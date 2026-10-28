@@ -1,0 +1,782 @@
+B700: 0e d0 4a          asl $4AD0    [$4AD0]
+B703: 90 02             bcc $B707
+B705: 84 1e             sty $1E      [$1E]
+B707: 29 04             and #$04
+B709: f0 02             beq $B70D
+B70B: 84 1d             sty $1D      [$1D]
+B70D: ad 0f d0          lda P3PL     [$D00F] = $00
+B710: 4a                lsr
+B711: 90 02             bcc $B715
+B713: 84 1f             sty $1F      [$1F]
+B715: ad 05 d0          lda P1PF     [$D005] = $00
+B718: 29 02             and #$02
+B71A: f0 02             beq $B71E
+B71C: 84 20             sty ICHIDZ   [$20]
+B71E: ad 0a d0          lda M2PL     [$D00A] = $00
+B721: 29 08             and #$08
+B723: f0 02             beq $B727
+B725: 84 1c             sty $1C      [$1C]
+B727: 4c 62 e4          jmp XITVBV   [$E462] = $4C
+B72A: a2 00             ldx #$00
+B72C: a9 3f             lda #$3F
+B72E: 8d 00 d4          sta DMACTL   [$D400]
+B731: 8d 0a d4          sta WSYNC    [$D40A]
+B734: a9 0c             lda #$0C
+B736: 8d 16 d0          sta COLPF0   [$D016]
+B739: 8e 1a d0          stx COLBK    [$D01A]
+B73C: a9 06             lda #$06
+B73E: 8d 09 d4          sta CHBASE   [$D409]
+B741: a5 bf             lda $BF      [$BF] = $0E
+B743: d0 06             bne $B74B
+B745: 8d 0a d4          sta WSYNC    [$D40A]
+B748: 8d 0a d4          sta WSYNC    [$D40A]
+B74B: a2 03             ldx #$03
+B74D: 8e 0b d0          stx SIZEP3   [$D00B]
+B750: a5 27             lda $27      [$27] = $FA
+B752: 8d 03 d0          sta HPOSP3   [$D003]
+B755: 69 15             adc #$15
+B757: a8                tay
+B758: a2 06             ldx #$06
+B75A: 8d 0a d4          sta WSYNC    [$D40A]
+B75D: 8c 02 d0          sty HPOSP2   [$D002]
+B760: bd 8d b4          lda $B48D,X  [$B498] = $D4
+B763: 8d 15 d0          sta COLPM3   [$D015]
+B766: 8d 14 d0          sta COLPM2   [$D014]
+B769: 88                dey
+B76A: ca                dex
+B76B: 10 ed             bpl $B75A
+B76D: 8d 0a d4          sta WSYNC    [$D40A]
+B770: 8d 1e d0          sta HITCLR   [$D01E]
+B773: 4c 62 e4          jmp XITVBV   [$E462] = $4C
+B776: 70 f0             bvs $B768
+B778: 30 4e             bmi $B7C8
+B77A: 10 46             bpl $B7C2
+B77C: 00                brk
+B77D: 10 00             bpl $B77F
+B77F: 06 06             asl TRAMSZ   [$06]
+B781: a0 00             ldy #$00
+B783: 56 4b             lsr CASSBT,X [$56]
+B785: b8                clv
+B786: 41 00             eor ($00,X)  [$FED6] = $80
+B788: 3f 50 46          rla $4650,X  [$465B] = $00
+B78B: 00                brk
+B78C: 10 30             bpl $B7BE
+B78E: 06 06             asl TRAMSZ   [$06]
+B790: d0 20             bne $B7B2
+B792: 56 4b             lsr CASSBT,X [$56]
+B794: b8                clv
+B795: 41 00             eor ($00,X)  [$FED6] = $80
+B797: 3f 0c 0c          rla $0C0C,X  [$0C17] = $00
+B79A: 0c 0c 0c          nop $0C0C    [$0C0C] = $00
+B79D: 0c 48 48          nop $4848    [$4848] = $00
+B7A0: 48                pha
+B7A1: 48                pha
+B7A2: 48                pha
+B7A3: 48                pha
+B7A4: 0c 0c 0c          nop $0C0C    [$0C0C] = $00
+B7A7: 0c 0c 0c          nop $0C0C    [$0C0C] = $00
+B7AA: 48                pha
+B7AB: 48                pha
+B7AC: 48                pha
+B7AD: 48                pha
+B7AE: 48                pha
+B7AF: 48                pha
+B7B0: b0 b0             bcs $B762
+B7B2: b0 80             bcs $B734
+B7B4: 80 b0             nop #$B0
+B7B6: b0 2a             bcs $B7E2
+B7B8: 2a                rol
+B7B9: 2a                rol
+B7BA: b0 b0             bcs $B76C
+B7BC: b0 b0             bcs $B76E
+B7BE: 16 b0             asl $B0,X    [$BB]
+B7C0: b0 2a             bcs $B7EC
+B7C2: 2a                rol
+B7C3: 2a                rol
+B7C4: ac ac 9c          ldy $9CAC    [$9CAC] = $00
+B7C7: 9c 8c 8c          shy $8C8C,X  [$8C97] = $00
+B7CA: a8                tay
+B7CB: a8                tay
+B7CC: 32                kil
+B7CD: 32                kil
+B7CE: 00                brk
+B7CF: 00                brk
+B7D0: 00                brk
+B7D1: 00                brk
+B7D2: 22                kil
+B7D3: 14 14             nop RTCLOK+2,X [$1F] = $FF
+B7D5: 12                kil
+B7D6: 12                kil
+B7D7: 14 14             nop RTCLOK+2,X [$1F] = $FF
+B7D9: 18                clc
+B7DA: 18                clc
+B7DB: 12                kil
+B7DC: 12                kil
+B7DD: 14 14             nop RTCLOK+2,X [$1F] = $FF
+B7DF: 12                kil
+B7E0: 22                kil
+B7E1: 22                kil
+B7E2: 22                kil
+B7E3: 22                kil
+B7E4: 22                kil
+B7E5: 22                kil
+B7E6: 22                kil
+B7E7: 22                kil
+B7E8: 18                clc
+B7E9: 28                plp
+B7EA: 3a                nop
+B7EB: 4a                lsr
+B7EC: 6a                ror
+B7ED: 7a                nop
+B7EE: 9a                txs
+B7EF: aa                tax
+B7F0: ba                tsx
+B7F1: ca                dex
+B7F2: ea                nop
+B7F3: fc 01 80          nop $8001,X  [$800C] = $00
+B7F6: 00                brk
+B7F7: 80 01             nop #$01
+B7F9: 00                brk
+B7FA: 02                kil
+B7FB: 00                brk
+B7FC: 04 00             nop $00      [$00] = $8B
+B7FE: ff ff aa          isb $AAFF,X  [$AB0A]
+B801: ff aa 55          isb $55AA,X  [$55B5]
+B804: 6a                ror
+B805: bf ea 95          lax $95EA,Y  [$96E9] = $00
+B808: 5a                nop
+B809: af fa a5          lax $A5FA    [$A5FA] = $4C
+B80C: 56 ab             lsr $AB,X    [$B6]
+B80E: fe a9 aa          inc $AAA9,X  [$AAB4]
+B811: ff aa aa          isb $AAAA,X  [$AAB5]
+B814: aa                tax
+B815: bf ea aa          lax $AAEA,Y  [$ABE9] = $88
+B818: aa                tax
+B819: af fa aa          lax $AAFA    [$AAFA] = $E5
+B81C: aa                tax
+B81D: ab fe             lxa #$FE
+B81F: aa                tax
+B820: 00                brk
+B821: 00                brk
+B822: 00                brk
+B823: 00                brk
+B824: 00                brk
+B825: 00                brk
+B826: 00                brk
+B827: 00                brk
+B828: 00                brk
+B829: 00                brk
+B82A: 00                brk
+B82B: 00                brk
+B82C: 00                brk
+B82D: 00                brk
+B82E: 00                brk
+B82F: 00                brk
+B830: 00                brk
+B831: 00                brk
+B832: 00                brk
+B833: 00                brk
+B834: 00                brk
+B835: 00                brk
+B836: 00                brk
+B837: 00                brk
+B838: 3f 3f 3f          rla $3F3F,X  [$3F4A] = $0E
+B83B: 3f 3f 07          rla $073F,X  [$074A] = $00
+B83E: 21 2d             and (ICAX4Z,X) [$1000] = $00
+B840: 25 00             and $00      [$00] = $8B
+B842: 2f 36 25          rla $2536    [$2536] = $55
+B845: 32                kil
+B846: 3f 3f 3f          rla $3F3F,X  [$3F4A] = $0E
+B849: 3f 3f 00          rla $003F,X  [$004A] = $5C
+B84C: 00                brk
+B84D: 00                brk
+B84E: 00                brk
+B84F: 00                brk
+B850: 00                brk
+B851: 00                brk
+B852: 00                brk
+B853: 00                brk
+B854: 00                brk
+B855: 00                brk
+B856: 00                brk
+B857: 00                brk
+B858: 00                brk
+B859: 00                brk
+B85A: 00                brk
+B85B: 00                brk
+B85C: 00                brk
+B85D: 00                brk
+B85E: 00                brk
+B85F: 00                brk
+B860: 00                brk
+B861: 00                brk
+B862: 00                brk
+B863: 00                brk
+B864: 00                brk
+B865: 12                kil
+B866: 09 16             ora #$16
+B868: 05 12             ora RTCLOK   [$12] = $A4
+B86A: 00                brk
+B86B: 12                kil
+B86C: 01 09             ora ($09,X)  [$E6D4] = $E6
+B86E: 04 19             nop $19      [$19] = $0F
+B870: 1a                nop
+B871: 00                brk
+B872: 22                kil
+B873: 39 00 03          and DDEVIC,Y [$03FF] = $00
+B876: 21 32             and (BUFRLO,X) [$0000] = $8B
+B878: 2f 2c 00          rla ICAX3Z   [$002C] = $07
+B87B: 13 28             slo (ICBLLZ),Y [$8200] = $00
+B87D: 21 37             and ($37,X)  [$1440] = $00
+B87F: 00                brk
+B880: 00                brk
+B881: 00                brk
+B882: 00                brk
+B883: 03 2f             slo (CIOCHR,X) [$0042] = $40
+B885: 30 39             bmi $B8C0
+B887: 32                kil
+B888: 29 27             and #$27
+B88A: 28                plp
+B88B: 34 00             nop $00,X    [$0B] = $D6
+B88D: 3b 3c 3d          rla $3D3C,Y  [$3E3B] = $55
+B890: 3a                nop
+B891: 18                clc
+B892: 3b 3c 3d          rla $3D3C,Y  [$3E3B] = $55
+B895: 3e 00 00          rol $0000,X  [$000B]
+B898: 00                brk
+B899: 1b 1c 1d          slo $1D1C,Y  [$1E1B] = $00
+B89C: 1e 1f 00          asl $001F,X  [$002A]
+B89F: 00                brk
+B8A0: 00                brk
+B8A1: 00                brk
+B8A2: 00                brk
+B8A3: 00                brk
+B8A4: 00                brk
+B8A5: 00                brk
+B8A6: 00                brk
+B8A7: 00                brk
+B8A8: 00                brk
+B8A9: 00                brk
+B8AA: 00                brk
+B8AB: 00                brk
+B8AC: 00                brk
+B8AD: 00                brk
+B8AE: 00                brk
+B8AF: 00                brk
+B8B0: 00                brk
+B8B1: 00                brk
+B8B2: 00                brk
+B8B3: 00                brk
+B8B4: 00                brk
+B8B5: 00                brk
+B8B6: 10 32             bpl $B8EA
+B8B8: 25 33             and BUFRHI   [$33] = $01
+B8BA: 33 00             rla ($00),Y  [$BA8A] = $08
+B8BC: 13 14             slo (RTCLOK+2),Y [$E7D3] = $20
+B8BE: 01 12             ora (RTCLOK,X) [$FFFF] = $C1
+B8C0: 14 00             nop $00,X    [$0B] = $D6
+B8C2: 2b 25             anc #$25
+B8C4: 39 00 00          and $0000,Y  [$00FF] = $00
+B8C7: 00                brk
+B8C8: 00                brk
+B8C9: 15 33             ora BUFRHI,X [$3E] = $00
+B8CB: 25 00             and $00      [$00] = $8B
+B8CD: 2a                rol
+B8CE: 2f 39 33          rla $3339    [$3339] = $55
+B8D1: 34 29             nop ICBLHZ,X [$34] = $1C
+B8D3: 23 2b             rla (ICAX2Z,X) [$0081] = $00
+B8D5: 00                brk
+B8D6: 3b 00 00          rla $0000,Y  [$00FF] = $00
+B8D9: 00                brk
+B8DA: 00                brk
+B8DB: 00                brk
+B8DC: 00                brk
+B8DD: 00                brk
+B8DE: 00                brk
+B8DF: 00                brk
+B8E0: 00                brk
+B8E1: 00                brk
+B8E2: 00                brk
+B8E3: 00                brk
+B8E4: 00                brk
+B8E5: 00                brk
+B8E6: 00                brk
+B8E7: 00                brk
+B8E8: 00                brk
+B8E9: 00                brk
+B8EA: 00                brk
+B8EB: 00                brk
+B8EC: 00                brk
+B8ED: 00                brk
+B8EE: 1b 1c 1d          slo $1D1C,Y  [$1E1B] = $00
+B8F1: 1e 1f 00          asl $001F,X  [$002A]
+B8F4: 00                brk
+B8F5: 00                brk
+B8F6: 00                brk
+B8F7: 00                brk
+B8F8: 00                brk
+B8F9: 00                brk
+B8FA: 00                brk
+B8FB: 00                brk
+B8FC: 00                brk
+B8FD: 00                brk
+B8FE: 00                brk
+B8FF: ff 00 00          isb $0000,X  [$000B]
+B902: 00                brk
+B903: 00                brk
+B904: 00                brk
+B905: 00                brk
+B906: 00                brk
+B907: 00                brk
+B908: 00                brk
+B909: 00                brk
+B90A: 00                brk
+B90B: 00                brk
+B90C: 00                brk
+B90D: 00                brk
+B90E: 00                brk
+B90F: 00                brk
+B910: 00                brk
+B911: 00                brk
+B912: 00                brk
+B913: 00                brk
+B914: 00                brk
+B915: 00                brk
+B916: 00                brk
+B917: 00                brk
+B918: 00                brk
+B919: 00                brk
+B91A: 00                brk
+B91B: 00                brk
+B91C: 14 48             nop $48,X    [$53] = $48
+B91E: 54 2a             nop ICAX1Z,X [$35] = $00
+B920: 89 2a             nop #$2A
+B922: a4 1a             ldy $1A      [$1A] = $FF
+B924: 61 8c             adc ($8C,X)  [$0000] = $8B
+B926: 23 c4             rla ($C4,X)  [$0000] = $8B
+B928: 19 29 92          ora $9229,Y  [$9328] = $00
+B92B: 8a                txa
+B92C: 45 94             eor $94      [$94] = $00
+B92E: 8a                txa
+B92F: 2a                rol
+B930: 91 4a             sta (CKEY),Y [$555B]
+B932: 24 12             bit RTCLOK   [$12] = $A4
+B934: 02                kil
+B935: 14 22             nop ICCOMZ,X [$2D] = $00
+B937: 11 44             ora ($44),Y  [$1513] = $00
+B939: 82 48             nop #$48
+B93B: 81 14             sta (RTCLOK+2,X) [$FFFF]
+B93D: 42                kil
+B93E: 88                dey
+B93F: 22                kil
+B940: 48                pha
+B941: 14 41             nop SOUNDR,X [$4C] = $14
+B943: 24 88             bit $88      [$88] = $00
+B945: 22                kil
+B946: 14 41             nop SOUNDR,X [$4C] = $14
+B948: 22                kil
+B949: 84 10             sty POKMSK   [$10]
+B94B: 08                php
+B94C: 00                brk
+B94D: 00                brk
+B94E: 00                brk
+B94F: 04 12             nop RTCLOK   [$12] = $A4
+B951: 48                pha
+B952: 12                kil
+B953: 44 08             nop WARMST   [$08] = $00
+B955: 10 44             bpl $B99B
+B957: 10 24             bpl $B97D
+B959: 02                kil
+B95A: 24 40             bit $40      [$40] = $42
+B95C: 12                kil
+B95D: 48                pha
+B95E: 20 04 40          jsr $4004    [$4004] = $00
+B961: 00                brk
+B962: 00                brk
+B963: 00                brk
+B964: 10 fe             bpl $B964
+B966: c6 de             dec $DE      [$DE]
+B968: de de de          dec $DEDE,X  [$DEE9]
+B96B: fe c6 de          inc $DEC6,X  [$DED1]
+B96E: ce de c6          dec $C6DE    [$C6DE]
+B971: fe c6 d6          inc $D6C6,X  [$D6D1]
+B974: d6 d6             dec FR0+2,X  [$E1]
+B976: fe de de          inc $DEDE,X  [$DEE9]
+B979: ce de c6          dec $C6DE    [$C6DE]
+B97C: 7c 7c fc          nop $FC7C,X  [$FC87] = $20
+B97F: fe ff 78          inc $78FF,X  [$790A]
+B982: 30 10             bmi $B994
+B984: 10 30             bpl $B9B6
+B986: 38                sec
+B987: 4f ff c6          sre $C6FF    [$C6FF] = $FF
+B98A: 80 0e             nop #$0E
+B98C: 04 8e             nop $8E      [$8E] = $00
+B98E: ff ff 9f          isb $9FFF,X  [$A00A]
+B991: 0e 04 1c          asl $1C04    [$1C04]
+B994: 07 0e             slo APPMHI   [$0E] = $66
+B996: 04 8e             nop $8E      [$8E] = $00
+B998: ff ff 9f          isb $9FFF,X  [$A00A]
+B99B: 0e 04 07          asl $0704    [$0704]
+B99E: 1c 3e 3f          nop $3F3E,X  [$3F49] = $0E
+B9A1: 7f ff 1e          rra $1EFF,X  [$1F0A] = $00
+B9A4: 0c 08 08          nop $0808    [$0808] = $00
+B9A7: 0c 1c f2          nop $F21C    [$F21C] = $04
+B9AA: ff 63 01          isb $0163,X  [$016E]
+B9AD: 70 20             bvs $B9CF
+B9AF: 71 ff             adc ($FF),Y  [$8BFF] = $00
+B9B1: ff f9 70          isb $70F9,X  [$7104]
+B9B4: 20 38 e0          jsr $E038    [$E038] = $00
+B9B7: 70 20             bvs $B9D9
+B9B9: 71 ff             adc ($FF),Y  [$8BFF] = $00
+B9BB: ff f9 70          isb $70F9,X  [$7104]
+B9BE: 20 e0 38          jsr $38E0    [$38E0] = $FF
+B9C1: 00                brk
+B9C2: 24 24             bit ICBALZ   [$24] = $00
+B9C4: ff ff ff          isb $FFFF,X  [$000A]
+B9C7: ff ff ff          isb $FFFF,X  [$000A]
+B9CA: ff ff ff          isb $FFFF,X  [$000A]
+B9CD: ff ff ff          isb $FFFF,X  [$000A]
+B9D0: ff ff ff          isb $FFFF,X  [$000A]
+B9D3: 00                brk
+B9D4: 00                brk
+B9D5: 18                clc
+B9D6: 18                clc
+B9D7: 18                clc
+B9D8: 24 24             bit ICBALZ   [$24] = $00
+B9DA: 24 24             bit ICBALZ   [$24] = $00
+B9DC: 24 3c             bit $3C      [$3C] = $00
+B9DE: 7e 7e ff          ror $FF7E,X  [$FF89]
+B9E1: ff ff ff          isb $FFFF,X  [$000A]
+B9E4: ff ff 7e          isb $7EFF,X  [$7F0A]
+B9E7: 7e 3c 00          ror $003C,X  [$0047]
+B9EA: 00                brk
+B9EB: 18                clc
+B9EC: 1f 18 7e          slo $7E18,X  [$7E23] = $00
+B9EF: ff ff 2a          isb $2AFF,X  [$2B0A]
+B9F2: 80 2a             nop #$2A
+B9F4: 00                brk
+B9F5: 00                brk
+B9F6: 18                clc
+B9F7: 1f 18 7e          slo $7E18,X  [$7E23] = $00
+B9FA: ff ff 54          isb $54FF,X  [$550A]
+B9FD: 01 54             ora (ROWCRS,X) [$0107] = $00
+B9FF: 00                brk
+BA00: 00                brk
+BA01: 18                clc
+BA02: f8                sed
+BA03: 18                clc
+BA04: 7e ff ff          ror $FFFF,X  [$000A]
+BA07: 2a                rol
+BA08: 80 2a             nop #$2A
+BA0A: 00                brk
+BA0B: 00                brk
+BA0C: 18                clc
+BA0D: f8                sed
+BA0E: 18                clc
+BA0F: 7e ff ff          ror $FFFF,X  [$000A]
+BA12: 54 01             nop $01,X    [$0C] = $FE
+BA14: 54 00             nop $00,X    [$0B] = $D6
+BA16: 00                brk
+BA17: 00                brk
+BA18: 00                brk
+BA19: 00                brk
+BA1A: 00                brk
+BA1B: 00                brk
+BA1C: 00                brk
+BA1D: 00                brk
+BA1E: 18                clc
+BA1F: 00                brk
+BA20: 00                brk
+BA21: 00                brk
+BA22: 00                brk
+BA23: 00                brk
+BA24: 00                brk
+BA25: 00                brk
+BA26: 00                brk
+BA27: 18                clc
+BA28: 18                clc
+BA29: 18                clc
+BA2A: 18                clc
+BA2B: 00                brk
+BA2C: 00                brk
+BA2D: 00                brk
+BA2E: 00                brk
+BA2F: 00                brk
+BA30: 00                brk
+BA31: 00                brk
+BA32: 18                clc
+BA33: 3c 3c 3c          nop $3C3C,X  [$3C47] = $FF
+BA36: 3c 18 00          nop $0018,X  [$0023] = $14
+BA39: 00                brk
+BA3A: 00                brk
+BA3B: 00                brk
+BA3C: 00                brk
+BA3D: 00                brk
+BA3E: 18                clc
+BA3F: 3c 3c 3c          nop $3C3C,X  [$3C47] = $FF
+BA42: 3c 3c 3c          nop $3C3C,X  [$3C47] = $FF
+BA45: 18                clc
+BA46: 00                brk
+BA47: 00                brk
+BA48: 00                brk
+BA49: 00                brk
+BA4A: 00                brk
+BA4B: 18                clc
+BA4C: 3c 3c 7e          nop $7E3C,X  [$7E47] = $00
+BA4F: 7e 7e 7e          ror $7E7E,X  [$7E89]
+BA52: 3c 3c 18          nop $183C,X  [$1847] = $00
+BA55: 00                brk
+BA56: 00                brk
+BA57: 00                brk
+BA58: 00                brk
+BA59: 3c 7e 7e          nop $7E7E,X  [$7E89] = $00
+BA5C: ff ff ff          isb $FFFF,X  [$000A]
+BA5F: ff ff ff          isb $FFFF,X  [$000A]
+BA62: 7e 7e 3c          ror $3C7E,X  [$3C89]
+BA65: 08                php
+BA66: 08                php
+BA67: 08                php
+BA68: 1c 3e 7f          nop $7F3E,X  [$7F49] = $00
+BA6B: 7f 6b 49          rra $496B,X  [$4976] = $00
+BA6E: 08                php
+BA6F: 1c 3e 2a          nop $2A3E,X  [$2A49] = $55
+BA72: 00                brk
+BA73: 08                php
+BA74: 08                php
+BA75: 08                php
+BA76: 18                clc
+BA77: 3c 3e 3e          nop $3E3E,X  [$3E49] = $55
+BA7A: 2e 0a 08          rol $080A    [$080A]
+BA7D: 18                clc
+BA7E: 3c 2e 02          nop CDTMF5,X [$0239] = $00
+BA81: 08                php
+BA82: 08                php
+BA83: 08                php
+BA84: 0c 1e 3e          nop $3E1E    [$3E1E] = $AF
+BA87: 3e 3a 28          rol $283A,X  [$2845]
+BA8A: 08                php
+BA8B: 0c 1e 3a          nop $3A1E    [$3A1E] = $55
+BA8E: 20 00 01          jsr $0100    [$0100] = $00
+BA91: ff ff 00          isb $00FF,X  [$010A]
+BA94: 01 00             ora ($00,X)  [$FED6] = $80
+BA96: 00                brk
+BA97: 01 00             ora ($00,X)  [$FED6] = $80
+BA99: 01 ff             ora ($FF,X)  [$D60A] = $FF
+BA9B: 00                brk
+BA9C: ff ff ff          isb $FFFF,X  [$000A]
+BA9F: 00                brk
+BAA0: 01 01             ora ($01,X)  [$66FE] = $00
+BAA2: 00                brk
+BAA3: 01 ff             ora ($FF,X)  [$D60A] = $FF
+BAA5: ff 00 00          isb $0000,X  [$000B]
+BAA8: ff 00 00          isb $0000,X  [$000B]
+BAAB: 00                brk
+BAAC: 01 01             ora ($01,X)  [$66FE] = $00
+BAAE: 00                brk
+BAAF: 00                brk
+BAB0: 00                brk
+BAB1: 01 02             ora (CASINI,X) [$6666] = $00
+BAB3: 05 04             ora RAMLO    [$04] = $F1
+BAB5: 07 06             slo TRAMSZ   [$06] = $0A
+BAB7: 00                brk
+BAB8: b9 15 ba          lda $BA15,Y  [$BB14] = $06
+BABB: 1f ba 2b          slo $2BBA,X  [$2BC5] = $55
+BABE: ba                tsx
+BABF: 38                sec
+BAC0: ba                tsx
+BAC1: 46 ba             lsr $BA      [$BA]
+BAC3: 55 ba             eor $BA,X    [$C5] = $24
+BAC5: 1e 2e 3e          asl $3E2E,X  [$3E39]
+BAC8: 4e 6e 7e          lsr $7E6E    [$7E6E]
+BACB: 9e be 00          shx $00BE,Y  [$01BD] = $00
+BACE: b9 00 b9          lda $B900,Y  [$B9FF] = $00
+BAD1: 4c b9 34          jmp $34B9    [$34B9] = $55
+BAD4: b9 1c b9          lda $B91C,Y  [$BA1B] = $00
+BAD7: 34 b9             nop $B9,X    [$C4] = $1C
+BAD9: 4c b9 81          jmp $81B9    [$81B9] = $00
+BADC: ba                tsx
+BADD: 73 ba             rra ($BA),Y  [$BD59] = $FF
+BADF: 65 ba             adc $BA      [$BA] = $5A
+BAE1: 0b 0b             anc #$0B
+BAE3: 02                kil
+BAE4: ff 0b 20          isb $200B,X  [$2016]
+BAE7: 14 36             nop $36,X    [$41] = $00
+BAE9: 00                brk
+BAEA: 01 7c             ora ($7C,X)  [$0000] = $8B
+BAEC: 00                brk
+BAED: fe 01 ff          inc $FF01,X  [$FF0C]
+BAF0: ff 11 00          isb BRKKEY,X [$001C]
+BAF3: 0d 01 00          ora $0001    [$0001] = $B9
+BAF6: 00                brk
+BAF7: 00                brk
+BAF8: 00                brk
+BAF9: 00                brk
+BAFA: 00                brk
+BAFB: 00                brk
+BAFC: 00                brk
+BAFD: 00                brk
+BAFE: 04 01             nop $01      [$01] = $B9
+BB00: 00                brk
+BB01: 00                brk
+BB02: 00                brk
+BB03: 00                brk
+BB04: 00                brk
+BB05: 00                brk
+BB06: 00                brk
+BB07: 00                brk
+BB08: 00                brk
+BB09: 04 80             nop $80      [$80] = $00
+BB0B: 00                brk
+BB0C: 00                brk
+BB0D: 00                brk
+BB0E: 00                brk
+BB0F: 00                brk
+BB10: 00                brk
+BB11: 00                brk
+BB12: 10 06             bpl $BB1A
+BB14: 06 15             asl BUFADR   [$15]
+BB16: 15 06             ora TRAMSZ,X [$11] = $94
+BB18: 03 50             slo ($50,X)  [$FFFF] = $C1
+BB1A: 08                php
+BB1B: 75 0d             adc DOSINI+1,X [$18] = $FC
+BB1D: 08                php
+BB1E: 0d 08 07          ora $0708    [$0708] = $00
+BB21: 0d 08 0c          ora $0C08    [$0C08] = $00
+BB24: 00                brk
+BB25: 01 03             ora (CASINI+1,X) [$7466] = $00
+BB27: 04 05             nop RAMLO+1  [$05] = $F1
+BB29: 06 00             asl $00      [$00]
+BB2B: 07 09             slo $09      [$09] = $00
+BB2D: 08                php
+BB2E: 0b 0a             anc #$0A
+BB30: 00                brk
+BB31: 00                brk
+BB32: 00                brk
+BB33: 00                brk
+BB34: 00                brk
+BB35: 00                brk
+BB36: 00                brk
+BB37: c4 b0             cpy $B0      [$B0] = $00
+BB39: b0 ba             bcs $BAF5
+BB3B: ba                tsx
+BB3C: e0 ca             cpx #$CA
+BB3E: cf 98 00          dcp $0098    [$0098]
+BB41: 00                brk
+BB42: 4c 34 1c          jmp $1C34    [$1C34] = $00
+BB45: 34 4c             nop $4C,X    [$57] = $7C
+BB47: 85 8b             sta $8B      [$8B]
+BB49: 95 8b             sta $8B,X    [$96]
+BB4B: 95 d5             sta FR0+1,X  [$E0]
+BB4D: 7d c1 65          adc $65C1,X  [$65CC] = $00
+BB50: 00                brk
+BB51: 00                brk
+BB52: 4c 34 1c          jmp $1C34    [$1C34] = $00
+BB55: 34 4c             nop $4C,X    [$57] = $7C
+BB57: a7 ad             lax $AD      [$AD] = $00
+BB59: b7 ad             lax $AD,Y    [$AC] = $D4
+BB5B: b7 d5             lax FR0+1,Y  [$D4] = $00
+BB5D: 9f c1 65          sha $65C1,Y  [$66C0] = $00
+BB60: 17 05             slo RAMLO+1,X [$10] = $86
+BB62: 05 05             ora RAMLO+1  [$05] = $F1
+BB64: 05 05             ora RAMLO+1  [$05] = $F1
+BB66: 05 05             ora RAMLO+1  [$05] = $F1
+BB68: 09 09             ora #$09
+BB6A: 09 09             ora #$09
+BB6C: 13 07             slo ($07),Y  [$0113] = $00
+BB6E: 13 17             slo ($17),Y  [$FDFE] = $85
+BB70: 00                brk
+BB71: 1a                nop
+BB72: 00                brk
+BB73: 00                brk
+BB74: 00                brk
+BB75: 00                brk
+BB76: 00                brk
+BB77: 00                brk
+BB78: 10 00             bpl $BB7A
+BB7A: 00                brk
+BB7B: 5b 00 00          sre $0000,Y  [$00FF] = $00
+BB7E: 00                brk
+BB7F: 00                brk
+BB80: 00                brk
+BB81: 00                brk
+BB82: 50 00             bvc $BB84
+BB84: 00                brk
+BB85: e7 e1             isb FR1+1    [$E1]
+BB87: ed e5 c7          sbc $C7E5    [$C7E5] = $FF
+BB8A: c8                iny
+BB8B: c9 c8             cmp #$C8
+BB8D: ca                dex
+BB8E: 00                brk
+BB8F: 83 84             sax ($84,X)  [$0000]
+BB91: 85 86             sta $86      [$86]
+BB93: 00                brk
+BB94: 00                brk
+BB95: 00                brk
+BB96: 91 00             sta ($00),Y  [$BA8A]
+BB98: 00                brk
+BB99: 00                brk
+BB9A: 00                brk
+BB9B: d1 00             cmp ($00),Y  [$BA8A] = $08
+BB9D: cb cc             sbx #$CC
+BB9F: cd cc ce          cmp $CECC    [$CECC] = $3E
+BBA2: 00                brk
+BBA3: 00                brk
+BBA4: 00                brk
+BBA5: 00                brk
+BBA6: 00                brk
+BBA7: 00                brk
+BBA8: 00                brk
+BBA9: 00                brk
+BBAA: 00                brk
+BBAB: 00                brk
+BBAC: 00                brk
+BBAD: 00                brk
+BBAE: 00                brk
+BBAF: 01 03             ora (CASINI+1,X) [$7466] = $00
+BBB1: 00                brk
+BBB2: 05 08             ora WARMST   [$08] = $00
+BBB4: 03 04             slo (RAMLO,X) [$8674] = $00
+BBB6: 05 06             ora TRAMSZ   [$06] = $0A
+BBB8: 06 08             asl WARMST   [$08]
+BBBA: 08                php
+BBBB: 0a                asl
+BBBC: 08                php
+BBBD: 08                php
+BBBE: 0a                asl
+BBBF: 0a                asl
+BBC0: 0a                asl
+BBC1: 0a                asl
+BBC2: 03 05             slo (RAMLO+1,X) [$9486] = $00
+BBC4: 06 08             asl WARMST   [$08]
+BBC6: 08                php
+BBC7: 08                php
+BBC8: 0a                asl
+BBC9: 0a                asl
+BBCA: 0a                asl
+BBCB: 0a                asl
+BBCC: 07 04             slo RAMLO    [$04] = $F1
+BBCE: 08                php
+BBCF: 06 06             asl TRAMSZ   [$06]
+BBD1: 04 05             nop RAMLO+1  [$05] = $F1
+BBD3: 04 04             nop RAMLO    [$04] = $F1
+BBD5: 04 04             nop RAMLO    [$04] = $F1
+BBD7: 04 04             nop RAMLO    [$04] = $F1
+BBD9: 04 05             nop RAMLO+1  [$05] = $F1
+BBDB: 04 05             nop RAMLO+1  [$05] = $F1
+BBDD: 04 07             nop $07      [$07] = $14
+BBDF: 08                php
+BBE0: 06 08             asl WARMST   [$08]
+BBE2: 09 0a             ora #$0A
+BBE4: 17 16             slo BUFADR+1,X [$21] = $FF
+BBE6: 15 14             ora RTCLOK+2,X [$1F] = $FF
+BBE8: 13 15             slo (BUFADR),Y [$F3E5] = $FF
+BBEA: 13 12             slo (RTCLOK),Y [$C7A3] = $FF
+BBEC: 14 15             nop BUFADR,X [$20] = $FF
+BBEE: 0c 0c 14          nop $140C    [$140C] = $00
+BBF1: 0e 0e 16          asl $160E    [$160E]
+BBF4: 16 1e             asl $1E,X    [$29]
+BBF6: 06 bc             asl $BC      [$BC]
+BBF8: 2a                rol
+BBF9: bc 5a bc          ldy $BC5A,X  [$BC65] = $BE
+BBFC: be bc be          ldx $BEBC,Y  [$BFBB] = $30
+BBFF: bc 12 bd          ldy $BD12,X  [$BD1D] = $A9

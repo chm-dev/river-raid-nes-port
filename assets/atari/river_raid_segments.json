@@ -1,0 +1,43 @@
+{
+  "source": "C:\\dev\\AI\\river-raid-port\\xex\\River Raid (1983)(Activision)(US)[a3].xex",
+  "source_bytes": 8220,
+  "source_sha256": "e30c9d838f45ca1f195c0d73dda358c43d8ca548485333fedc3976710574d613",
+  "segments": [
+    {
+      "start": "0x9FF0",
+      "end": "0xBFFF",
+      "length": 8208,
+      "file_offset": "0x0006",
+      "sha256": "5696c000d305adb8e8ca798a40a749a3348a6e518f2a679079cf83153cb2d882"
+    },
+    {
+      "start": "0x02E0",
+      "end": "0x02E1",
+      "length": 2,
+      "file_offset": "0x201A",
+      "sha256": "3c1c36c746e9b9106e77cfc2ede3374d38a883e23fbcd3b20023e326008c5434"
+    }
+  ],
+  "outputs": {
+    "river_raid_cart_a000_bfff.bin": {
+      "bytes": 8192,
+      "sha256": "54cd609164064ab89da72b82e820819bb1eb81ebf80fb208108cc093e7bc63ed"
+    },
+    "river_raid_loader_9ff0_9fff.bin": {
+      "bytes": 16,
+      "sha256": "16f2069df02a88635db8518a05e5d9c26aef0ec534f3cb4d39bfcef1881b1a3f"
+    },
+    "river_raid_full_9ff0_bfff.bin": {
+      "bytes": 8208,
+      "sha256": "5696c000d305adb8e8ca798a40a749a3348a6e518f2a679079cf83153cb2d882"
+    },
+    "river_raid_seg_9ff0_bfff.bin": {
+      "bytes": 8208,
+      "sha256": "5696c000d305adb8e8ca798a40a749a3348a6e518f2a679079cf83153cb2d882"
+    },
+    "river_raid_seg_02e0_02e1.bin": {
+      "bytes": 2,
+      "sha256": "3c1c36c746e9b9106e77cfc2ede3374d38a883e23fbcd3b20023e326008c5434"
+    }
+  }
+}

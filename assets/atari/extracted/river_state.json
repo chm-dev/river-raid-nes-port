@@ -1,0 +1,62 @@
+{
+ "segments": [
+  {
+   "lms_ctl": "$4E",
+   "start": "$2870",
+   "lines": 34
+  },
+  {
+   "lms_ctl": "$4E",
+   "start": "$3000",
+   "lines": 79
+  },
+  {
+   "lms_ctl": "$4E",
+   "start": "$2000",
+   "lines": 44
+  },
+  {
+   "lms_ctl": "$46",
+   "start": "$1000",
+   "lines": 0
+  },
+  {
+   "lms_ctl": "$56",
+   "start": "$B8E7",
+   "lines": 0
+  }
+ ],
+ "total_lines": 157,
+ "first_last_row": [
+  "$2870",
+  "$2810"
+ ],
+ "lmargn_52": 27,
+ "rmargn_53": 72,
+ "rowcrs_54": 28,
+ "colcrs_56": 1,
+ "dindex_57": 124,
+ "oldrow_5a": 2,
+ "oldcol_5b": 255,
+ "oldcol_hi_5c": 255,
+ "oldchr_5d": 14,
+ "oldadr_5e": 9,
+ "oldadr_hi_5f": 7,
+ "level_60": 1,
+ "counter_61": 0,
+ "counter_62": 1,
+ "seed_66_69": [
+  227,
+  212,
+  247,
+  32
+ ],
+ "lfsr_aa_ac": [
+  122,
+  120,
+  77
+ ],
+ "flags_2d": 0,
+ "flags_36": 0,
+ "colpf0_index": 214
+}
