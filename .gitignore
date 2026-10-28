@@ -1,4 +1,12 @@
 gbdk/
 MesenCE-MCP/
 xex/
-assets/atari/runtime
+assets/atari/runtime/
+
+# build artifacts
+build/
+roms/
+*.ihx
+*.rom
+*.map
+*.o
