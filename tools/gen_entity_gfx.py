@@ -53,7 +53,7 @@ def nearest(c, candidates):
 # palette 0 (yellow, white, red) also serves the fuel depot and the debris;
 # palette 1 belongs to the HUD gauge.
 PAL0 = [0x28, 0x30, 0x16]
-PAL2 = [0x0F, 0x28, 0x02]      # helicopters: black, yellow, blue
+PAL2 = [0x0F, 0x28, 0x02]      # helicopters: black, yellow, darkest blue ($02; water is the brighter $11)
 PAL3 = [0x0F, 0x06, 0x2C]      # ship: black, dark red, cyan
 PALETTES = {0: PAL0, 2: PAL2, 3: PAL3}
 HW_PAL = {a: 2 for a in (8, 9, 10, 11)}
@@ -64,6 +64,8 @@ HW_PAL.update({a: 0 for a in range(2, 7)})
 def value_for(a, r):
     if a in range(2, 7):  # debris: yellow / red rows
         return 1 if r % 2 == 0 else 3
+    if a in (8, 9, 10, 11) and color[coff[a] + r] == 0x80:
+        return 3  # the blue cockpit stripe (nearest-colour would pick black)
     return nearest(color[coff[a] + r], PALETTES[HW_PAL[a]])
 
 tiles = []

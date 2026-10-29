@@ -34,6 +34,9 @@ uint8_t player_disable;
 #define PLAYER_STATE_PLAY       0u
 #define PLAYER_STATE_DEAD       1u
 #define PLAYER_STATE_OVER       2u
+#define PLAYER_STATE_WAIT       3u      /* game start: river still scrolling in */
+#define PLAYER_STATE_READY      4u      /* jet shown, river stopped until input */
+#define PLAYER_START_INPUT      (J_A | J_LEFT | J_RIGHT | J_UP | J_DOWN)
 
 #define PLAYER_SHOT_SLOT        47u
 #define PLAYER_SHOT_SPEED       6u
@@ -81,7 +84,9 @@ void player_init(void) BANKED {
     player.alive = 1;
     player.fuel_hi = 0xFF;
     player.fuel_lo = 0xFF;
-    player_state = PLAYER_STATE_PLAY;
+    /* Like the Atari, the jet only appears once the river has scrolled in
+     * to the bottom of the screen; then everything waits for input. */
+    player_state = PLAYER_STATE_WAIT;
     player_timer = 0;
     player_fuel_tick = 0;
     player_prev_pad = 0;
@@ -236,8 +241,8 @@ static void player_crash(void) {
     player_state = (hud_lives == 0u) ? PLAYER_STATE_OVER : PLAYER_STATE_DEAD;
 }
 
-/* Re-enter the river at its centre under the jet. */
-static void player_respawn(void) {
+/* Put the jet at the centre of the river under it. */
+static void player_center(void) {
     pl_slot = river_slot_at_scanline(player.y);
     pl_l = river_left_x[pl_slot];
     pl_r = river_right_x[pl_slot];
@@ -247,14 +252,19 @@ static void player_respawn(void) {
         player.x = (uint8_t)(SOURCE_X_OFFSET + ((pl_l + pl_r) >> 1) -
                              (PLAYER_WIDTH >> 1));
     }
+}
+
+/* Re-enter the river at its centre under the jet, stopped until input. */
+static void player_respawn(void) {
+    player_center();
     entities_clear();
     player.alive = 1;
     player.speed = 1;
     hud_fuel = 255u;
     player_fuel_tick = 0;
     river_speed = 1u;
-    river_freeze = 0;
-    player_state = PLAYER_STATE_PLAY;
+    river_freeze = 1u;
+    player_state = PLAYER_STATE_READY;
 }
 
 void player_update(void) BANKED {
@@ -269,7 +279,28 @@ void player_update(void) BANKED {
         return;
     }
 
+    if (player_state == PLAYER_STATE_WAIT) {
+        if (river_right_x[river_slot_at_scanline(239u)] == 0u) {
+            return;
+        }
+        river_freeze = 1u;
+        player_center();
+        player_state = PLAYER_STATE_READY;
+    }
+
     pl_pad = joypad();
+
+    if (player_state == PLAYER_STATE_READY) {
+        /* Stopped on the river: the game starts when the player fires or
+         * moves. */
+        player_show(PLAYER_TILE_STRAIGHT);
+        if (!(pl_pad & PLAYER_START_INPUT)) {
+            player_prev_pad = pl_pad;
+            return;
+        }
+        river_freeze = 0;
+        player_state = PLAYER_STATE_PLAY;
+    }
 
     if (player_state != PLAYER_STATE_PLAY) {
         if (player_timer != 0u) {

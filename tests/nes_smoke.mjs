@@ -140,7 +140,7 @@ async function main() {
     check('HUD palette 0 = black backdrop, gray, yellow, white',
         eq(palette.slice(0, 4), [0x0f, 0x00, 0x28, 0x30]), hexArray(palette.slice(0, 4)));
     check('playfield palette 2 = backdrop 0F + 09 07 01',
-        eq(palette.slice(8, 12), [0x0f, 0x09, 0x07, 0x01]), hexArray(palette.slice(8, 12)));
+        eq(palette.slice(8, 12), [0x0f, 0x09, 0x07, 0x11]), hexArray(palette.slice(8, 12)));
     const spritePalette = await readBytes(16, 16, 'NesPaletteRam');
     check('player sprite palette 0 = backdrop 0F + 28 30 16',
         eq(spritePalette.slice(0, 4), [0x0f, 0x28, 0x30, 0x16]),
@@ -330,7 +330,7 @@ async function main() {
     const isBlack = (r, g, b) => r < 40 && g < 40 && b < 40;
     const isYellow = (r, g, b) => r > 150 && g > 140 && b < 100;
     const isGreen = (r, g, b) => g > 50 && g < 140 && r < 60 && b < 60;
-    const isBlue = (r, g, b) => b > 100 && r < 80 && g < 80;
+    const isBlue = (r, g, b) => b > 150 && r < 80 && g < 140;
     const isPlayfield = (r, g, b) => isGreen(r, g, b) || isBlue(r, g, b);
     const grayAt = y => countRow(shot, y, isGray);
     const blackAt = y => countRow(shot, y, isBlack);

@@ -163,7 +163,7 @@
  * by Lab distance against both the Mesen default and NES-classic palettes. */
 #define BG_COLOR_GREEN          0x09u
 #define BG_COLOR_BROWN          0x07u
-#define BG_COLOR_BLUE           0x01u
+#define BG_COLOR_BLUE           0x11u   /* brighter than the Atari $84 on request */
 #define BG_COLOR_YELLOW         0x28u
 #define BG_COLOR_GRAY           0x00u
 #define BG_COLOR_BRIGHT_GREEN   0x19u   /* land on odd levels ($D6, 008300) */

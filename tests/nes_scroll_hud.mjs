@@ -67,7 +67,7 @@ function isGreen(r, g, b) {
 }
 
 function isBlue(r, g, b) {
-    return b > 90 && r < 80 && g < 80;
+    return b > 150 && r < 80 && g < 140;
 }
 
 function firstPlayfieldRow(image) {

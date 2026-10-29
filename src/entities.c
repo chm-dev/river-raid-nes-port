@@ -38,6 +38,7 @@ uint8_t entity_count;
 
 static uint8_t ent_rng = 0x5Au;
 static uint8_t ent_spawn_acc;
+static uint8_t ent_anim;
 static uint8_t ent_oam_used;
 
 /* File-scope scratch (SDCC aliases block locals across calls). */
@@ -325,6 +326,7 @@ void entities_update(void) BANKED {
 
     e_px = river_scrolled;
     e_oam = ENT_OAM_FIRST;
+    ent_anim++;
 
     ent_spawn_acc = (uint8_t)(ent_spawn_acc + e_px);
     if (ent_spawn_acc >= ENT_SPAWN_PIXELS) {
@@ -353,8 +355,15 @@ void entities_update(void) BANKED {
                     continue;
                 }
             }
-        } else if (river_scrolled != 0u) {
-            ent_move();
+        } else {
+            if (river_scrolled != 0u) {
+                ent_move();
+            }
+            /* Rotor animation: the Atari swaps the two shapes of a helicopter
+             * (aux 8<->9, 10<->11, `$BB24` remap) every second frame. */
+            if (e_type >= 8u && e_type <= 11u && !(ent_anim & 1u)) {
+                ent_type[e_i] ^= 1u;
+            }
         }
         ent_draw();
     }

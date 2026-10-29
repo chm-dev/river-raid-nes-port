@@ -769,3 +769,18 @@ AltirraBridge: reuse the live server token explicitly when known, e.g.
   by nearest classic-NES colour: helicopters sprite palette 2 (black, yellow,
   blue), ships palette 3 (black, dark red, cyan), jet/fuel/debris share the jet's
   palette 0 (yellow, white, red).  Black parts are only visible over water.
+### 2026-10-29 - Start sequence, colours, helicopter animation
+
+- **Start / respawn sequence (verified against Altirra):** at game start
+  `$5E` = 0 (jet blank) while `$76` counts `$80 -> $2F` as the river scrolls in
+  (lives `$6A` 4 -> 3 at that moment); the jet appears (`$5E` = 9) and everything
+  holds at `$2F` until the stick moves or fire is pressed (`A329-A339`), which
+  sets `$76 = 0` and starts play.  The NES port matches: `PLAYER_STATE_WAIT`
+  (jet hidden until the ring row at scanline 239 is non-black) ->
+  `PLAYER_STATE_READY` (jet centred on the river, `river_freeze = 1`, no fuel
+  burn or collisions) -> `PLAY` on A / any direction.  Respawn re-enters READY.
+  The Atari also shows the road/bridge at the bottom here (still open).
+- Water is NES `$11` (brighter), helicopter stripe `$02`; helicopters animate
+  (aux 8<->9, 10<->11 every 2nd frame).  Tests updated for the new water colour.
+- Altirra server note: a stale `AltirraBridgeServer` may hold port 6502; kill
+  all of them before starting, and remember `a.quit()` removes the token.
