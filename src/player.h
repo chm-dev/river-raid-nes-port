@@ -12,7 +12,7 @@
 #include <stdint.h>
 
 #define PLAYER_START_X          120u
-#define PLAYER_START_Y          224u    /* bottom of the playfield, like the Atari (jet rows 162..175 of a 20..176 river) */
+#define PLAYER_START_Y          218u    /* ~8 scanlines above the bottom of the playfield, like the Atari */
 #define PLAYER_BANK_NONE        0u
 
 typedef struct {
