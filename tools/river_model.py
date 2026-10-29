@@ -43,7 +43,7 @@ WIDTHS_BBB2 = rom(0xBBB2, 26)
 TYPE_LFSR_BBCC = rom(0xBBCC, 8)
 TYPE_MARGIN_BBD4 = rom(0xBBD4, 33)
 LENGTH_BBEB = rom(0xBBEB, 11)
-TPL_STREAM = rom(0xBC00, 0x200)  # templates live in $BC00-$BDFF
+TPL_STREAM = rom(0xBC00, 0x2F0)  # templates live in $BC00-$BEEE (width 10 x 30 rows)
 LEVEL_DESC = rom(0xB494, 0x18)
 SCORE = rom(0xBB0B, 17)
 
@@ -253,7 +253,9 @@ class RiverState:
             # AFF4: write Y+1 bytes but advance the destination by only Y,
             # so a following pattern overwrites the last filled byte.
             nonlocal p, b4
-            if y < 0:
+            # Y is an 8-bit register: wrap, then BPL/BMI on bit 7 skips the fill.
+            y &= 0xFF
+            if y & 0x80:
                 return
             if not edge:
                 if hit:

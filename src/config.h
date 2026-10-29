@@ -65,14 +65,15 @@
  *   29..30    wide "HI" label (two tiles)
  *   31..38    wide "BRIDGE" label (four glyphs, two tiles each)
  *   39..46    wide "GAME" letters (16x8 px, two tiles per letter)
- *   47        solid land
- *   48        solid water
- *   49..255   exact river cache (207 slots)
+ *
+ * These HUD tiles (0..46) live in pattern table $1000, shared with the
+ * sprites (which start at SPRITE_TILE_BASE).  The playfield uses its own
+ * table $0000: 0 solid land, 1 solid water, 2..255 exact river cache
+ * (254 slots).  main.c flips PPUCTRL bit 4 between the HUD and playfield
+ * passes of the split.
  *
  * The river cache is filled at runtime: each visible 8x8 block is uploaded
- * from the generated scanline data, so bank edges and trees are exact.  The
- * 26 visible ring rows need at most 203 per-row slots (measured over 40k
- * model rows), leaving four slots of headroom.
+ * from the generated scanline data, so bank edges and trees are exact.
  *
  * The small labels are the supplied Atari 4-pixel-font glyphs (charset codes
  * $43-$46 "BRIDGE", $5A "P1", $5B "HI"), doubled horizontally exactly like
@@ -96,22 +97,30 @@
 #define TILE_BRIDGE_WIDE        31u     /* 8 tiles: BR ID G E */
 #define TILE_GAME_WIDE          39u     /* 8 tiles: G A M E halves */
 
-#define TILE_LAND               47u
-#define TILE_WATER              48u
-#define TILE_RIVER_BASE         49u
-#define TILE_RIVER_COUNT        207u    /* exact per-row river cache */
+/* The playfield owns its own 256-tile background pattern table ($0000,
+ * PPUCTRL bit 4 = 0 during the playfield pass).  The HUD tiles above and all
+ * sprites share the other table ($1000): the split handlers flip PPUCTRL
+ * bit 4 per region, and sprites sit at SPRITE_TILE_BASE+ to stay clear of the
+ * HUD IDs.  Playfield table layout: 0 land, 1 water, 2..255 river cache. */
+#define TILE_LAND               0u
+#define TILE_WATER              1u
+#define TILE_RIVER_BASE         2u
+#define TILE_RIVER_COUNT        254u    /* exact per-row river cache */
+
+#define BG_TABLE_BIT            0x10u   /* PPUCTRL bit 4: BG pattern table */
+#define SPRITE_TILE_BASE        64u     /* sprites share the HUD table */
 
 /* Sprite tiles for the gauge overlay.
  *   8 = E, 9 = F, 10..13 = 16x14 "1/2", 14 + 16 = yellow level bar,
  *   15 = yellow lives plane ($5C).
  * Gauge labels use OAM slots 48..53; the bar uses slots 54..55 so it sits
  * behind them (lower OAM index wins).  Lives planes use slots 44..46. */
-#define HUD_GAUGE_E_TILE        8u
-#define HUD_GAUGE_F_TILE        9u
-#define HUD_FRAC_TILE           10u
-#define HUD_FUEL_BAR_TILE       14u
-#define HUD_LIFE_TILE           15u
-#define HUD_FUEL_BAR_TILE2      16u
+#define HUD_GAUGE_E_TILE        (SPRITE_TILE_BASE + 8u)
+#define HUD_GAUGE_F_TILE        (SPRITE_TILE_BASE + 9u)
+#define HUD_FRAC_TILE           (SPRITE_TILE_BASE + 10u)
+#define HUD_FUEL_BAR_TILE       (SPRITE_TILE_BASE + 14u)
+#define HUD_LIFE_TILE           (SPRITE_TILE_BASE + 15u)
+#define HUD_FUEL_BAR_TILE2      (SPRITE_TILE_BASE + 16u)
 #define HUD_LIFE_SLOT           44u
 #define HUD_GAUGE_E_SLOT        48u
 #define HUD_FRAC_SLOT           49u

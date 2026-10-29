@@ -107,7 +107,7 @@ def extract_tables() -> dict:
             rb(RIVER_TEMPLATE_PTR + i) | (rb(RIVER_TEMPLATE_PTR + i + 1) << 8)
             for i in range(0, 16, 2)
         ],
-        "river_template_bytes": list(rbytes(RIVER_TEMPLATE_DATA, 0x200)),
+        "river_template_bytes": list(rbytes(RIVER_TEMPLATE_DATA, 0x2F0)),
         "marquee_range": {"start": 0xB84B, "end": 0xB8D6},
         "marquee_text": decode_atari_text(rbytes(MARQUEE_TEXT, 0xB8D7 - 0xB84B)),
     }

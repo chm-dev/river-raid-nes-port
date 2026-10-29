@@ -55,7 +55,7 @@ The machine used for all captures is an Altirra 800XL, 320 KiB, NTSC,
 | `$BA00-$BB0A` | More shapes, player turn shapes. |
 | `$BB0B-$BB6F` | Score/spawn/remap/colour/shape/offset tables. |
 | `$BB70-$BBAB` | HUD seed text. |
-| `$BBB2-$BDFF` | River generation tables and 48-byte row templates. |
+| `$BBB2-$BEEE` | River generation tables and 48-byte row templates.  The template stream runs to `$BEEE`: width-10 trees are 30 rows x 10 bytes from `$BDC2`. |
 | `$BEEE-$BFFF` | Charset patch blocks, checksum data, vectors/unused. |
 
 ## 2. Memory map

@@ -34,8 +34,12 @@ const ROM = path.resolve('roms/river_raid.nes');
 const NOI = path.resolve('roms/river_raid.noi');
 const SHOT = path.resolve('build/phase3_smoke.png');
 
-const TILE_LAND = 47;
-const TILE_WATER = 48;
+/* The playfield owns pattern table $0000 (land 0, water 1, river cache 2..255);
+ * HUD tiles and all sprites share table $1000 (sprites start at tile 64). */
+const TILE_LAND = 0;
+const TILE_WATER = 1;
+const HUD_CHR = 0x1000;
+const SPRITE_TILE_BASE = 64;
 const TILE_GAUGE_TL = 11;
 const TILE_GAUGE_T = 13;
 const TILE_GAUGE_TC = 15;
@@ -143,7 +147,7 @@ async function main() {
     // ---------------------------------------------------------------------
     // CHR-RAM
     // ---------------------------------------------------------------------
-    const blankChr = await readBytes(0, 16, 'NesChrRam');
+    const blankChr = await readBytes(HUD_CHR, 16, 'NesChrRam');
     const zeros = Array(8).fill(0x00);
     const ff = Array(8).fill(0xff);
     check('blank/space tile 0 is empty', eq(blankChr, [...zeros, ...zeros]),
@@ -153,19 +157,19 @@ async function main() {
     check('river land tile is solid colour 1', eq(landChr, [...ff, ...zeros]),
         hexArray(landChr));
 
-    const fillChr = await readBytes(TILE_GAUGE_T * 16, 16, 'NesChrRam');
+    const fillChr = await readBytes(HUD_CHR + TILE_GAUGE_T * 16, 16, 'NesChrRam');
     const gaugeTop = [0xff, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00,
                       0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00];
     check('gauge frame top rule is one pixel',
         eq(fillChr, gaugeTop), hexArray(fillChr));
 
-    const digit0Chr = await readBytes(TILE_DIGIT_BASE * 16, 16, 'NesChrRam');
+    const digit0Chr = await readBytes(HUD_CHR + TILE_DIGIT_BASE * 16, 16, 'NesChrRam');
     check('shared digit 0 is glyph 0 on plane 0',
         eq(digit0Chr, [0x00, 0x3c, 0x66, 0x66, 0x66, 0x66, 0x3c, 0x00,
                        ...zeros]),
         hexArray(digit0Chr));
 
-    const playerChr = await readBytes(0x1000, 16, 'NesChrRam');
+    const playerChr = await readBytes(0x1000 + SPRITE_TILE_BASE * 16, 16, 'NesChrRam');
     check('player sprite CHR is populated', playerChr.some(v => v !== 0),
         hexArray(playerChr));
 
@@ -245,14 +249,14 @@ async function main() {
     check('all 30 playfield ring rows are populated', ringFilled);
 
     const riverRow = nt1.slice(3 * 32, 3 * 32 + 32);
-    check('playfield row 3 has six land tiles on each side',
-        riverRow.slice(0, 6).every(v => v === TILE_LAND) &&
-        riverRow.slice(26).every(v => v === TILE_LAND),
+    check('playfield row 3 has four land tiles on each side',
+        riverRow.slice(0, 4).every(v => v === TILE_LAND) &&
+        riverRow.slice(28).every(v => v === TILE_LAND),
         hexArray(riverRow));
     check('playfield row 3 contains river tiles',
-        riverRow.slice(6, 26).every(v => v >= TILE_LAND) &&
-        riverRow.slice(6, 26).some(v => v !== TILE_LAND),
-        hexArray(riverRow.slice(6, 26)));
+        riverRow.slice(4, 28).every(v => v >= TILE_LAND) &&
+        riverRow.slice(4, 28).some(v => v !== TILE_LAND),
+        hexArray(riverRow.slice(4, 28)));
 
     const attr1 = await readBytes(0x27C0, 64, 'NesPpuMemory');
     check('playfield attributes use palette 2 (0xAA)', attr1.every(v => v === 0xaa),

@@ -55,9 +55,9 @@ void player_init_graphics(void) {
     set_sprite_palette(0, 1, player_palette);
 
     /* Tile pairs: 0/1 bank-left, 2/3 bank-right, 4/5 straight. */
-    player_load_shape(0, 7);
-    player_load_shape(2, 8);
-    player_load_shape(4, 9);
+    player_load_shape(SPRITE_TILE_BASE + 0u, 7);
+    player_load_shape(SPRITE_TILE_BASE + 2u, 8);
+    player_load_shape(SPRITE_TILE_BASE + 4u, 9);
 
     /* Phase 3 keeps OAM hidden; Phase 5 owns the metasprite instances. */
 }

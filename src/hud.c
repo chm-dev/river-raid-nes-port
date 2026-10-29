@@ -502,6 +502,9 @@ void hud_init_graphics(void) {
     /* Shared digits: blank at tile 0, then glyphs $50-$59 at 1..10.  All
      * art is plane 0; the attribute quadrants choose black or yellow. */
     _current_1bpp_colors = 0x0001;
+    /* HUD tiles live in the $1000 pattern table (shared with sprites); the
+     * playfield uses $0000.  Select it for the BG loads below only. */
+    shadow_PPUCTRL |= BG_TABLE_BIT;
     set_bkg_1bpp_data(TILE_BLANK, 1, atari_charset);
     set_bkg_1bpp_data(TILE_DIGIT_BASE, 10,
                       atari_charset + (uint16_t)GLYPH_0 * 8u);
@@ -510,6 +513,7 @@ void hud_init_graphics(void) {
 
     /* Source HUD artwork, generated from the Atari charset. */
     hud_draw_static();
+    shadow_PPUCTRL &= (uint8_t)~BG_TABLE_BIT;
     hud_init_gauge_sprites();
 
     /* Palette 0 everywhere, then palette 1 on the yellow digit quadrants:

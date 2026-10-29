@@ -30,7 +30,7 @@
   - The 30-row collision ring stores left/right bank X and island bounds in
     source pixels, plus bridge/island/feature/flash flags.
   - The NES renderer uploads each visible 8x8 block **verbatim** into a
-    207-slot CHR cache (tiles 49..255); solids use fixed land/water tiles.
+    254-slot CHR cache in the playfield's own pattern table; solids use fixed land/water tiles.
     There is no edge/tree atlas, so 1-px staircases and 32-px tree template
     fragments are exact.
   - Orientation matches the Atari: newest row at the top, playfield scrolls
@@ -78,14 +78,14 @@
     writes one 32-tile row every 8 pixels just above the visible window.
   - Each streamed tile row is built from 8 procedural Atari rows. Raw row 7
     is the **top** scanline of the NES tile (Atari's stream is bottom-up
-    relative to the display). `river_debug_row` exposes the last raw row and
+    relative to the display). `river_raw_row` (valid when `river_block_index == 0`) exposes the last raw row and
     `river_debug_state` the generator state for the Mesen test.
   - `river_init()` prefills the ring with a straight channel (not 30 full
     procedural rows) so boot stays under one frame budget; the first
     procedural tile row replaces it as soon as the scroll crosses 8 px.
   - The old demo/atlas tile sources (`river_demo_data.*`, `river_atlas_data.*`,
     `river_tileset_data.*`) and their generators are gone; the river uses the
-    exact 207-slot cache.
+    exact 254-slot cache (24 river tile columns).
 - Build: `roms/river_raid.nes` is 32,784 bytes, mapper 30, 2 x 16 KiB PRG,
   CHR-RAM, vertical mirroring. RAM: `DATA $0300-$030F`,
   `BSS $0310-$079C`, heap at `$079D`, 99 bytes free.
@@ -212,7 +212,7 @@
 | `assets/atari/extracted/README.md` | Asset file map + full HUD glyph inventory (`$43-$46`, `$47-$4E`, `$5A-$5C`, `$50-$59`, `$01-$1A`) and their uses |
 | `assets/atari/runtime/` | Attract, scroll, play-left and play-fire captures |
 | `src/atari_data.h` / `.c` | Generated Atari asset arrays |
-| `src/river.c` | Exact generator, 30-row collision ring, exact 207-slot tile cache |
+| `src/river.c` | Exact generator, 30-row collision ring, exact 254-slot tile cache, 24-column river area |
 | `src/river.h` | Collision-ring bounds/flags and generator object-input hooks |
 | `tools/river_model.py` | Validated Python reference model of `$A6DE-$AB7E` |
 | `tools/atari_river_trace.py` | Live Altirra per-row state/row capture |
@@ -281,22 +281,24 @@ These are documented in full in `docs/ATARI_RE_SPEC.md`; don't re-derive them.
 
 ## Known issues / deferred items
 
-1. **Exact river cache (Phase 4, done):** the renderer uploads every visible
-   8x8 block verbatim.  The 26 visible ring rows need at most 203 non-solid
-   per-row slots (measured over 40,000 model rows); the cache has 207
-   (tiles 49..255).  `build/flip_fixed.png` shows the correct orientation:
-   green land, blue water, 1-px red bank staircases and right-side-up trees.
-   Remaining risk: the allocator has four slots of headroom, and
-   `set_bkg_data` stalls when a row adds more than ~6 patterns because GBDK's
-   transfer buffer is only 136 bytes.  Performance is deferred.
+1. **Exact river cache (Phase 4, done, 60 fps-class):** the renderer uploads
+   every visible 8x8 block verbatim into the playfield's **own** 256-tile BG
+   pattern table (`$0000`: 0 land, 1 water, 2..255 = 254 cache slots).  HUD
+   tiles stay in `$1000` shared with sprites (sprites start at tile 64,
+   `SPRITE_TILE_BASE`); the split handlers flip PPUCTRL bit 4 per pass.  The
+   generator runs **one tile row ahead** of the display (8 pre-generated
+   rows at init), so pattern uploads/stripe writes are spread over frames.
+   Main loop now runs ~0.98 iterations per PPU frame (was 0.45).  Remaining
+   cost: a few frames per minute still exceed one frame (rows with >6 new
+   patterns fall back to a blocking `set_bkg_data`).
 2. **Fuel/bridge scores (Phase 5):** confirm the 80/500 candidates and how
    `$BB0B` is indexed for those objects.
 3. **Collision ring is per tile row:** bounds are sampled at raw row 3 of
    each 8-row block.  Phase 5 should interpolate or sample the jet's exact
    scanline within the block.
-4. **CHR layout:** 0 blank, 1..10 shared digits, 11..26 gauge, 27..28 P1,
-   29..30 HI, 31..38 BRIDGE, 39..46 GAME, 47 land, 48 water, 49..255 exact
-   river cache.  Only 10 charset glyphs remain in CHR; all HUD labels are
+4. **CHR layout:** HUD table `$1000`: 0 blank, 1..10 shared digits, 11..26
+   gauge, 27..28 P1, 29..30 HI, 31..38 BRIDGE, 39..46 GAME; sprites 64+.
+   Playfield table `$0000`: 0 land, 1 water, 2..255 exact river cache.  Only 10 charset glyphs remain in CHR; all HUD labels are
    built from `atari_charset` in PRG.  Score/bridge digits use plane-0 art
    plus BG palette 1 (yellow); HI/game digits stay palette 0 (black).
 5. **Fuel rate / 16-bit gauge (Phase 5).**
@@ -330,14 +332,18 @@ These are documented in full in `docs/ATARI_RE_SPEC.md`; don't re-derive them.
    advances **backwards** now (`river_slot` decrements); the bounds are
    sampled at raw row 3, which sits 4 scanlines below the top of the tile
    after the vertical flip.
-3. Long-run cache validation (optional hardening): run the model/ROM for
-   thousands of tile rows and confirm the 207-slot ring never reuses a
-   visible slot.  The measured peak is 203.
+3. `tests/nes_river_cache.mjs` is the long-run cache/streaming check (needs
+   `python tools/gen_river_tiles_golden.py 520`); run it after touching
+   `river.c`.  It passed 311 tile rows / 72k row checks with zero visible
+   glitches.  The collision ring is now filled **one tile row ahead** of
+   the display: the jet must index it with that lead in mind.
 4. Visual A/B the exact cache against `river_rows_157.bin` and live Altirra
    frames, especially the bridge flash and island forks.
-5. Performance pass (deferred): the generator + exact cache currently run
-   below 60 fps; `set_bkg_data` can stall when a row adds more than ~6
-   patterns.  Profile before optimizing.
+5. RAM is tight: 36 bytes free (queue 64 B, tile buffer 320 B, ring arrays
+   150 B, debug hooks 64 B).  Phase 5 will need to reclaim some of it
+   (e.g. gate `river_debug_*` behind a macro, shrink `RIVER_Q_MAX`).
+6. Remaining perf headroom: `river_convert_row` (~4.3k cycles/frame) and
+   `river_render_row` (~3k) dominate; `hud_update` costs ~2k/frame.
 
 ## Handy commands
 
@@ -585,3 +591,70 @@ AltirraBridge: reuse the live server token explicitly when known, e.g.
 - Verified in Mesen: `build/flip_fixed.png` (newest row at the top,
   continuous edges, right-side-up trees) and `build/scroll_diff.png`.
 - All three suites pass: 50 smoke, 14 scroll/HUD, 3 river checks.
+
+### 2026-10-29 - Frame-time profile and own playfield pattern table
+
+- Profiled with Mesen Lua cycle counters (exec callbacks on `river_update`
+  entry / `hud_set_playfield_scroll`): main loop was 0.45 iterations/frame;
+  normal frames cost >30k cycles, tile-row frames up to 102k.
+- `river_row_to_tile` bit loop -> two 256-byte nibble LUTs
+  (`src/river_lut.h`, `tools/gen_river_lut.py`) with an all-land/all-water
+  fast path; per-column solid flags (`river_col_kind`) replace 16-byte
+  compares against the land/water tiles.  Normal frame ~12k cycles.
+- Tile-row classification (dedupe + uploads) is split over two frames
+  (columns 0-9, then 10-19 before the next row is converted), the nametable
+  stripe is written a frame later, and new patterns go through a small
+  upload queue (`RIVER_EAGER` direct, `RIVER_Q_MAX` queued, rest blocking).
+- To give that slack the generator runs one tile row ahead (8 rows
+  pre-generated in `river_init`, display reveals a row 8 frames after the
+  generator completes it).  A full 27-row window needs up to ~231 cache
+  slots, more than the old 207, so the playfield now has its **own BG
+  pattern table** (`$0000`, 254 slots).  HUD BG tiles moved to `$1000` with
+  the sprites; sprite tile IDs moved to 64+; `main.c` sets/clears PPUCTRL
+  bit 4 in the VBL/LCD handlers.  `hud_init_graphics` selects `$1000` for
+  its BG loads.
+- Result: ~0.98 loop iterations per PPU frame (8.1-8.2 frames per tile row).
+- Added `tests/nes_river_cache.mjs` + `tools/gen_river_tiles_golden.py`
+  (pauses and steps frames; every tile row in the visible window must match
+  the Atari model's CHR patterns).  Updated `nes_smoke.mjs` for the split
+  tables.  All four suites pass.
+- Dead end noted: `set_bkg_tiles` only addresses `$2000`-`$23FF`, and
+  `set_tiles`/`set_data` are declared in `nes.h` but missing from the
+  library, so the playfield nametable stripe still uses 20 `set_vram_byte`
+  calls (~550 cycles each).  A 6-bit rolling tile hash for dedupe was slower
+  than plain compares and was removed.
+
+### 2026-10-29 - Out-of-bounds river and garbage trees (levels 10+)
+
+- **Garbage trees:** the extracted template stream was only 512 bytes
+  (`$BC00-$BDFF`), but width-10 templates (30 rows x 10 bytes from `$BDC2`)
+  run to `$BEEE`; the cart's `$BE00-$BEEE` bytes are real template data.
+  `atari_river_templates[]` now holds `$BC00-$BEEF` (752 bytes;
+  `tools/extract_assets.py`, `tools/river_model.py` `TPL_STREAM`).  Before
+  this, level >= 10 forests read whatever followed the array in PRG.
+- **Model bug found on the way:** `river_model.py` `fill()` treated Y as an
+  unbounded Python int; the 6502 wraps Y to 8 bits and skips when bit 7 is
+  set.  Fixed (`y &= 0xFF; if y & 0x80: return`).  The C renderer already
+  did this.
+- **Out-of-bounds river:** over 40,000 tile rows (levels up to ~79) the
+  generator's banks span source bytes 3..46 (px 12..187), i.e. up to 4 px
+  outside the original TV window (bytes 4..43).  The NES port used to show
+  only that 20-tile window, so water was cut by hard land columns.  The
+  river area is now the whole 48-byte row: **24 tile columns at nametable
+  columns 4..27** (`RIVER_TILE_COLS`, `RIVER_LEFT_COL`), land in cols 0-3 and
+  28-31.  Jet X mapping for Phase 5: screen X = source px + 32.
+- RAM paid for it (+64 B tile buffer, +8): dropped the 48-byte
+  `river_debug_row` copy (tests read `river_raw_row` when
+  `river_block_index == 0`) and `RIVER_Q_MAX` 4 -> 3.  **29 bytes free.**
+- New host harness: `tests/host_river.ps1` compiles `river.c` with `zig cc`
+  against stub GBDK headers and checks 20,000 tile rows (all levels) against
+  `river_model.py` in seconds.  All 19,999 rows match.  `nes_river.mjs` now
+  steps frames (deterministic) instead of pause/resume timing.
+- Cache capacity with 24 columns: a window of 27-28 rows needs up to 257-265
+  slots in the worst case of 40,000 rows (>254 in only 2-13 windows, all at
+  very high levels), so extremely rare glitches remain theoretically
+  possible; cross-row pattern sharing would remove them if ever seen.
+- Seen at the top of the playfield around tile row 1405: a one-tile-tall
+  strip of yellow/white/black dashes across the full width.  This is believed
+  to be the bridge row at the end of a level (`flags23 & 0x80`); bridge
+  visuals are still an open Phase 5 item.

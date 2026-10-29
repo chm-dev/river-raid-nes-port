@@ -359,6 +359,8 @@ Memory notes:
 
 ## Lua scripting
 
+> Profiling recipe (used for the river frame-time work): Lua `io`/`os` are disabled, and a non-persistent script is removed after `waitMs`, so use `persistent:true` and report results through spare NES RAM (`emu.write`), read back with `mesen_read_memory`. Exec callbacks (`emu.addMemoryCallback(cb, emu.callbackType.exec, addr)`) plus `emu.getState()["cpu.cycleCount"]` give per-function cycle counts; a range callback over `$8000-$FFFF` works but slows emulation ~100x, so profile ~60 frames at a time.
+
 `mesen_run_lua_script` runs a script inside Mesen and returns its log output.
 Use **`emu.log(...)`**, not Lua `print`: `print` output was not returned by the
 MCP call in probing, while `emu.log` lines were.

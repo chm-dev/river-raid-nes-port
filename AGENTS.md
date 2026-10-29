@@ -23,12 +23,18 @@ Port of Atari 8-bit **River Raid** (`xex/River Raid (1983)(Activision)(US)[a3].x
 1. **Flat Static State:** Use global/static variables and fixed-size arrays instead of deep call stacks or pointers to stack locals to avoid SDCC `mos6502` software-stack overhead.
 2. **ISR Overlay Safety:** Mark all `add_VBL()`, `add_LCD()`, and `add_TIM()` handlers (and their callees) with `NO_OVERLAY_LOCALS` or `#pragma nooverlay`.
 3. **SDCC Local Aliasing:** do not keep a block-local value live across a call in a complex function. SDCC may allocate it to the same register/overlay slot as the callee's state even with `#pragma nooverlay`; the saved value silently changes. Use a file-scope `static` for values like a saved row offset. This produced a real river-renderer bug (`ysave` in `river_render_row`) that only disappeared when extra debug stores perturbed code generation.
-4. **VBlank Budget:** Never write full screens during gameplay. Stream at most **1 tile row (32 bytes)** + **attribute updates (8 bytes)** and dirty HUD digits per frame. GBDK's VRAM transfer buffer is only `$100-$187` (136 bytes); `set_bkg_data` blocks if it fills, so keep per-row exact-cache uploads small.
+4. **VBlank Budget / transfer buffer:** GBDK's VRAM transfer buffer is 136 bytes and `set_bkg_data`/`set_vram_byte` are CPU-expensive (~1.5k / ~550 cycles per call). `set_bkg_tiles` only reaches `$2000-$23FF`; `set_tiles`/`set_data` are declared but not in the library. Spread uploads over frames (see `river_stream_pending`).
+4b. **VBlank Budget:** Never write full screens during gameplay. Stream at most **1 tile row (32 bytes)** + **attribute updates (8 bytes)** and dirty HUD digits per frame. GBDK's VRAM transfer buffer is only `$100-$187` (136 bytes); `set_bkg_data` blocks if it fills, so keep per-row exact-cache uploads small.
 5. **Top HUD Sprite Clipping:** Hide or clip any metasprite whose Y coordinate is in the HUD region (`Y < 36`).
 6. **Split Scroll Compensation:** GBDK's deferred LCD ISR adds the **current scanline** to `bkg_scroll_y` when it writes the entry. The playfield handler must subtract `HUD_SPLIT_SCANLINE` (mod 240) before `move_bkg()`, otherwise the playfield is 36 px ahead of the ring and the newest row appears at the bottom. The handler in `main.c` does this.
 7. **No Fixed River Atlas:** the Atari river is a per-scanline bitmap; trees are template fragments 4*$BC px wide and $BE scanlines tall, often starting on odd bytes. The 8x8 block depends on vertical phase. Upload exact blocks; do not reintroduce nearest-tile atlases.
 
 ---
+
+### NES pattern tables and sprite tiles
+- The playfield owns BG pattern table `$0000` (0 land, 1 water, 2..255 river cache). HUD BG tiles live in `$1000` with all sprites; sprite tile IDs start at `SPRITE_TILE_BASE` (64) so they never collide with HUD IDs. `main.c` flips PPUCTRL bit 4 in the VBL (HUD) and LCD (playfield) handlers; code that calls `set_bkg_data` outside those handlers must set/restore `shadow_PPUCTRL` bit 4 itself (see `hud_init_graphics`).
+- The river shows the whole 48-byte Atari row: 24 tile columns at nametable columns 4..27 (`RIVER_TILE_COLS`, `RIVER_LEFT_COL`); screen X = source px + 32.
+- `tests/host_river.ps1` checks the C generator against `tools/river_model.py` on the host (needs `zig cc`); run it after touching `river.c` generator code. `tests/nes_river_cache.mjs` checks the on-screen tiles against the model in Mesen.
 
 ## Reverse Engineering Tools
 
@@ -70,4 +76,5 @@ Full reference: `info/MESEN_MCP_NOTES.md`.
   - **Deterministic Stepping:** Pause playback and use `mesen_step {cpuType: "Nes", count: 1, stepType: "PpuFrame"}` for frame-exact assertions.
   - **Input Latching:** `mesen_input_override` latches buttons; always clear with `buttons: ""` in a `finally` block.
   - **Lua Probes:** Always use `emu.log(...)` (never `print(...)`) in `mesen_run_lua_script`.
+  - **Lua limits:** `io`/`os` are disabled and the log only returns at load time. Use `persistent:true` (a non-persistent script is removed after `waitMs`) and write results to free NES RAM with `emu.write`, then read them with `mesen_read_memory`. Cycle counting: `emu.getState()["cpu.cycleCount"]` inside `emu.addMemoryCallback(..., emu.callbackType.exec, addr)`. Keep the mailbox inside the free RAM reported by `build.ps1`.
   - **Cleanup:** Remove breakpoints/Lua scripts and stop `MesenCE-MCP-Windows` when finished if you started it.

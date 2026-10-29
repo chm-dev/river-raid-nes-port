@@ -16,6 +16,13 @@
 #define RIVER_ROWS              30u
 #define RIVER_COLS              32u
 
+/* The whole 48-byte Atari row is shown: 24 tiles of river area (nametable
+ * columns 4..27) between 4 land columns on each side.  Generator banks can
+ * reach bytes 3..46 at high levels, outside the 40-byte window of the
+ * original TV picture. */
+#define RIVER_TILE_COLS         24u
+#define RIVER_LEFT_COL          4u
+
 #define RIVER_FLAG_BRIDGE       0x01u
 #define RIVER_FLAG_ISLAND       0x02u
 #define RIVER_FLAG_FEATURE      0x04u

@@ -77,7 +77,8 @@ async function main() {
     const scrollAddr = symAddr('playfield_scroll_y');
     const freezeAddr = symAddr('river_freeze');
     const distAddr = symAddr('river_distance');
-    const rowAddr = symAddr('river_debug_row');
+    const rowAddr = symAddr('river_raw_row');
+    const blockAddr = symAddr('river_block_index');
     const stateAddr = symAddr('river_debug_state');
     const leftAddr = symAddr('river_left_x');
     const rightAddr = symAddr('river_right_x');
@@ -105,12 +106,13 @@ async function main() {
     let firstCollisionFail = null;
     const seen = new Set();
 
-    // The game runs freely; pause it and identify the debug row by matching
-    // the 12-byte generator state against the golden stream.  This avoids
-    // racing the distance counter and works even if a block is in flight.
-    for (let iter = 0; iter < TILE_ROWS * 8 && samples < TILE_ROWS; iter++) {
-        await callTool('mesen_playback', { action: 'pause' });
-        await sleep(10);
+    // Step one frame at a time.  When river_block_index is 0 the raw row
+    // buffer holds the eighth row of a finished tile row, which is the row
+    // the golden stream records; match the 12-byte generator state to find
+    // which tile row that is.
+    for (let iter = 0; iter < TILE_ROWS * 10 && samples < TILE_ROWS; iter++) {
+        await stepFrame();
+        if ((await readU8(blockAddr)) !== 0) continue;
         const state = await readBytes(stateAddr, 12);
         let match = -1;
         for (let k = 0; k < golden.length; k++) {
@@ -153,8 +155,6 @@ async function main() {
                 firstCollisionFail = `tile row ${match}: got ${JSON.stringify(collision)} want ${JSON.stringify(want)}`;
             }
         }
-        await callTool('mesen_playback', { action: 'resume' });
-        await sleep(60);
     }
 
     // The ROM is already running when the test first attaches, so the first

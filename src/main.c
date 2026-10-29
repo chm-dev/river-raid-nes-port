@@ -39,7 +39,8 @@ static void vbl_handler(void) {
     /* The NMI applies this entry during VBlank.  Ask for the faked LCD
      * entry at HUD_SPLIT_LYC; the handler installs the playfield scroll. */
     move_bkg(0, 0);
-    shadow_PPUCTRL = (uint8_t)((shadow_PPUCTRL & 0xFCu) | 0x00u);
+    /* HUD pass: nametable 0 and the HUD/sprite pattern table ($1000). */
+    shadow_PPUCTRL = (uint8_t)((shadow_PPUCTRL & 0xECu) | BG_TABLE_BIT);
     LYC_REG = HUD_SPLIT_LYC;
     vbl_events++;
 }
@@ -56,7 +57,10 @@ static void lcd_handler(void) {
         ? (uint8_t)(sy - HUD_SPLIT_SCANLINE)
         : (uint8_t)(sy + (240u - HUD_SPLIT_SCANLINE));
     move_bkg(0, sy);
-    shadow_PPUCTRL = (uint8_t)((shadow_PPUCTRL & 0xFCu) | PLAYFIELD_NT_BITS);
+    /* Playfield pass: nametable 1 and the playfield's own pattern table
+     * ($0000).  Main-thread set_bkg_data() therefore targets the river
+     * cache whenever this handler was the last to run. */
+    shadow_PPUCTRL = (uint8_t)((shadow_PPUCTRL & 0xECu) | PLAYFIELD_NT_BITS);
     LYC_REG = 0;
     split_events++;
 }
