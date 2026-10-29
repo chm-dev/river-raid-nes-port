@@ -931,6 +931,7 @@ static void ent_draw(void) {
 void entities_update(void) BANKED {
     if (player_disable) {
         /* Test hook: no entities while the jet is frozen. */
+        river_scrolled = 0;
         if (entity_count != 0u) {
             entities_clear();
         }
@@ -1041,6 +1042,7 @@ void entities_update(void) BANKED {
     }
 
     ent_frame = (uint8_t)(ent_frame + game_ticks);
+    river_scrolled = 0;                     /* consumed: every entity moved by it above */
 
     /* Hide sprites freed since the last frame. */
     while (ent_oam_used > e_oam) {

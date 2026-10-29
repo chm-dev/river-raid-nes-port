@@ -27,8 +27,8 @@
 #include "collision.h"
 #include "sound.h"
 
-#ifndef MAIN_FRAMES_PER_PASS
-#define MAIN_FRAMES_PER_PASS 2u     /* 2 = 30 Hz logic, 1 = 60 Hz */
+#ifndef LOGIC_FRAMES
+#define LOGIC_FRAMES 2u             /* HUD/player/entities every n-th frame: 2 = 30 Hz, 1 = 60 Hz */
 #endif
 
 /* Read by tests through roms/river_raid.noi. */
@@ -37,6 +37,7 @@ volatile uint16_t vbl_events;
 volatile uint16_t split_events;
 uint8_t game_ticks = 1u;
 static uint8_t main_last;
+static uint8_t logic_acc;       /* frames since the last logic pass */
 
 static void vbl_handler(void) NO_OVERLAY_LOCALS;
 static void lcd_handler(void) NO_OVERLAY_LOCALS;
@@ -98,24 +99,30 @@ void main(void) {
     for (;;) {
         /* Wait for a new frame, but only if none passed during the last
          * pass: an overrun pass starts the next one at once (catch-up). */
-        /* 30 Hz experiment: one pass per MAIN_FRAMES_PER_PASS frames.  An
-         * overrun pass that already used them starts the next one at once. */
-        do {
-            vsync();
-        } while ((uint8_t)((uint8_t)sys_time - main_last) < MAIN_FRAMES_PER_PASS);
+        /* Wait for a new frame, but only if none passed during the last
+         * pass: an overrun pass starts the next one at once (catch-up). */
+        vsync();
         game_ticks = (uint8_t)((uint8_t)sys_time - main_last);
         main_last = (uint8_t)sys_time;
         if (game_ticks > 4u) {
             game_ticks = 4u;
         }
         frame_counter++;
-        hud_update();
+
+        /* The river (scroll, row generation, tile uploads) runs every frame;
+         * everything else runs once per LOGIC_FRAMES frames.  river_scrolled
+         * accumulates in between so the entities still follow the river. */
         river_update();
 
-        /* Phase 4-6 update hooks; each is a no-op stub for now. */
-        player_update();
-        entities_update();
-        collision_update();
-        sound_update();
+        logic_acc = (uint8_t)(logic_acc + game_ticks);
+        if (logic_acc >= LOGIC_FRAMES) {
+            game_ticks = logic_acc;         /* at most 1 + 4 */
+            logic_acc = 0;
+            hud_update();
+            player_update();
+            entities_update();
+            collision_update();
+            sound_update();
+        }
     }
 }

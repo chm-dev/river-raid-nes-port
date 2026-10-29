@@ -1680,7 +1680,7 @@ void river_update(void) {
      * for classification, so a slow frame delays generation, never the
      * scroll.  The generator is 8 rows ahead of the display, which is the
      * slack river_owed may use. */
-    river_scrolled = 0;
+    /* river_scrolled accumulates until entities_update() consumes it. */
     if (!river_freeze) {
         ru_target = (river_speed == 0u) ? RIVER_VEL_SLOW :
                     (river_speed == 1u) ? RIVER_VEL_CRUISE : RIVER_VEL_FAST;
@@ -1706,7 +1706,7 @@ void river_update(void) {
                 : (uint8_t)(ru_next - 1u);
         }
         river_owed = (uint8_t)(river_owed + ru_rows);
-        river_scrolled = ru_rows;
+        river_scrolled = (uint8_t)(river_scrolled + ru_rows);
         if (ru_rows) {
             hud_set_playfield_scroll(ru_next);
         }
