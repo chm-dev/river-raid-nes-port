@@ -51,6 +51,14 @@ extern uint16_t river_distance;
  * untouched so a test can drive playfield_scroll_y directly. */
 extern uint8_t river_freeze;
 
+/* Throttle set by the player: 0 = slow (scroll every other frame),
+ * 1 = cruise (1 px/frame).  A fast setting is still to do. */
+extern uint8_t river_speed;
+
+/* Collision-ring slot (== nametable row) under a playfield scanline
+ * (36..239). */
+uint8_t river_slot_at_scanline(uint8_t scanline);
+
 void river_init(void);
 
 /* Advance the playfield by one pixel and stream the next hidden row when

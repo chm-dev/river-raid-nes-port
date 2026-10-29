@@ -29,6 +29,9 @@ typedef struct {
 
 extern player_state_t player;
 
+/* Test hook: freeze the jet (hidden, no fuel burn, no collisions). */
+extern uint8_t player_disable;
+
 void player_init(void);
 
 /* Load the three 14-row flight shapes into the sprite pattern table.

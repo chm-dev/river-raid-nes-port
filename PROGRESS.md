@@ -1,7 +1,7 @@
 # Project Progress & Session Handoff
 
 **Last updated:** 2026-10-29
-**Current phase:** Phase 4 COMPLETE — Phase 5 (player, entities, collision) is next
+**Current phase:** Phase 5 IN PROGRESS — jet steering/terrain crash done; entities, shot, fuel pick-ups, scoring next
 **Phase 1:** COMPLETE (reverse engineering + asset extraction)
 **Phase 2:** COMPLETE (scaffolding, build pipeline, boot ROM, Mesen smoke test)
 **Phase 3:** COMPLETE (HUD, deferred LCD split, playfield ring, 1-px scroll test)
@@ -706,3 +706,15 @@ AltirraBridge: reuse the live server token explicitly when known, e.g.
   work below.
 - `nes_smoke.mjs` waits 5 s for the river to fill the screen before the colour
   check and accepts an all-black ring row 3.
+### 2026-10-29 - Phase 5 slice 1: player jet
+
+- `player.c`: joypad steering (1 px/frame, clamped to source px 8..184), bank
+  sprite (shapes 7/8/9 on OAM 0/1), throttle (Down = slow: `river_speed` 0
+  scrolls every other frame; fast not done), fuel burn 1 unit / 8 frames,
+  terrain crash (jet nose and tail rows vs `river_left_x/right_x/island_*`
+  via `river_slot_at_scanline()`; 0/0 black-world rows ignored), 90-frame
+  death delay, respawn mid-river, game over at 0 lives (START restarts).
+- Test hook `player_disable` (like `river_freeze`); `nes_scroll_hud` and
+  `nes_river` set it. All three suites pass. RAM: 11 bytes free.
+- Not done: shot, entities, fuel refill, bridge, scoring, respawn at the last
+  bridge, fast throttle, fuel rate parity, fine collision within a tile row.

@@ -125,6 +125,7 @@ async function main() {
     const frameAddr = symAddr('frame_counter');
     const scrollAddr = symAddr('playfield_scroll_y');
     const freezeAddr = symAddr('river_freeze');
+    await writeBytes(symAddr('player_disable'), [1]);
     const vblAddr = symAddr('vbl_events');
     const splitAddr = symAddr('split_events');
 

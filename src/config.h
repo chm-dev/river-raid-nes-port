@@ -182,6 +182,10 @@
 
 #define PLAYFIELD_NT_BITS       0x01u   /* PPUCTRL bit 0 selects $2400 */
 
+/* Screen X of a source-pixel X (the river row starts at nametable column 4). */
+#define SOURCE_X_OFFSET         (RIVER_LEFT_COL_PX)
+#define RIVER_LEFT_COL_PX       32u
+
 #define RIVER_RING_ROWS         30u
 #define RIVER_VIEW_TOP_ROW      3u      /* ring row at scroll 0 */
 #define RIVER_SCROLL_HEIGHT     240u

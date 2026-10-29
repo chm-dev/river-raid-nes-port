@@ -86,6 +86,7 @@ async function main() {
     const irAddr = symAddr('river_island_right_x');
     const flagsAddr = symAddr('river_flags');
 
+    await writeBytes(symAddr('player_disable'), [1]);
     await writeBytes(freezeAddr, [0]);
 
     // The free-running boot may already have generated a few tile rows;

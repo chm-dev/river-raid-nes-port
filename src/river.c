@@ -121,6 +121,8 @@ uint8_t river_flags[RIVER_ROWS];
 
 uint16_t river_distance;
 uint8_t river_freeze;
+uint8_t river_speed = 1u;
+static uint8_t river_slow_phase;
 
 /* Test hooks: last generated 48-byte row and the state after it.  These are
  * exported through the .noi file so Mesen tests can compare the C port with
@@ -1072,6 +1074,16 @@ void river_init(void) {
     }
 }
 
+uint8_t river_slot_at_scanline(uint8_t scanline) {
+    uint16_t bg_y = (uint16_t)playfield_scroll_y +
+                    (uint16_t)(scanline - PLAYFIELD_SCANLINE);
+
+    if (bg_y >= RIVER_SCROLL_HEIGHT) {
+        bg_y -= RIVER_SCROLL_HEIGHT;
+    }
+    return (uint8_t)(bg_y >> 3);
+}
+
 void river_update(void) {
     uint8_t next;
 
@@ -1079,6 +1091,14 @@ void river_update(void) {
 
     if (river_freeze) {
         return;
+    }
+
+    /* Throttle: the slow setting scrolls every other frame. */
+    if (river_speed == 0u) {
+        river_slow_phase ^= 1u;
+        if (river_slow_phase) {
+            return;
+        }
     }
 
     /* Scroll down: the playfield moves in the opposite direction to the
