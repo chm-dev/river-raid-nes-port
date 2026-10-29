@@ -27,6 +27,10 @@
 #include "collision.h"
 #include "sound.h"
 
+#ifndef MAIN_FRAMES_PER_PASS
+#define MAIN_FRAMES_PER_PASS 2u     /* 2 = 30 Hz logic, 1 = 60 Hz */
+#endif
+
 /* Read by tests through roms/river_raid.noi. */
 volatile uint16_t frame_counter;
 volatile uint16_t vbl_events;
@@ -94,7 +98,11 @@ void main(void) {
     for (;;) {
         /* Wait for a new frame, but only if none passed during the last
          * pass: an overrun pass starts the next one at once (catch-up). */
-        vsync();
+        /* 30 Hz experiment: one pass per MAIN_FRAMES_PER_PASS frames.  An
+         * overrun pass that already used them starts the next one at once. */
+        do {
+            vsync();
+        } while ((uint8_t)((uint8_t)sys_time - main_last) < MAIN_FRAMES_PER_PASS);
         game_ticks = (uint8_t)((uint8_t)sys_time - main_last);
         main_last = (uint8_t)sys_time;
         if (game_ticks > 4u) {
