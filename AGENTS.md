@@ -8,7 +8,8 @@
 ## Project Overview
 Port of Atari 8-bit **River Raid** (`xex/River Raid (1983)(Activision)(US)[a3].xex`) to the **NES** in C using **GBDK-2020 v4.5.0** (`./gbdk`).
 - **Source Binary:** 8,220-byte XEX containing a 16-byte loader stub (`$9FF0–$9FFF`, sets `RAMTOP=$60`, jumps to `$A000`) and an unbanked **8 KiB Atari 800 Left Cartridge ROM (`$A000–$BFFF`)**, with `RUNAD=$9FF0`.
-- **NES Display Architecture:** Stationary **Top HUD** (rows 0–2, scanlines 0–23) + **Vertically Scrolling Playfield** (rows 3–29, scanlines 24–239) split via GBDK's `add_LCD()` (`_lcd_scanline` / `LYC_REG = 24`).
+- **NES Display Architecture:** Stationary **Top HUD** (rows 0-3, scanlines 0-31, plus 4 px bottom padding) in nametable 0 (`$2000`) + **Vertically Scrolling Playfield** (scanlines 36-239) in nametable 1 (`$2400`), split by GBDK's deferred `add_LCD()` handler (`LYC=35`, visible split 36/37) with vertical mirroring in the iNES header. The playfield is a full 30-row ring, so fine scrolling never wraps into the HUD.
+- **HUD assets:** do not redraw the HUD. `assets/atari/extracted/charset.bin` already contains the original art: `$43-$46` = BRIDGE, `$47-$4E` = the 5-cell gauge (`47 48 49 48 4A` / `4B 4C 4D 4C 4E`, E/1-2/F baked in), `$5A` = P1, `$5B` = HI, `$5C` = lives plane. Labels are doubled horizontally like mode-6 text. See `assets/atari/extracted/README.md` → "HUD glyph inventory" for codes, sizes and uses.
 - **Full Porting Plan:** See `PORTING_PLAN.md`.
 
 ---

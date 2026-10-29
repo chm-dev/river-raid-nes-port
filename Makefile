@@ -26,6 +26,7 @@ $(ROM): $(OBJ)
 	@mkdir -p roms
 	$(LCC) $(LDFLAGS) -o $@ $(OBJ)
 	@rm -f roms/river_raid.ihx roms/river_raid.rom
+	python tools/patch_nes_header.py $(ROM)
 
 clean:
 	rm -rf build
@@ -33,3 +34,4 @@ clean:
 
 test: $(ROM)
 	node tests/nes_smoke.mjs
+	node tests/nes_scroll_hud.mjs

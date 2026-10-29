@@ -3,7 +3,7 @@
  *
  * TODO(Phase 5): deterministic spawn cadence from the Atari tables,
  * bridge checker, helicopter/ship patrol ranges, jet crossings, fuel
- * depots and explosion state.  Sprites are hidden above scanline 24.
+ * depots and explosion state.  Sprites are hidden above scanline 36.
  */
 #include <stdint.h>
 

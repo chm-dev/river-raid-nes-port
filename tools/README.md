@@ -34,6 +34,13 @@ The AltirraBridge SDK lives at `F:\Emu\Atari800\Altirra\AlitrraBridge\sdk\python
 | `export_row_reference.py` | Exports the live 157-row playfield and generator state. |
 | `extract_assets.py` | Generates `assets/atari/extracted/*` and `src/atari_data.{h,c}`. |
 
+## NES build / assets
+
+| Tool | Purpose |
+|---|---|
+| `gen_river_demo.py` | Packs the captured 157-row Atari river into 8x8 NES tiles and emits `src/river_demo_data.{h,c}`. |
+| `patch_nes_header.py` | Rewrites GBDK's iNES byte 6 to vertical mirroring (HUD `$2000`, playfield `$2400`). Called by `build.ps1` and the Makefile. |
+
 ## Deprecated
 
 * `render_mode14.py` - wrong mode/stride assumption; use `render_mode_e.py`.

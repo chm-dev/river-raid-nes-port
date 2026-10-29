@@ -102,6 +102,14 @@ Remove-Item -Force -ErrorAction SilentlyContinue @(
 if (-not (Test-Path $romPath)) { throw "ROM not produced: $romPath" }
 if (-not (Test-Path $noiPath)) { throw "NOI not produced: $noiPath" }
 
+# GBDK 4.5.0 always passes `makenes -a 1` (four-screen layout bit).  This
+# port needs the two vertically stacked nametables that horizontal mirroring
+# provides: HUD in $2000, playfield ring in $2800.
+$patchHeader = Join-Path $repoRoot 'tools\patch_nes_header.py'
+if (-not (Test-Path $patchHeader)) { throw "Header patch tool missing: $patchHeader" }
+& python $patchHeader $romPath
+if ($LASTEXITCODE -ne 0) { throw 'NES header patch failed' }
+
 function Get-NoiSymbol {
     param(
         [Parameter(Mandatory = $true)][string]$Path,
@@ -130,6 +138,7 @@ function Assert-RomHeader {
     $prgBanks = [int]$rom[4]
     $chrBanks = [int]$rom[5]
     $mapper   = (($rom[6] -shr 4) -band 0x0F) -bor ($rom[7] -band 0xF0)
+    $layout   = $rom[6] -band 0x0F
     $expected = 16 + ($prgBanks * 16384) + ($chrBanks * 8192)
 
     if ($mapper -ne 30) {
@@ -138,11 +147,15 @@ function Assert-RomHeader {
     if ($chrBanks -ne 0) {
         throw ("Unexpected CHR-ROM bank count {0}; this build uses 8 KiB CHR-RAM" -f $chrBanks)
     }
+    if ($layout -ne 1) {
+        throw ("Unexpected iNES nametable layout 0x{0:X2}; expected vertical mirroring" -f $layout)
+    }
     if ($rom.Length -ne $expected) {
         throw ("ROM size {0} does not match header ({1} bytes)" -f $rom.Length, $expected)
     }
 
-    Write-Host ("ROM  {0} bytes, mapper {1}, PRG {2} x 16 KiB, CHR-RAM" -f `
+    Write-Host (("ROM  {0} bytes, mapper {1}, PRG {2} x 16 KiB, CHR-RAM, " +
+        "vertical mirroring (HUD `$2000 + playfield `$2400)") -f `
         $rom.Length, $mapper, $prgBanks)
 }
 

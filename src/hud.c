@@ -1,191 +1,551 @@
 /*
- * hud.c - Phase 2 boot screen and HUD scaffolding.
+ * hud.c - stationary HUD built from the original Atari HUD artwork.
  *
- * Tile memory layout:
- *   0..127   Atari 8x8 character set (1bpp source expanded to NES 2bpp)
- *   128..132 scene tiles (interleaved Game Boy 2bpp source -> NES planar)
+ * The source HUD is a gray band with black and yellow text:
  *
- * Everything here is drawn through GBDK's normal tile API.  While the
- * display is off those calls write VRAM directly; once the display is on
- * they use the transfer buffer and are consumed by the NMI handler.
+ *   row 0:   P1          score          HI       hi-score
+ *   row 1:   GAME        [ fuel box ]   BRIDGE   bridge#
+ *   row 2:      game#    [ E 1/2 F ]    lives
+ *
+ * Fixed artwork comes straight from charset.bin:
+ *   $43-$46 = "BRIDGE" (two letters per 8x8 glyph)
+ *   $5A     = "P1",  $5B = "HI"
+ *   $47-$4A = gauge top row  (47 48 49 48 4A)
+ *   $4B-$4E = gauge bottom row (4B 4C 4D 4C 4E)
+ *   $5C     = lives plane
+ * Small labels are doubled horizontally, exactly like the Atari's mode-6
+ * text.  "GAME" uses the ordinary uppercase glyphs the same way.
+ *
+ * The fuel level is a yellow vertical bar that slides from F (full) to E
+ * (empty), behind the gauge's fixed E / 1-2 / F artwork.  The gauge frame
+ * and its labels are background art; E, 1/2 and F are duplicated as black
+ * sprites with a lower OAM index than the bar, so when the bar passes under
+ * a label the sprite keeps the label visible on top.
+ *
+ * Tile memory layout (see config.h):
+ *   0..127    Atari 8x8 character set (1bpp source expanded to NES 2bpp)
+ *   128..209  Phase 3 river demo tiles
+ *   210..255  fixed HUD artwork and yellow digits
+ *
+ * The HUD is drawn once into nametable 0 and then only dirty dynamic fields
+ * are rewritten.  Everything here uses GBDK's normal tile API; while the
+ * display is off those calls write VRAM directly, and once it is on they go
+ * through the NMI transfer buffer.
  */
 #include <nes/nes.h>
 #include <stdint.h>
+#include <string.h>
 
 #include "config.h"
 #include "atari_data.h"
 #include "hud.h"
+#include "river_demo_data.h"
 
 volatile uint8_t playfield_scroll_y;
 
-/* One 4-colour background palette.  Entry 0 is also the universal backdrop,
- * so the boot screen is white-on-black.  Entries 1..3 are white/green/blue. */
-static const palette_color_t boot_palette[4] = {
-    BG_COLOR_BLACK, BG_COLOR_WHITE, BG_COLOR_GREEN, BG_COLOR_BLUE
+uint8_t hud_score_bcd[3];
+uint8_t hud_hi_bcd[3];
+uint8_t hud_fuel;
+uint8_t hud_lives;
+uint8_t hud_game;
+uint8_t hud_bridge;
+
+static const palette_color_t hud_palette[4] = {
+    BG_COLOR_GRAY, BG_COLOR_BLACK, BG_COLOR_YELLOW, BG_COLOR_WHITE
 };
 
-/* Scene tile source is Game Boy-style interleaved 2bpp: eight (plane0,
- * plane1) row pairs.  set_bkg_data() converts these to NES planar CHR. */
-static const uint8_t scene_tiles[TILE_SCENE_COUNT * 16] = {
-    /* 128 TILE_LAND: colour 2 (green) */
-    0x00, 0xFF, 0x00, 0xFF, 0x00, 0xFF, 0x00, 0xFF,
-    0x00, 0xFF, 0x00, 0xFF, 0x00, 0xFF, 0x00, 0xFF,
-    /* 129 TILE_WATER: colour 3 (blue) */
-    0xFF, 0xFF, 0xFF, 0xFF, 0xFF, 0xFF, 0xFF, 0xFF,
-    0xFF, 0xFF, 0xFF, 0xFF, 0xFF, 0xFF, 0xFF, 0xFF,
-    /* 130 TILE_BANK_LEFT: green on the left, blue on the right */
-    0x0F, 0xFF, 0x0F, 0xFF, 0x0F, 0xFF, 0x0F, 0xFF,
-    0x0F, 0xFF, 0x0F, 0xFF, 0x0F, 0xFF, 0x0F, 0xFF,
-    /* 131 TILE_BANK_RIGHT: blue on the left, green on the right */
-    0xF0, 0xFF, 0xF0, 0xFF, 0xF0, 0xFF, 0xF0, 0xFF,
-    0xF0, 0xFF, 0xF0, 0xFF, 0xF0, 0xFF, 0xF0, 0xFF,
-    /* 132 TILE_BRIDGE: blue with a two-pixel white band */
-    0xFF, 0xE7, 0xFF, 0xE7, 0xFF, 0xE7, 0xFF, 0xE7,
-    0xFF, 0xE7, 0xFF, 0xE7, 0xFF, 0xE7, 0xFF, 0xE7,
+static const palette_color_t playfield_palette[4] = {
+    BG_COLOR_BLACK, BG_COLOR_GREEN, BG_COLOR_RED, BG_COLOR_BLUE
 };
 
-/* Scratch row shared by text and scene drawing.  BSS, not the stack. */
+/* Gauge labels and fraction are black; sprite palette entry 1 is black. */
+static const palette_color_t gauge_sprite_palette[4] = {
+    0x0Fu, 0x0Fu, 0x0Fu, 0x0Fu
+};
+
+/* Fuel marker: 4-pixel yellow column in two stacked sprites (8 + 2 px),
+ * starting just below the gauge's top markers and ending just above the
+ * bottom rule.  The colour starts in tile column 0 so the sprite X equals
+ * the marker X.  Sprite palette 0 entry 1 is the player yellow. */
+static const uint8_t fuel_bar_tile[16] = {
+    0xF0, 0x00, 0xF0, 0x00, 0xF0, 0x00, 0xF0, 0x00,
+    0xF0, 0x00, 0xF0, 0x00, 0xF0, 0x00, 0xF0, 0x00
+};
+static const uint8_t fuel_bar_tile2[16] = {
+    0xF0, 0x00, 0xF0, 0x00, 0x00, 0x00, 0x00, 0x00,
+    0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00
+};
+
+/* Bar X position by fuel sixteenth.  The half-tank entry (8) lines up with
+ * the centre of the fixed 1/2 artwork. */
+static const uint8_t fuel_bar_x[16] = {
+    80, 84, 88, 92, 95, 99, 103, 107,
+    111, 115, 120, 124, 129, 133, 137, 142
+};
+
+/* Scratch tile buffer for doubled glyphs (2 tiles) and gauge sprites. */
+static uint8_t wide_tile_buf[2 * 16];
+static uint8_t gauge_sprite_buf[4 * 16];
+
+/* Scratch row shared by text and dynamic field drawing.  BSS, not the stack. */
 static uint8_t hud_row_buf[SCREEN_TILES_W];
 
-/* BCD frame counter displayed at row 26.  Kept in BCD so the main loop
- * does not need 16-bit division every frame. */
-static uint8_t frame_digits[4];
-static uint8_t frame_glyphs[4];
+/* Cached values; hud_update() writes a field only when it differs. */
+static uint8_t shown_score[6];
+static uint8_t shown_hi[6];
+static uint8_t shown_bridge[2];
+static uint8_t shown_game;
+static uint8_t shown_lives;
+static uint8_t shown_fuel_step;
 
-/* Wavy river shape used by the boot screen.  The phase 4 generator will
- * replace this with the authentic Atari LFSR/table stream. */
-static const uint8_t river_wave[BOOT_RIVER_WAVE_ROWS] = {
-    0, 1, 2, 3, 4, 3, 2, 1
-};
+/* ------------------------------------------------------------------------- */
+/* Small helpers                                                             */
+/* ------------------------------------------------------------------------- */
 
-static uint8_t glyph_for_char(char c) {
-    if (c >= 'A' && c <= 'Z') {
-        return (uint8_t)(c - 'A' + GLYPH_A);
-    }
-    if (c >= 'a' && c <= 'z') {
-        return (uint8_t)(c - 'a' + 33u);
-    }
-    if (c >= '0' && c <= '9') {
-        return (uint8_t)(c - '0' + GLYPH_0);
-    }
-    if (c == '.') {
-        return GLYPH_DOT;
-    }
-    if (c == '!') {
-        return GLYPH_BANG;
-    }
-    if (c == '?') {
-        return GLYPH_QUESTION;
-    }
-    /* Anything else (including spaces) is the blank glyph. */
-    return GLYPH_SPACE;
+static void hud_vram_byte(uint16_t addr, uint8_t value) {
+    set_vram_byte((uint8_t *)addr, value);
 }
 
-static void hud_draw_text(uint8_t x, uint8_t y, const char *text) {
-    uint8_t n = 0;
+/* Duplicate a byte's pixels horizontally: 8 source bits -> 16 output bits. */
+static uint8_t spread_left(uint8_t v) {
+    uint8_t out = 0;
 
-    while (text[n] != '\0' && n < SCREEN_TILES_W) {
-        hud_row_buf[n] = glyph_for_char(text[n]);
-        n++;
-    }
-    if (n != 0) {
-        set_bkg_tiles(x, y, n, 1, hud_row_buf);
-    }
+    if (v & 0x80u) out |= 0xC0u;
+    if (v & 0x40u) out |= 0x30u;
+    if (v & 0x20u) out |= 0x0Cu;
+    if (v & 0x10u) out |= 0x03u;
+    return out;
 }
 
-static void hud_draw_scene(void) {
-    uint8_t r;
-    uint8_t x;
+static uint8_t spread_right(uint8_t v) {
+    uint8_t out = 0;
 
-    for (r = 0; r < BOOT_RIVER_ROWS; r++) {
-        uint8_t y = (uint8_t)(BOOT_RIVER_TOP_ROW + r);
-        uint8_t wave = river_wave[r & (BOOT_RIVER_WAVE_ROWS - 1u)];
-        uint8_t left = (uint8_t)(BOOT_RIVER_LEFT_MIN + wave);
-        uint8_t right = (uint8_t)(BOOT_RIVER_RIGHT_MAX - wave);
+    if (v & 0x08u) out |= 0xC0u;
+    if (v & 0x04u) out |= 0x30u;
+    if (v & 0x02u) out |= 0x0Cu;
+    if (v & 0x01u) out |= 0x03u;
+    return out;
+}
 
-        for (x = 0; x < SCREEN_TILES_W; x++) {
-            uint8_t tile;
+/* Load one charset glyph as two 16x8 background tiles.  Yellow art goes on
+ * plane 1 (palette entry 2); black art goes on plane 0 (entry 1). */
+static void hud_wide_glyph(uint8_t dest, uint8_t code, uint8_t yellow) {
+    const uint8_t *src = atari_charset + (uint16_t)(code & 0x7Fu) * 8u;
+    uint8_t row;
 
-            if (x < left) {
-                tile = TILE_LAND;
-            } else if (x == left) {
-                tile = TILE_BANK_LEFT;
-            } else if (x < right) {
-                tile = (y == BOOT_BRIDGE_ROW) ? TILE_BRIDGE : TILE_WATER;
-            } else if (x == right) {
-                tile = TILE_BANK_RIGHT;
-            } else {
-                tile = TILE_LAND;
-            }
-            hud_row_buf[x] = tile;
+    for (row = 0; row < 8u; row++) {
+        uint8_t l = spread_left(src[row]);
+        uint8_t r = spread_right(src[row]);
+
+        wide_tile_buf[row * 2u] = yellow ? 0u : l;
+        wide_tile_buf[row * 2u + 1u] = yellow ? l : 0u;
+        wide_tile_buf[16u + row * 2u] = yellow ? 0u : r;
+        wide_tile_buf[16u + row * 2u + 1u] = yellow ? r : 0u;
+    }
+    set_bkg_data(dest, 2, wide_tile_buf);
+}
+
+/* Convert 3 BCD bytes (6 digits) to tile IDs, suppressing leading zeros.
+ * `base` is GLYPH_0 for black digits or TILE_DIGIT_YELLOW for yellow ones. */
+static void hud_bcd_tiles(const uint8_t bcd[3], uint8_t out[6], uint8_t base) {
+    uint8_t digits[6];
+    uint8_t started = 0;
+    uint8_t i;
+
+    digits[0] = (uint8_t)(bcd[0] >> 4);
+    digits[1] = (uint8_t)(bcd[0] & 0x0Fu);
+    digits[2] = (uint8_t)(bcd[1] >> 4);
+    digits[3] = (uint8_t)(bcd[1] & 0x0Fu);
+    digits[4] = (uint8_t)(bcd[2] >> 4);
+    digits[5] = (uint8_t)(bcd[2] & 0x0Fu);
+
+    for (i = 0; i < 6u; i++) {
+        if (digits[i] != 0u) {
+            started = 1u;
         }
-        set_bkg_tiles(0, y, (uint8_t)SCREEN_TILES_W, 1, hud_row_buf);
+        out[i] = started ? (uint8_t)(base + digits[i]) : GLYPH_SPACE;
+    }
+    if (!started) {
+        out[5] = base; /* a zero score still shows one digit */
     }
 }
+
+/* ------------------------------------------------------------------------- */
+/* Gauge sprite art (from the original charset)                              */
+/* ------------------------------------------------------------------------- */
+
+/* Gauge labels use the 4-pixel-wide letters.  The top bar is the last row
+ * of the upper box glyph ($47 for E, $4A for F); the body is the first six
+ * rows of the lower glyph ($4B / $4E).  E sits in columns 4..7, F in 0..3. */
+static void hud_build_gauge_letter(uint8_t dest, uint8_t top_code,
+                                   uint8_t body_code, uint8_t shift) {
+    const uint8_t *top = atari_charset + (uint16_t)(top_code & 0x7Fu) * 8u;
+    const uint8_t *body = atari_charset + (uint16_t)(body_code & 0x7Fu) * 8u;
+    uint8_t row;
+
+    for (row = 0; row < 8u; row++) {
+        uint8_t src;
+
+        if (row == 0u) {
+            src = top[7];                  /* top bar */
+        } else if (row < 7u) {
+            src = body[row - 1u];          /* letter body */
+        } else {
+            src = 0u;
+        }
+        wide_tile_buf[row * 2u] =
+            spread_left((uint8_t)(((src >> shift) & 0x0Fu) << 4));
+        wide_tile_buf[row * 2u + 1u] = 0u;
+    }
+    set_sprite_data(dest, 1, wide_tile_buf);
+}
+
+/* "1/2" is baked into the gauge-box centre glyphs: $49 carries the upper
+ * seven rows, $4D the lower seven.  Build it as a 16x14 (2x2 sprite) map. */
+static void hud_build_gauge_fraction(void) {
+    uint8_t row;
+    uint8_t i;
+
+    for (i = 0; i < 4u * 16u; i++) {
+        gauge_sprite_buf[i] = 0u;
+    }
+
+    for (row = 0; row < 14u; row++) {
+        uint8_t src = (row < 7u)
+            ? atari_charset[(0x49u * 8u) + 1u + row]
+            : atari_charset[(0x4Du * 8u) + (row - 7u)];
+        uint8_t left = spread_left(src);
+        uint8_t right = spread_right(src);
+        uint8_t tile = (row < 8u) ? 0u : 2u;
+        uint8_t local = (uint8_t)(row & 7u);
+        uint16_t base = (uint16_t)tile * 16u + (uint16_t)local * 2u;
+
+        gauge_sprite_buf[base] = left;
+        gauge_sprite_buf[base + 1u] = 0u;
+        gauge_sprite_buf[base + 16u] = right;
+        gauge_sprite_buf[base + 17u] = 0u;
+    }
+    set_sprite_data(HUD_FRAC_TILE, 4, gauge_sprite_buf);
+}
+
+/* Lives plane is the source's $5C glyph, one sprite tile. */
+static void hud_build_life_tile(void) {
+    const uint8_t *src = atari_charset + (0x5Cu * 8u);
+    uint8_t row;
+
+    for (row = 0; row < 8u; row++) {
+        gauge_sprite_buf[row * 2u] = src[row];
+        gauge_sprite_buf[row * 2u + 1u] = 0u;
+    }
+    set_sprite_data(HUD_LIFE_TILE, 1, gauge_sprite_buf);
+}
+
+static void hud_init_gauge_sprites(void) {
+    uint8_t i;
+
+    set_sprite_palette(1, 1, gauge_sprite_palette);
+
+    hud_build_gauge_letter(HUD_GAUGE_E_TILE, 0x47u, 0x4Bu, 0u);
+    hud_build_gauge_letter(HUD_GAUGE_F_TILE, 0x4Au, 0x4Eu, 4u);
+    hud_build_gauge_fraction();
+    hud_build_life_tile();
+    set_sprite_data(HUD_FUEL_BAR_TILE, 1, fuel_bar_tile);
+    set_sprite_data(HUD_FUEL_BAR_TILE2, 1, fuel_bar_tile2);
+
+    set_sprite_tile(HUD_GAUGE_E_SLOT, HUD_GAUGE_E_TILE);
+    set_sprite_prop(HUD_GAUGE_E_SLOT, S_PAL(1));
+    move_sprite(HUD_GAUGE_E_SLOT, HUD_GAUGE_E_X, HUD_GAUGE_LABEL_Y - 1u);
+
+    for (i = 0; i < 4u; i++) {
+        uint8_t slot = (uint8_t)(HUD_FRAC_SLOT + i);
+
+        set_sprite_tile(slot, (uint8_t)(HUD_FRAC_TILE + i));
+        set_sprite_prop(slot, S_PAL(1));
+        move_sprite(slot,
+                    (uint8_t)(HUD_FRAC_X + (i & 1u) * 8u),
+                    (uint8_t)(HUD_FRAC_Y + (i >> 1) * 8u - 1u));
+    }
+
+    set_sprite_tile(HUD_GAUGE_F_SLOT, HUD_GAUGE_F_TILE);
+    set_sprite_prop(HUD_GAUGE_F_SLOT, S_PAL(1));
+    move_sprite(HUD_GAUGE_F_SLOT, HUD_GAUGE_F_X, HUD_GAUGE_LABEL_Y - 1u);
+
+    set_sprite_tile(HUD_FUEL_BAR_SLOT, HUD_FUEL_BAR_TILE);
+    set_sprite_prop(HUD_FUEL_BAR_SLOT, S_PAL(0));
+    move_sprite(HUD_FUEL_BAR_SLOT, HUD_FUEL_BAR_X_MAX, HUD_FUEL_BAR_Y - 1u);
+
+    set_sprite_tile(HUD_FUEL_BAR_SLOT2, HUD_FUEL_BAR_TILE2);
+    set_sprite_prop(HUD_FUEL_BAR_SLOT2, S_PAL(0));
+    move_sprite(HUD_FUEL_BAR_SLOT2, HUD_FUEL_BAR_X_MAX, HUD_FUEL_BAR_Y2 - 1u);
+
+    for (i = 0; i < HUD_LIVES_ICON_MAX; i++) {
+        uint8_t slot = (uint8_t)(HUD_LIFE_SLOT + i);
+
+        set_sprite_tile(slot, HUD_LIFE_TILE);
+        set_sprite_prop(slot, S_PAL(0));
+        hide_sprite(slot);
+    }
+}
+
+/* ------------------------------------------------------------------------- */
+/* Dynamic fields                                                            */
+/* ------------------------------------------------------------------------- */
+
+static void hud_write_score(void) {
+    uint8_t tiles[6];
+    uint8_t i;
+    uint8_t changed = 0;
+
+    hud_bcd_tiles(hud_score_bcd, tiles, TILE_DIGIT_YELLOW);
+    for (i = 0; i < 6u; i++) {
+        if (tiles[i] != shown_score[i]) {
+            changed = 1u;
+        }
+    }
+    if (changed) {
+        set_bkg_tiles(HUD_SCORE_X, HUD_SCORE_ROW, 6, 1, tiles);
+        memcpy(shown_score, tiles, 6);
+    }
+}
+
+static void hud_write_hi(void) {
+    uint8_t tiles[6];
+    uint8_t i;
+    uint8_t changed = 0;
+
+    hud_bcd_tiles(hud_hi_bcd, tiles, GLYPH_0);
+    for (i = 0; i < 6u; i++) {
+        if (tiles[i] != shown_hi[i]) {
+            changed = 1u;
+        }
+    }
+    if (changed) {
+        set_bkg_tiles(HUD_HI_X, HUD_HI_ROW, 6, 1, tiles);
+        memcpy(shown_hi, tiles, 6);
+    }
+}
+
+static void hud_write_bridge(void) {
+    uint8_t value = hud_bridge;
+    uint8_t tiles[2];
+
+    if (value > HUD_BRIDGE_DIGIT_MAX) {
+        value = HUD_BRIDGE_DIGIT_MAX;
+    }
+    if (value >= 10u) {
+        tiles[0] = (uint8_t)(TILE_DIGIT_YELLOW + value / 10u);
+        tiles[1] = (uint8_t)(TILE_DIGIT_YELLOW + value % 10u);
+    } else {
+        tiles[0] = GLYPH_SPACE;
+        tiles[1] = (uint8_t)(TILE_DIGIT_YELLOW + value);
+    }
+    if (tiles[0] != shown_bridge[0] || tiles[1] != shown_bridge[1]) {
+        set_bkg_tiles(HUD_BRIDGE_DIGIT_X, HUD_BRIDGE_ROW, 2, 1, tiles);
+        shown_bridge[0] = tiles[0];
+        shown_bridge[1] = tiles[1];
+    }
+}
+
+static void hud_write_game(void) {
+    uint8_t digit = hud_game;
+
+    if (digit > 9u) {
+        digit = 9u;
+    }
+    if (digit != shown_game) {
+        set_bkg_tile_xy(HUD_GAME_DIGIT_X, HUD_GAME_DIGIT_ROW,
+                        (uint8_t)(GLYPH_0 + digit));
+        shown_game = digit;
+    }
+}
+
+static void hud_write_lives(void) {
+    uint8_t i;
+    uint8_t icons = hud_lives;
+
+    if (icons > HUD_LIVES_ICON_MAX) {
+        icons = HUD_LIVES_ICON_MAX;
+    }
+    if (icons == shown_lives) {
+        return;
+    }
+    for (i = 0; i < HUD_LIVES_ICON_MAX; i++) {
+        uint8_t slot = (uint8_t)(HUD_LIFE_SLOT + i);
+
+        if (i < icons) {
+            move_sprite(slot, (uint8_t)(HUD_LIFE_X + i * 8u),
+                        HUD_LIFE_Y - 1u);
+        } else {
+            hide_sprite(slot);
+        }
+    }
+    shown_lives = icons;
+}
+
+/* Slide the yellow level marker across the gauge; the labels never change. */
+static void hud_write_fuel(void) {
+    uint8_t step = (uint8_t)(hud_fuel >> 4);
+
+    if (step == shown_fuel_step) {
+        return;
+    }
+    move_sprite(HUD_FUEL_BAR_SLOT, fuel_bar_x[step], HUD_FUEL_BAR_Y - 1u);
+    move_sprite(HUD_FUEL_BAR_SLOT2, fuel_bar_x[step], HUD_FUEL_BAR_Y2 - 1u);
+    shown_fuel_step = step;
+}
+
+/* ------------------------------------------------------------------------- */
+/* Static layout                                                             */
+/* ------------------------------------------------------------------------- */
+
+static void hud_draw_static(void) {
+    uint8_t tiles[HUD_GAUGE_W];
+    uint8_t i;
+
+    /* Labels are the game's own 4-pixel HUD glyphs, doubled like mode 6. */
+    hud_wide_glyph(TILE_P1_WIDE, 0x5Au, 1u);          /* P1, yellow */
+    hud_wide_glyph(TILE_HI_WIDE, 0x5Bu, 0u);          /* HI, black */
+    hud_wide_glyph(TILE_BRIDGE_WIDE + 0u, 0x43u, 1u); /* BR */
+    hud_wide_glyph(TILE_BRIDGE_WIDE + 2u, 0x44u, 1u); /* ID */
+    hud_wide_glyph(TILE_BRIDGE_WIDE + 4u, 0x45u, 1u); /* G */
+    hud_wide_glyph(TILE_BRIDGE_WIDE + 6u, 0x46u, 1u); /* E */
+
+    /* GAME uses the ordinary uppercase glyphs, doubled. */
+    hud_wide_glyph(TILE_GAME_WIDE + 0u, 7u, 0u);      /* G */
+    hud_wide_glyph(TILE_GAME_WIDE + 2u, 1u, 0u);      /* A */
+    hud_wide_glyph(TILE_GAME_WIDE + 4u, 13u, 0u);     /* M */
+    hud_wide_glyph(TILE_GAME_WIDE + 6u, 5u, 0u);      /* E */
+
+    /* Gauge frame comes from the charset's 5-cell assembly:
+     *   top    47 48 49 48 4A
+     *   bottom 4B 4C 4D 4C 4E */
+    hud_wide_glyph(TILE_GAUGE_TL, 0x47u, 0u);
+    hud_wide_glyph(TILE_GAUGE_T, 0x48u, 0u);
+    hud_wide_glyph(TILE_GAUGE_TC, 0x49u, 0u);
+    hud_wide_glyph(TILE_GAUGE_TR, 0x4Au, 0u);
+    hud_wide_glyph(TILE_GAUGE_BL, 0x4Bu, 0u);
+    hud_wide_glyph(TILE_GAUGE_B, 0x4Cu, 0u);
+    hud_wide_glyph(TILE_GAUGE_BC, 0x4Du, 0u);
+    hud_wide_glyph(TILE_GAUGE_BR, 0x4Eu, 0u);
+
+    tiles[0] = TILE_P1_WIDE;
+    tiles[1] = TILE_P1_WIDE + 1u;
+    set_bkg_tiles(HUD_P1_X, HUD_P1_ROW, 2, 1, tiles);
+
+    tiles[0] = TILE_HI_WIDE;
+    tiles[1] = TILE_HI_WIDE + 1u;
+    set_bkg_tiles(HUD_HI_LABEL_X, HUD_HI_ROW, 2, 1, tiles);
+
+    for (i = 0; i < HUD_GAME_TILES; i++) {
+        tiles[i] = (uint8_t)(TILE_GAME_WIDE + i);
+    }
+    set_bkg_tiles(HUD_GAME_X, HUD_GAME_ROW, HUD_GAME_TILES, 1, tiles);
+
+    for (i = 0; i < HUD_BRIDGE_TILES; i++) {
+        tiles[i] = (uint8_t)(TILE_BRIDGE_WIDE + i);
+    }
+    set_bkg_tiles(HUD_BRIDGE_X, HUD_BRIDGE_ROW, HUD_BRIDGE_TILES, 1, tiles);
+
+    /* Top row: TL, T, TC, T, TR. */
+    tiles[0] = TILE_GAUGE_TL;
+    tiles[1] = TILE_GAUGE_TL + 1u;
+    tiles[2] = TILE_GAUGE_T;
+    tiles[3] = TILE_GAUGE_T + 1u;
+    tiles[4] = TILE_GAUGE_TC;
+    tiles[5] = TILE_GAUGE_TC + 1u;
+    tiles[6] = TILE_GAUGE_T;
+    tiles[7] = TILE_GAUGE_T + 1u;
+    tiles[8] = TILE_GAUGE_TR;
+    tiles[9] = TILE_GAUGE_TR + 1u;
+    set_bkg_tiles(HUD_GAUGE_X, HUD_GAUGE_ROW, HUD_GAUGE_W, 1, tiles);
+
+    /* Bottom row: BL, B, BC, B, BR. */
+    tiles[0] = TILE_GAUGE_BL;
+    tiles[1] = TILE_GAUGE_BL + 1u;
+    tiles[2] = TILE_GAUGE_B;
+    tiles[3] = TILE_GAUGE_B + 1u;
+    tiles[4] = TILE_GAUGE_BC;
+    tiles[5] = TILE_GAUGE_BC + 1u;
+    tiles[6] = TILE_GAUGE_B;
+    tiles[7] = TILE_GAUGE_B + 1u;
+    tiles[8] = TILE_GAUGE_BR;
+    tiles[9] = TILE_GAUGE_BR + 1u;
+    set_bkg_tiles(HUD_GAUGE_X, HUD_GAUGE_BOTTOM_ROW, HUD_GAUGE_W, 1, tiles);
+}
+
+static void hud_refresh_all(void) {
+    hud_write_score();
+    hud_write_hi();
+    hud_write_bridge();
+    hud_write_game();
+    hud_write_lives();
+    hud_write_fuel();
+}
+
+/* ------------------------------------------------------------------------- */
+/* Public interface                                                          */
+/* ------------------------------------------------------------------------- */
 
 void hud_init_palette(void) {
-    set_bkg_palette(0, 1, boot_palette);
+    set_bkg_palette(HUD_PALETTE, 1, hud_palette);
+    set_bkg_palette(PLAYFIELD_PALETTE, 1, playfield_palette);
 }
 
 void hud_init_graphics(void) {
-    /* 128 glyphs, 1bpp source; set_bkg_1bpp_data() expands to NES 2bpp.
-     * GBDK's storage initialises fg=3,bg=0 which leaves plane 1 equal
-     * to plane 0 (every bit becomes colour entry 3).  The library build
-     * does not ship set_1bpp_colors_ex(), so poke the colour pair
-     * directly: low byte = fg, high byte = bg.  fg=1/bg=0 puts glyph
-     * bits in plane 0 only (colour entry 1, white). */
+    uint8_t i;
+    uint8_t row;
+
+    /* 128 black glyphs (plane 0, HUD palette entry 1). */
     _current_1bpp_colors = 0x0001;
     set_bkg_1bpp_data(TILE_FIRST_GLYPH, 128, atari_charset);
-    set_bkg_data(TILE_FIRST_SCENE, TILE_SCENE_COUNT, scene_tiles);
 
-    hud_draw_text(BOOT_TITLE_X, BOOT_TITLE_ROW, "RIVER RAID");
-    hud_draw_text(BOOT_SUBTITLE_X, BOOT_SUBTITLE_ROW, "ATARI 800 TO NES");
-    hud_draw_text(BOOT_PHASE_X, BOOT_PHASE_ROW, "PHASE 2 BOOT");
+    /* River demo tiles use the playfield palette (entries 1..3). */
+    set_bkg_data(TILE_RIVER_BASE, RIVER_DEMO_TILE_COUNT, river_demo_tile_chr);
 
-    hud_draw_text(BOOT_STATUS_X0, BOOT_STATUS_ROW0, "CHR RAM OK");
-    hud_draw_text(BOOT_STATUS_X1, BOOT_STATUS_ROW1, "PALETTE OK");
-    hud_draw_text(BOOT_STATUS_X2, BOOT_STATUS_ROW2, "NAMETABLE OK");
-
-    hud_draw_scene();
-
-    hud_draw_text(BOOT_FRAME_LABEL_X, BOOT_FRAME_LABEL_ROW, "FRAME");
-
-    frame_digits[0] = 0;
-    frame_digits[1] = 0;
-    frame_digits[2] = 0;
-    frame_digits[3] = 0;
-    frame_glyphs[0] = GLYPH_0;
-    frame_glyphs[1] = GLYPH_0;
-    frame_glyphs[2] = GLYPH_0;
-    frame_glyphs[3] = GLYPH_0;
-    set_bkg_tiles(BOOT_FRAME_DIGITS_X, BOOT_FRAME_DIGITS_ROW, 4, 1,
-                  frame_glyphs);
-
-    hud_draw_text(BOOT_FOOTER_X, BOOT_FOOTER_ROW, "MESEN SMOKE TEST");
-}
-
-void hud_update_frame(void) {
-    uint8_t i = 3;
-
-    /* BCD increment with carry from ones to thousands. */
-    for (;;) {
-        frame_digits[i]++;
-        if (frame_digits[i] < 10u) {
-            break;
+    /* Yellow digits (plane 1, HUD palette entry 2), shifted up one pixel so
+     * the score has a little padding above the gauge frame. */
+    _current_1bpp_colors = 0x0002;
+    for (i = 0; i < 10u; i++) {
+        for (row = 0; row < 8u; row++) {
+            hud_row_buf[row] = (row < 7u)
+                ? atari_charset[(uint16_t)(GLYPH_0 + i) * 8u + row + 1u]
+                : 0u;
         }
-        frame_digits[i] = 0;
-        if (i == 0) {
-            break;
-        }
-        i--;
+        set_bkg_1bpp_data((uint8_t)(TILE_DIGIT_YELLOW + i), 1, hud_row_buf);
+    }
+    _current_1bpp_colors = 0x0001;
+
+    /* Source HUD artwork, generated from the Atari charset. */
+    hud_draw_static();
+    hud_init_gauge_sprites();
+
+    /* One HUD palette for every 16x16 block of nametable 0. */
+    for (i = 0; i < 64; i++) {
+        hud_vram_byte((uint16_t)(PPU_NT0_ATTR + i), 0x00u);
     }
 
-    frame_glyphs[0] = (uint8_t)(GLYPH_0 + frame_digits[0]);
-    frame_glyphs[1] = (uint8_t)(GLYPH_0 + frame_digits[1]);
-    frame_glyphs[2] = (uint8_t)(GLYPH_0 + frame_digits[2]);
-    frame_glyphs[3] = (uint8_t)(GLYPH_0 + frame_digits[3]);
-    set_bkg_tiles(BOOT_FRAME_DIGITS_X, BOOT_FRAME_DIGITS_ROW, 4, 1,
-                  frame_glyphs);
+    hud_score_bcd[0] = 0;
+    hud_score_bcd[1] = 0;
+    hud_score_bcd[2] = 0;
+    hud_hi_bcd[0] = 0;
+    hud_hi_bcd[1] = 0;
+    hud_hi_bcd[2] = 0;
+    hud_fuel = 255;
+    hud_lives = 3;
+    hud_game = 1;
+    hud_bridge = 1;
+    shown_fuel_step = 0xFFu; /* force the first marker write */
+
+    hud_refresh_all();
+}
+
+void hud_update(void) {
+    hud_write_score();
+    hud_write_hi();
+    hud_write_bridge();
+    hud_write_game();
+    hud_write_lives();
+    hud_write_fuel();
 }
 
 void hud_set_playfield_scroll(uint8_t y) {

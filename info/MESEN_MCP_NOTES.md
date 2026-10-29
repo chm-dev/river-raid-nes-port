@@ -317,6 +317,11 @@ Memory notes:
   the PNG on the server side and returns a `Saved to ...` text block plus a
   base64 `image` block. Without `outputFile`, only the image block is returned.
 - NES screenshots are **256x240** PNGs in this build.
+- A screenshot taken while the emulator is running can capture a partially
+  rendered frame. For pixel-exact assertions, pause, call
+  `mesen_step {cpuType:"Nes", count:1, stepType:"PpuFrame"}`, then take the
+  screenshot. Freeze any game-controlled scroll first so the step does not
+  advance it.
 - Use absolute paths for `outputFile`, `mesen_save_state` file paths, and
   `mesen_load_rom` paths.
 - `mesen_get_state {component:"cpu"}` returns text such as

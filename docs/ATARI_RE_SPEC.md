@@ -643,6 +643,31 @@ The custom charset is a rearranged copy of the OS ROM:
 The runtime 1 KiB copy is in `assets/atari/extracted/charset.bin`. Glyph
 code `c` displays `charset[(c & 0x7F) * 8 .. +8]`.
 
+### 8.1 HUD glyphs (use these directly)
+
+The charset already contains the complete HUD artwork.  The small labels
+use a compressed 4-pixel font (two letters per 8x8 glyph); the gauge and
+plane icon are dedicated glyphs.  Note that the live HUD buffer stores the
+high-bit forms (`$C7..$CE`), so mask with `$7F` before indexing.
+
+| Code | Art | Use |
+|---|---|---|
+| `$43` / `$44` / `$45` / `$46` | "BR" / "ID" / "G" / "E" | `BRIDGE` (4 glyphs, doubled to 16 px each) |
+| `$47` / `$48` / `$49` / `$4A` | gauge top row | assembled `47 48 49 48 4A` |
+| `$4B` / `$4C` / `$4D` / `$4E` | gauge bottom row | assembled `4B 4C 4D 4C 4E` |
+| `$5A` / `$5B` | "P1" / "HI" | player and high-score labels (doubled) |
+| `$5C` | plane icon | remaining-lives icons |
+| `$01-$1A` | uppercase A-Z | `GAME` (`G/A/M/E = $07/$01/$0D/$05`) |
+
+The gauge's E, 1/2 and F are baked into `$47..$4E`; they are fixed labels,
+not a fuel readout.  The level is the yellow vertical bar, which is 10 px
+tall and 4 px wide, starts just below the top markers, and moves from the F
+marker (full) to the E marker (empty); it is drawn behind the labels.  `$48`
+carries the top rule, `$49` the upper half of 1/2, `$4C` the bottom rule and
+`$4D` the lower half.  At mode-6 scale each glyph is 16 px wide, so the
+5-cell gauge is 80 px wide.  See `assets/atari/extracted/README.md` for the
+full asset/glyph map.
+
 ## 9. Audio
 
 The deferred VBI at `$B2A5` drives four POKEY channels:

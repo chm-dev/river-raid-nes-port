@@ -9,7 +9,9 @@
   - Contains a 16-byte XEX loader stub at `$9FF0–$9FFF` (`LDA #$60`, `STA $6A` [RAMTOP], `JSR $F3F6` [OS screen init], `JMP $A000`) and a linear, unbanked **8 KiB Atari 800 Left Cartridge ROM image (`$A000–$BFFF`)**.
 - **Target Platform & Toolchain:** **NES** using **GBDK-2020 v4.5.0** (`./gbdk/bin/lcc -mmos6502:nes`, SDCC `mos6502` backend; this build rejects the shorter `-mnes` spelling).
 - **Screen Layout & HUD Strategy:** **Top Stationary HUD (Scanlines 0–23 / Rows 0–2)** + **Vertically Scrolling River Playfield (Scanlines 24–239)**.
-  - Implemented using GBDK-NES's built-in `add_LCD()` scanline interrupt (`_lcd_scanline` / `LYC_REG = 24`) with vertically arranged nametables (`-DNES_TILEMAP_V` or single-screen wrap with HUD redraw/split). Placing the HUD at the top keeps GBDK's software scanline delay loop under ~10% of the frame CPU budget and avoids custom bottom-of-screen PPU register juggling.
+  - The HUD is drawn in nametable 0 (`$2000`); the 30-row (240-pixel) playfield ring lives in nametable 1 (`$2400`). The iNES header uses vertical mirroring so the two nametables are distinct.
+  - GBDK's deferred `add_LCD()` handler (requested `LYC=23`) switches the playfield scroll/nametable from the NMI path every frame, so river row streaming cannot delay or miss the split. The visible split lands on scanline 24/25; that one-line boundary jitter is inherent to GBDK's faked LCD delay, but the top 24 rows stay HUD/black and there are no black playfield frames.
+  - A full 30-row playfield ring means fine scrolling never wraps into the HUD rows: three hidden tile rows provide the lead time for the next streamed river row.
 - **Reverse Engineering Stack:**
   - **Static Analysis:** **REA / Ghidra** (6502 disassembly & decompilation of the `$A000–$BFFF` cartridge image).
   - **Dynamic Analysis:** **AltirraBridge** (`F:\Emu\Atari800\Altirra\AlitrraBridge\AltirraBridgeServer.exe` + Python SDK) for live memory probing, display list / GTIA / PMG / POKEY inspection, execution profiling, and deterministic behavior verification.
@@ -61,8 +63,8 @@
 | Subsystem | Atari 8-Bit (*River Raid*) | NES Port (GBDK-2020) |
 | :--- | :--- | :--- |
 | **ROM / Mapper** | 8 KiB Cartridge (`$A000–$BFFF`) | Default GBDK-NES ROM configuration (NROM / UNROM with CHR-RAM or CHR-ROM) + `.noi` debug symbols. |
-| **Screen Layout** | scrolling playfield on top + ANTIC DLI split for HUD at the bottom. | **Top HUD (Rows 0–2, 24 px)** fixed at scroll `(0, 0)` + **Scrolling Playfield (Rows 3–29, 216 px)** split at scanline 24 via `add_LCD()`. |
-| **Vertical Scrolling** | ANTIC `VSCROL` fine scroll + Display List LMS row pointer updates. | Nametable circular ring buffer (`bkg_scroll_y`) streaming 1 new river row at the top of the scrolling viewport before it enters view. |
+| **Screen Layout** | scrolling playfield on top + ANTIC DLI split for HUD at the bottom. | **Top HUD (Rows 0–2, 24 px)** fixed at scroll `(0, 0)` in NT0 + **Scrolling Playfield (Rows 3–29, 216 px)** in NT1, split at scanline 24/25 by GBDK's deferred `add_LCD()` handler. |
+| **Vertical Scrolling** | ANTIC `VSCROL` fine scroll + Display List LMS row pointer updates. | Full 30-row (240 px) nametable ring in `$2400`; `playfield_scroll_y` advances one pixel/frame and one 32-tile row is streamed every 8 pixels into the hidden slot. |
 | **Terrain & Attributes** | 4-color playfield characters (green banks, blue water, black/gray roads, bridges). | 8×8 background CHR tiles. By including water/land transition tiles in a shared 4-color background palette (`[Water Blue, Bank Green, Dark Outline/Black, Road/Bridge Accent]`), 8×8 riverbank edges need zero 16×16 attribute table clashes. |
 | **Sprites (Player, Enemies, Shots)** | 4 Players + 4 Missiles (1bpp full-height strips multiplexed vertically by band). | **NES 2bpp Hardware Metasprites (`move_metasprite`)**: Player jet (16×16), Enemy ship/heli/jet (16×16 or 24×16), Fuel depot (16×24), Player shot (8×8). Since *River Raid* places at most one obstacle per horizontal band, the NES 8-sprites-per-scanline limit is naturally respected. |
 | **Collision Detection** | Hardware GTIA registers (`P0PF`, `M0PF`, `P0PL`, `M0PL`). | **Deterministic C Collision:**<br>• **Jet / Shot vs. Terrain:** Fast lookup into a 32-row in-RAM river geometry ring buffer (storing left/right bank & island X bounds per tile row).<br>• **Jet / Shot vs. Entities:** AABB bounding-box check against active entity slots. |
@@ -145,15 +147,16 @@
 **Goal:** Render the stationary Top HUD and smoothly scrolling river viewport below scanline 24.
 
 1. **CHR & Palette Setup:**
-   - Load HUD font/digits, fuel gauge tiles, riverbank/water/island/road/bridge tiles, and sprite tiles into PPU pattern tables.
-   - Configure NES background and sprite palettes derived from the Atari color registers.
-2. **Top HUD & `add_LCD()` Split (`src/hud.c`):**
-   - Draw the 3-row stationary HUD at nametable rows 0–2 (Score, Fuel bar with `E ... F` markers, remaining Lives icon).
-   - Install `add_VBL()` / `add_LCD()` handlers:
-     - At VBlank (scanline 0): set scroll to `(0, 0)` so the Top HUD is stationary.
-     - At scanline 24 (`LYC_REG = 24`): switch scroll to `(0, river_scroll_y)` for the playfield.
-3. **Verification (`tests/nes_scroll_hud.mjs`):**
-   - Step 120 frames in `MesenCE-MCP`, inspect PPU state and screenshots to confirm the top 24 scanlines remain rock-solid while the playfield scrolls smoothly without seam glitches.
+   - Load the HUD font/digits, fuel gauge tiles, the captured river tile set, and the three player flight shapes into CHR-RAM.
+   - HUD palette `0F 30 28 2A` (black/white/yellow/bright green); playfield palette `0F 1A 06 12` (black/bank green/outline red/water blue).
+2. **Top HUD & Split (`src/hud.c`, `src/main.c`):**
+   - Draw the 3-row stationary HUD at nametable rows 0–2 (score, HI, gear/game, fuel bar with `E ... F`, lives, bridge count/icons).
+   - Keep the HUD in NT0 (`$2000`) and the full 30-row playfield ring in NT1 (`$2400`), enabled by vertical mirroring in the iNES header.
+   - At VBlank the NMI restores `(0, 0)` in NT0.  The deferred `add_LCD()` handler then installs the playfield scroll/nametable at scanline 24/25; GBDK's PPUADDR + PPUSCROLL sequence sets both `t` and `v`, so the vertical scroll works mid-frame.  The one-line boundary jitter comes from the faked LCD delay, not the main loop.
+3. **Playfield Ring:**
+   - `river_update()` advances the fine scroll 1 pixel/frame and streams the next 32-tile row into the hidden slot every 8 pixels. Phase 3 uses the captured Atari river converted by `tools/gen_river_demo.py`; Phase 4 replaces only the row source.
+4. **Verification (`tests/nes_scroll_hud.mjs`):**
+   - Confirms 120+ frames of 1-pixel/frame scroll with the top 24 scanlines unchanged, a stable split at scanline 24, an exact `A[y+1] == B[y]` frozen-scroll shift, and live score/fuel/lives/bridge updates.
 
 ---
 

@@ -1,9 +1,9 @@
 /*
  * player.h - player jet and shot state (Phase 5 scaffolding).
  *
- * Coordinates are playfield pixels: x = 0..255, y = 0..215 (scanline 24
- * is the top of the playfield).  Fuel is kept as two BCD-ish bytes; the
- * exact Atari gauge rate is still an open item in PROGRESS.md.
+ * Coordinates are playfield pixels: x = 0..255, y = 0..203 (scanline 36
+ * is the top of the visible playfield).  Fuel is kept as two BCD-ish bytes;
+ * the exact Atari gauge rate is still an open item in PROGRESS.md.
  */
 #ifndef PLAYER_H
 #define PLAYER_H
@@ -30,6 +30,10 @@ typedef struct {
 extern player_state_t player;
 
 void player_init(void);
+
+/* Load the three 14-row flight shapes into the sprite pattern table.
+ * Called while the display is off; Phase 5 adds the metasprite instances. */
+void player_init_graphics(void);
 
 /* Phase 5: read joypad, apply throttle/banking, move the shot and fuel. */
 void player_update(void);

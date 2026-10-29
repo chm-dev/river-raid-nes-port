@@ -1,5 +1,5 @@
 /*
- * Phase 2 NES smoke test (MesenCE-MCP, Streamable HTTP).
+ * Phase 3 NES smoke test (MesenCE-MCP, Streamable HTTP).
  *
  * Start Mesen before running:
  *   .\MesenCE-MCP\MesenCE-MCP-Windows.exe --mcp --mcp-port=9100 \
@@ -8,13 +8,13 @@
  *   node tests/nes_smoke.mjs
  *
  * Verifies:
- *   - GBDK mapper-30 / CHR-RAM / iNES 1.0 header contract,
- *   - the shared palette and the 128-glyph Atari charset in CHR-RAM,
- *   - the boot-screen text and deterministic scene rows in the nametable,
- *   - VBL/LCD handler cadence and the scanline-24 HUD split scaffolding,
- *   - rendered split geometry from the screenshot (HUD rows, blank row 3,
- *     status/river/bridge/footer positions),
- *   - the frame counter/BCD digit update and a clean 256x240 screenshot.
+ *   - the GBDK mapper-30 / CHR-RAM / iNES header contract and the
+ *     vertical-mirroring nametable layout (HUD $2000, playfield $2400),
+ *   - the HUD and playfield palettes and the CHR-RAM tile set,
+ *   - the four-row HUD text, source gauge art, moving fuel marker and lives planes,
+ *   - the 30-row playfield ring in nametable 1 and its attributes,
+ *   - the VBL/sprite-0 split cadence and the fixed 24-line HUD,
+ *   - the rendered screenshot geometry (HUD, split at y=36, river colors).
  */
 import fs from 'node:fs';
 import path from 'node:path';
@@ -24,23 +24,30 @@ import {
     callTool,
     readBytes,
     readU16,
-    readU8,
     symbolsFromNoi,
     requireSymbol,
     sleep,
 } from './mcp_client.mjs';
-import { readPng, countRow, rowMatches } from './png.mjs';
+import { readPng, countRow } from './png.mjs';
 
 const ROM = path.resolve('roms/river_raid.nes');
 const NOI = path.resolve('roms/river_raid.noi');
-const SHOT = path.resolve('build/boot.png');
+const SHOT = path.resolve('build/phase3_smoke.png');
 
-const TILE_FIRST_SCENE = 128;
 const TILE_LAND = 128;
-const TILE_WATER = 129;
-const TILE_BANK_LEFT = 130;
-const TILE_BANK_RIGHT = 131;
-const TILE_BRIDGE = 132;
+const TILE_GAUGE_TL = 210;
+const TILE_GAUGE_T = 212;
+const TILE_GAUGE_TC = 214;
+const TILE_GAUGE_TR = 216;
+const TILE_GAUGE_BL = 218;
+const TILE_GAUGE_B = 220;
+const TILE_GAUGE_BC = 222;
+const TILE_GAUGE_BR = 224;
+const TILE_P1_WIDE = 226;
+const TILE_HI_WIDE = 228;
+const TILE_BRIDGE_WIDE = 230;
+const TILE_GAME_WIDE = 238;
+const TILE_DIGIT_YELLOW = 246;
 const GLYPH_0 = 80;
 
 let failures = 0;
@@ -72,26 +79,8 @@ function textGlyphs(text) {
     return [...text].map(glyphForChar);
 }
 
-function expectedRiverRow(relativeRow) {
-    const waveTable = [0, 1, 2, 3, 4, 3, 2, 1];
-    const y = 8 + relativeRow;
-    const wave = waveTable[relativeRow & 7];
-    const left = 3 + wave;
-    const right = 28 - wave;
-    const out = [];
-
-    for (let x = 0; x < 32; x++) {
-        if (x < left) out.push(TILE_LAND);
-        else if (x === left) out.push(TILE_BANK_LEFT);
-        else if (x < right) out.push(y === 16 ? TILE_BRIDGE : TILE_WATER);
-        else if (x === right) out.push(TILE_BANK_RIGHT);
-        else out.push(TILE_LAND);
-    }
-    return out;
-}
-
-function digitsValue(digits) {
-    return digits.reduce((acc, d) => acc * 10 + (d - GLYPH_0), 0);
+function digitTiles(text) {
+    return [...text].map(d => TILE_DIGIT_YELLOW + Number(d));
 }
 
 async function main() {
@@ -102,6 +91,7 @@ async function main() {
     const prgBanks = rom[4];
     const chrBanks = rom[5];
     const mapper = ((rom[6] >> 4) & 0x0f) | (rom[7] & 0xf0);
+    const layout = rom[6] & 0x0f;
 
     check('iNES magic', rom[0] === 0x4e && rom[1] === 0x45 &&
         rom[2] === 0x53 && rom[3] === 0x1a);
@@ -109,6 +99,7 @@ async function main() {
         `byte7=0x${rom[7].toString(16)}`);
     check('mapper 30 (UNROM-512)', mapper === 30, `mapper=${mapper}`);
     check('CHR-RAM (0 CHR banks)', chrBanks === 0, `byte5=${chrBanks}`);
+    check('vertical mirroring layout', layout === 1, `byte6 low=0x${layout.toString(16)}`);
     check('PRG >= 2 x 16 KiB', prgBanks >= 2, `prgBanks=${prgBanks}`);
     check('file size matches header',
         rom.length === 16 + prgBanks * 16384 + chrBanks * 8192,
@@ -123,8 +114,6 @@ async function main() {
     await sleep(900);
     await callTool('mesen_reset', { type: 'hard' });
     await sleep(1400);
-    // A prior diagnostic may have left the debugger paused; the smoke test
-    // needs the CPU running for the frame/LCD counters.
     try {
         await callTool('mesen_resume_execution', {});
     } catch {
@@ -132,112 +121,154 @@ async function main() {
     }
 
     const header = JSON.parse(await callTool('mesen_get_rom_header'));
-    check('Mesen sees mapper 30', header.mapper === 30,
-        `mapper=${header.mapper}`);
-    check('Mesen sees an iNES header', /ines/i.test(String(header.format)),
-        `format=${header.format}`);
+    check('Mesen sees mapper 30', header.mapper === 30, `mapper=${header.mapper}`);
+    check('Mesen sees vertical mirroring', /vertical/i.test(String(header.mirroring)),
+        `mirroring=${header.mirroring}`);
 
     // ---------------------------------------------------------------------
-    // Palette and CHR-RAM
+    // Palettes
     // ---------------------------------------------------------------------
-    const palette = await readBytes(0, 32, 'NesPaletteRam');
-    check('shared BG palette 0 = 0F 30 1A 12',
-        palette[0] === 0x0f && palette[1] === 0x30 &&
-        palette[2] === 0x1a && palette[3] === 0x12,
-        hexArray(palette.slice(0, 4)));
+    const palette = await readBytes(0, 16, 'NesPaletteRam');
+    check('HUD palette 0 = gray black yellow white',
+        eq(palette.slice(0, 4), [0x00, 0x0f, 0x28, 0x30]), hexArray(palette.slice(0, 4)));
+    check('playfield palette 2 = backdrop 00 + 1A 06 12',
+        eq(palette.slice(8, 12), [0x00, 0x1a, 0x06, 0x12]), hexArray(palette.slice(8, 12)));
+    const spritePalette = await readBytes(16, 16, 'NesPaletteRam');
+    check('player sprite palette 0 = backdrop 00 + 28 30 16',
+        eq(spritePalette.slice(0, 4), [0x00, 0x28, 0x30, 0x16]),
+        hexArray(spritePalette.slice(0, 4)));
 
+    // ---------------------------------------------------------------------
+    // CHR-RAM
+    // ---------------------------------------------------------------------
     const glyphA = await readBytes(1 * 16, 16, 'NesChrRam');
-    check('1bpp glyph A expanded to NES 2bpp',
+    check('white glyph A at tile 1',
         eq(glyphA, [0x00, 0x18, 0x3c, 0x66, 0x66, 0x7e, 0x66, 0x00,
                     0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00]),
         hexArray(glyphA));
 
-    const sceneChr = await readBytes(TILE_FIRST_SCENE * 16, 5 * 16, 'NesChrRam');
+    const landChr = await readBytes(TILE_LAND * 16, 16, 'NesChrRam');
     const zeros = Array(8).fill(0x00);
     const ff = Array(8).fill(0xff);
-    const lf = Array(8).fill(0x0f);
-    const f0 = Array(8).fill(0xf0);
-    const e7 = Array(8).fill(0xe7);
+    check('river land tile is solid colour 1', eq(landChr, [...ff, ...zeros]),
+        hexArray(landChr));
 
-    check('TILE_LAND plane data', eq(sceneChr.slice(0, 16), [...zeros, ...ff]),
-        hexArray(sceneChr.slice(0, 16)));
-    check('TILE_WATER plane data', eq(sceneChr.slice(16, 32), [...ff, ...ff]),
-        hexArray(sceneChr.slice(16, 32)));
-    check('TILE_BANK_LEFT plane data', eq(sceneChr.slice(32, 48), [...lf, ...ff]),
-        hexArray(sceneChr.slice(32, 48)));
-    check('TILE_BANK_RIGHT plane data', eq(sceneChr.slice(48, 64), [...f0, ...ff]),
-        hexArray(sceneChr.slice(48, 64)));
-    check('TILE_BRIDGE plane data', eq(sceneChr.slice(64, 80), [...ff, ...e7]),
-        hexArray(sceneChr.slice(64, 80)));
+    const fillChr = await readBytes(TILE_GAUGE_T * 16, 16, 'NesChrRam');
+    const gaugeTop = [0xff, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00,
+                      0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00];
+    check('gauge frame top rule is one pixel',
+        eq(fillChr, gaugeTop), hexArray(fillChr));
+
+    const digit0Chr = await readBytes(TILE_DIGIT_YELLOW * 16, 16, 'NesChrRam');
+    check('yellow digit 0 is glyph 0 on plane 1, raised one pixel',
+        eq(digit0Chr, [...zeros, 0x3c, 0x66, 0x66, 0x66, 0x66, 0x3c, 0x00, 0x00]),
+        hexArray(digit0Chr));
+
+    const playerChr = await readBytes(0x1000, 16, 'NesChrRam');
+    check('player sprite CHR is populated', playerChr.some(v => v !== 0),
+        hexArray(playerChr));
 
     // ---------------------------------------------------------------------
-    // Nametable boot screen
+    // HUD nametable (NT0)
     // ---------------------------------------------------------------------
-    const nametable = await readBytes(0, 960, 'NesNametableRam');
-    const row = r => nametable.slice(r * 32, r * 32 + 32);
+    const nt0 = await readBytes(0x2000, 160, 'NesPpuMemory');
+    const row0 = nt0.slice(0, 32);
+    const row1 = nt0.slice(32, 64);
+    const row2 = nt0.slice(64, 96);
+    const row3 = nt0.slice(96, 128);
+    const row4 = nt0.slice(128, 160);
 
-    check('row 0 title', eq(row(0).slice(11, 21), textGlyphs('RIVER RAID')),
-        hexArray(row(0).slice(11, 21)));
-    check('row 1 subtitle', eq(row(1).slice(8, 24), textGlyphs('ATARI 800 TO NES')),
-        hexArray(row(1).slice(8, 24)));
-    check('row 2 phase', eq(row(2).slice(10, 22), textGlyphs('PHASE 2 BOOT')),
-        hexArray(row(2).slice(10, 22)));
-    check('row 4 CHR status', eq(row(4).slice(11, 21), textGlyphs('CHR RAM OK')),
-        hexArray(row(4).slice(11, 21)));
-    check('row 5 palette status', eq(row(5).slice(11, 21), textGlyphs('PALETTE OK')),
-        hexArray(row(5).slice(11, 21)));
-    check('row 6 nametable status', eq(row(6).slice(10, 22), textGlyphs('NAMETABLE OK')),
-        hexArray(row(6).slice(10, 22)));
-    check('row 26 FRAME label', eq(row(26).slice(11, 16), textGlyphs('FRAME')),
-        hexArray(row(26).slice(11, 16)));
-    check('row 28 footer', eq(row(28).slice(8, 24), textGlyphs('MESEN SMOKE TEST')),
-        hexArray(row(28).slice(8, 24)));
-    check('row 3 blank', row(3).every(v => v === 0), hexArray(row(3)));
-    check('row 7 blank', row(7).every(v => v === 0), hexArray(row(7)));
+    const SPACE = 0;
 
-    let sceneOk = true;
-    let sceneDetail = '';
-    for (let r = 0; r < 17; r++) {
-        const expected = expectedRiverRow(r);
-        const actual = row(8 + r);
-        if (!eq(actual, expected)) {
-            sceneOk = false;
-            sceneDetail = `row ${8 + r}: ${hexArray(actual)}`;
-            break;
+    check('row 0 is blank padding', row0.every(v => v === SPACE),
+        hexArray(row0));
+    check('row 4 is blank padding', row4.every(v => v === SPACE),
+        hexArray(row4));
+    check('row 1 P1 (wide label, aligned with GAME)',
+        eq(row1.slice(1, 3), [TILE_P1_WIDE, TILE_P1_WIDE + 1]),
+        hexArray(row1.slice(1, 3)));
+    check('row 1 score is a single yellow 0 (leading zeros blank)',
+        eq(row1.slice(11, 17), [SPACE, SPACE, SPACE, SPACE, SPACE, TILE_DIGIT_YELLOW]),
+        hexArray(row1.slice(11, 17)));
+    check('row 1 HI label (wide, aligned with BRIDGE)',
+        eq(row1.slice(20, 22), [TILE_HI_WIDE, TILE_HI_WIDE + 1]),
+        hexArray(row1.slice(20, 22)));
+    check('row 1 high score is a single black 0',
+        eq(row1.slice(25, 31), [SPACE, SPACE, SPACE, SPACE, SPACE, GLYPH_0]),
+        hexArray(row1.slice(25, 31)));
+
+    check('row 2 GAME uses eight wide tiles',
+        eq(row2.slice(1, 9), [...Array(8)].map((_, i) => TILE_GAME_WIDE + i)),
+        hexArray(row2.slice(1, 9)));
+    check('row 2 gauge frame top (47 48 49 48 4A)',
+        eq(row2.slice(9, 19), [
+            TILE_GAUGE_TL, TILE_GAUGE_TL + 1,
+            TILE_GAUGE_T, TILE_GAUGE_T + 1,
+            TILE_GAUGE_TC, TILE_GAUGE_TC + 1,
+            TILE_GAUGE_T, TILE_GAUGE_T + 1,
+            TILE_GAUGE_TR, TILE_GAUGE_TR + 1,
+        ]), hexArray(row2.slice(9, 19)));
+    check('row 2 BRIDGE uses eight wide tiles',
+        eq(row2.slice(20, 28), [...Array(8)].map((_, i) => TILE_BRIDGE_WIDE + i)),
+        hexArray(row2.slice(20, 28)));
+    check('row 2 bridge number 1',
+        row2[29] === SPACE && row2[30] === TILE_DIGIT_YELLOW + 1,
+        hexArray(row2.slice(29, 31)));
+
+    check('row 3 game number 1', row3[5] === GLYPH_0 + 1, `tile=${row3[5]}`);
+    check('row 3 gauge frame floor (4B 4C 4D 4C 4E)',
+        eq(row3.slice(9, 19), [
+            TILE_GAUGE_BL, TILE_GAUGE_BL + 1,
+            TILE_GAUGE_B, TILE_GAUGE_B + 1,
+            TILE_GAUGE_BC, TILE_GAUGE_BC + 1,
+            TILE_GAUGE_B, TILE_GAUGE_B + 1,
+            TILE_GAUGE_BR, TILE_GAUGE_BR + 1,
+        ]), hexArray(row3.slice(9, 19)));
+
+    // ---------------------------------------------------------------------
+    // Playfield nametable (NT1) and attributes
+    // ---------------------------------------------------------------------
+    const nt1 = await readBytes(0x2400, 960, 'NesPpuMemory');
+    let ringFilled = true;
+    for (let r = 0; r < 30; r++) {
+        if (nt1.slice(r * 32, r * 32 + 32).every(v => v === 0)) {
+            ringFilled = false;
         }
     }
-    check('boot river scene rows 8..24', sceneOk, sceneDetail);
-    check('bridge row 16 spans the water',
-        row(16).slice(4, 28).every(v => v === TILE_BRIDGE),
-        hexArray(row(16).slice(3, 29)));
+    check('all 30 playfield ring rows are populated', ringFilled);
 
-    const digits0 = row(26).slice(17, 21);
-    check('frame digits are 0..9 glyphs',
-        digits0.every(v => v >= GLYPH_0 && v <= GLYPH_0 + 9),
-        hexArray(digits0));
+    const riverRow = nt1.slice(3 * 32, 3 * 32 + 32);
+    check('playfield row 3 has six land tiles on each side',
+        riverRow.slice(0, 6).every(v => v === TILE_LAND) &&
+        riverRow.slice(26).every(v => v === TILE_LAND),
+        hexArray(riverRow));
+    check('playfield row 3 contains river tiles',
+        riverRow.slice(6, 26).every(v => v >= TILE_LAND && v <= 209) &&
+        riverRow.slice(6, 26).some(v => v !== TILE_LAND),
+        hexArray(riverRow.slice(6, 26)));
+
+    const attr1 = await readBytes(0x27C0, 64, 'NesPpuMemory');
+    check('playfield attributes use palette 2 (0xAA)', attr1.every(v => v === 0xaa),
+        [...new Set(attr1)].map(v => v.toString(16)).join(','));
 
     // ---------------------------------------------------------------------
-    // Handler cadence and RAM layout
+    // Handlers, sprite-0 split and RAM layout
     // ---------------------------------------------------------------------
     const frameAddr = symAddr('frame_counter');
     const vblAddr = symAddr('vbl_events');
-    const lcdAddr = symAddr('lcd_events');
+    const splitAddr = symAddr('split_events');
     const scrollAddr = symAddr('playfield_scroll_y');
 
     const frame0 = await readU16(frameAddr);
     const vbl0 = await readU16(vblAddr);
-    const lcd0 = await readU16(lcdAddr);
+    const split0 = await readU16(splitAddr);
 
     check('frame counter running', frame0 > 10, `frame=${frame0}`);
     check('VBL handler running', vbl0 > 10, `vbl=${vbl0}`);
-    check('LCD handler runs twice per frame', Math.abs(lcd0 - 2 * vbl0) <= 2,
-        `vbl=${vbl0} lcd=${lcd0}`);
-    check('playfield scroll starts at 0', (await readU8(scrollAddr)) === 0);
+    check('deferred split runs once per frame',
+        Math.abs(split0 - vbl0) <= 2, `vbl=${vbl0} split=${split0}`);
 
-    const cpu = await callTool('mesen_get_state', {
-        component: 'cpu',
-        cpuType: 'Nes',
-    });
+    const cpu = await callTool('mesen_get_state', { component: 'cpu', cpuType: 'Nes' });
     const spMatch = cpu.match(/SP=\$([0-9A-Fa-f]{2})/);
     check('CPU state has a stack pointer', !!spMatch, cpu.trim());
     if (spMatch) {
@@ -247,87 +278,86 @@ async function main() {
     }
 
     // ---------------------------------------------------------------------
-    // Frame digit animation and screenshot
+    // Frame animation, scroll and screenshot
     // ---------------------------------------------------------------------
     await sleep(1000);
     const frame1 = await readU16(frameAddr);
-    const nametable1 = await readBytes(0, 960, 'NesNametableRam');
-    const digits1 = nametable1.slice(26 * 32 + 17, 26 * 32 + 21);
-
+    const split1 = await readU16(splitAddr);
     check('frame counter advances', frame1 - frame0 > 20 && frame1 - frame0 < 120,
         `delta=${frame1 - frame0}`);
-    check('frame digits animate', !eq(digits0, digits1),
-        `${digitsValue(digits0)} -> ${digitsValue(digits1)}`);
+    check('split keeps running', split1 - split0 > 20, `delta=${split1 - split0}`);
 
-    const expected = (frame1 - 1 + 10000) % 10000;
-    const displayed = digitsValue(digits1);
-    const digitDiff = Math.min((expected - displayed + 10000) % 10000,
-        (displayed - expected + 10000) % 10000);
-    check('frame digits track the counter', digitDiff <= 2,
-        `display=${displayed} counter=${frame1}`);
+    const scroll = await readU16(scrollAddr);
+    check('playfield scroll is advancing', scroll > 0, `scroll=${scroll}`);
+
+    // The split is stable; a frozen scroll makes the 1-pixel check exact.
+    await callTool('mesen_playback', { action: 'pause' });
+    await sleep(150);
+    await callTool('mesen_step', { cpuType: 'Nes', count: 1, stepType: 'PpuFrame' });
 
     fs.mkdirSync(path.dirname(SHOT), { recursive: true });
     await callTool('mesen_take_screenshot', { outputFile: SHOT });
+    await callTool('mesen_playback', { action: 'resume' });
     check('screenshot written', fs.existsSync(SHOT) && fs.statSync(SHOT).size > 1000,
         SHOT);
 
-    // ---------------------------------------------------------------------
-    // Rendered scanline geometry (catches split/scroll regressions that the
-    // nametable checks above cannot see)
-    // ---------------------------------------------------------------------
     const shot = readPng(SHOT);
-    const isWhite = (r, g, b) => r > 200 && g > 200 && b > 200;
-    const isGreen = (r, g, b) => g > 100 && r < 100 && b < 100;
-    const isBlue = (r, g, b) => b > 100 && r < 100 && g < 100;
-    const isBlack = (r, g, b) => r < 32 && g < 32 && b < 32;
-    const whiteAt = y => countRow(shot, y, isWhite);
+    const isGray = (r, g, b) => r > 80 && r < 130 && Math.abs(r - g) < 8 && Math.abs(g - b) < 8;
+    const isBlack = (r, g, b) => r < 40 && g < 40 && b < 40;
+    const isYellow = (r, g, b) => r > 150 && g > 140 && b < 100;
+    const isGreen = (r, g, b) => g > 90 && r < 130 && b < 80;
+    const isBlue = (r, g, b) => b > 90 && r < 80 && g < 80;
+    const isPlayfield = (r, g, b) => isGreen(r, g, b) || isBlue(r, g, b);
+    const grayAt = y => countRow(shot, y, isGray);
+    const blackAt = y => countRow(shot, y, isBlack);
+    const yellowAt = y => countRow(shot, y, isYellow);
 
     check('screenshot is 256x240', shot.width === 256 && shot.height === 240,
         `${shot.width}x${shot.height}`);
 
-    check('HUD row 0 has no scanline tear',
-        rowMatches(shot, 0, isBlack) && whiteAt(1) > 20,
-        `row0=${whiteAt(0)} row1=${whiteAt(1)}`);
-    check('HUD text ends above the split', whiteAt(22) > 20 && rowMatches(shot, 23, isBlack),
-        `row22=${whiteAt(22)} row23=${whiteAt(23)}`);
+    let hudClean = true;
+    for (let y = 0; y < 36; y++) {
+        for (let x = 0; x < 256; x++) {
+            const [r, g, b] = shot.pixel(x, y);
+            if (isPlayfield(r, g, b)) {
+                hudClean = false;
+                break;
+            }
+        }
+        if (!hudClean) break;
+    }
+    check('top 36 scanlines contain no playfield bleed', hudClean);
 
-    let splitOk = true;
-    let splitRow = -1;
-    for (let y = 24; y < 32; y++) {
-        if (!rowMatches(shot, y, isBlack)) {
-            splitOk = false;
-            splitRow = y;
+    check('HUD row 1 is a gray band with black/yellow text',
+        grayAt(12) > 100 && blackAt(12) > 10 && yellowAt(12) > 10,
+        `gray=${grayAt(12)} black=${blackAt(12)} yellow=${yellowAt(12)}`);
+    check('HUD row 2 renders GAME, gauge and BRIDGE',
+        grayAt(18) > 80 && blackAt(18) > 20 && yellowAt(18) > 20,
+        `gray=${grayAt(18)} black=${blackAt(18)} yellow=${yellowAt(18)}`);
+    check('HUD row 3 renders the gauge floor and lives icons',
+        grayAt(26) > 60 && blackAt(26) > 5 && yellowAt(26) > 5,
+        `gray=${grayAt(26)} black=${blackAt(26)} yellow=${yellowAt(26)}`);
+
+    let firstPlayfield = -1;
+    for (let y = 30; y < 50; y++) {
+        if (countRow(shot, y, isPlayfield) > 32) {
+            firstPlayfield = y;
             break;
         }
     }
-    check('playfield starts at nametable row 3 (blank)', splitOk,
-        splitRow >= 0 ? `white at y=${splitRow}, count=${whiteAt(splitRow)}` : '');
+    check('playfield starts on scanline 36 or 37',
+        firstPlayfield === 36 || firstPlayfield === 37,
+        `first=${firstPlayfield}`);
 
-    check('status row 4 renders at y=32..39',
-        rowMatches(shot, 32, isBlack) && whiteAt(33) > 20,
-        `row32=${whiteAt(32)} row33=${whiteAt(33)}`);
-    check('river row 8 starts at y=64',
-        rowMatches(shot, 63, isBlack) &&
-        countRow(shot, 64, isGreen) > 0 && countRow(shot, 64, isBlue) > 0,
-        `y63 white=${whiteAt(63)} y64 green=${countRow(shot, 64, isGreen)} ` +
-        `blue=${countRow(shot, 64, isBlue)}`);
-
-    let bridgeOk = true;
-    let bridgeRow = -1;
-    for (let y = 128; y < 136; y++) {
-        if (whiteAt(y) === 0) {
-            bridgeOk = false;
-            bridgeRow = y;
-            break;
-        }
+    let greenPixels = 0;
+    let bluePixels = 0;
+    for (const y of [80, 100, 120, 140, 160]) {
+        greenPixels += countRow(shot, y, isGreen);
+        bluePixels += countRow(shot, y, isBlue);
     }
-    check('bridge row 16 renders at y=128..135',
-        bridgeOk && whiteAt(127) === 0 && whiteAt(136) === 0,
-        bridgeRow >= 0 ? `no white at y=${bridgeRow}` : `above=${whiteAt(127)} below=${whiteAt(136)}`);
-
-    check('footer row 28 renders at y=224..231',
-        rowMatches(shot, 224, isBlack) && whiteAt(225) > 20,
-        `row224=${whiteAt(224)} row225=${whiteAt(225)}`);
+    check('river has both green banks and blue water',
+        greenPixels > 200 && bluePixels > 200,
+        `green=${greenPixels} blue=${bluePixels}`);
 
     if (failures) {
         console.log(`NES smoke FAILED (${failures})`);
