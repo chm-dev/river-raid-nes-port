@@ -945,3 +945,52 @@ NES implementation:
   three tones (black edge, grey, yellow) instead of four; the bar's stripes use
   three NES colours.  Still open: respawn at the last bridge, fuel rate
   parity, sound, a visual check of a natural level-1 bridge in play.
+### 2026-10-29 - Bridge tank and its shell
+
+What the Atari does (disassembly `$A21B-$A26A`, `$A4EA-$A545`, `$A609-$A671`,
+`$ADA6-$ADCA`, `$AEA3`; captured with `tools/atari_bridge_capture.py`):
+
+- The "tank" is the P1 object (`$38` state, `$39` X, `$3A` Y).  The spawner
+  creates it in every bridge section (not at game start), at X =
+  `($AA & $7F) + $40` from the LFSR (so its start is fixed by the level) and
+  facing right (`$38 = 5`) when `$AA & $7F < $40`, else left (`$38 = 6`).  Its Y
+  scrolls with the river, 4 rows below the bridge bar's top; it is removed when
+  `$3A >= $BC`.
+- Shapes `$B4D1[state]`: 4/5 = facing right, 6/7 = facing left (the two tread
+  frames), 3/1 and 2 = explosion.  `$BAAF` is the next-state table
+  (4<->5, 6<->7, 3->2->1->0).  Driving frames change every 4th frame, the
+  explosion every 16th.  It moves one pixel on those ticks, toward the side it
+  faces, only while `$2E == 0` (`$2E` is cleared when the bridge section starts
+  and incremented when the bridge is destroyed) and no shell is flying
+  (`$50 >= 0`).
+- Shooting the bridge (`$A4EA`) with the tank on it (`bridge_x - 8 < tank_x <=
+  bridge_x + $1F`) destroys the tank (bit 7 of `$38`) and scores
+  `$BB0B[$10]` = **750 instead of the bridge's 500**.
+- Otherwise, once the bridge counter (`$61/$62`) is >= 5 and the tank is within
+  `$29` pixels on the side it is driving from (`$41` when facing left), it
+  fires: `$50` counts 0..`$38` per frame.  The shell (P0, shapes `$BAB7[1..6]`)
+  starts 4 px in front of the tank and 6 rows above it, flies 17 frames at
+  2 px/frame (`$3E:$3F` = 2.0) with a few pixels of vertical drift (`$B4AF`),
+  stays put for 40 frames while it swells (shape 2..6, 4 shapes per 8 frames),
+  and **kills the jet only while `$50 >= $11`** (`$A428`).  At `$39` it
+  restarts from the tank, so it keeps firing while the tank is on screen.
+
+NES port (`entities.c`, no extra RAM: the tank/shell are entity slots, type
+16/17, with the Atari `$38`/`$50` kept in `ent_aux`):
+
+- `ent_tank_spawn()` (bridge spawn) makes a positioned-later tank
+  (`ENT_F_WAIT`); `ent_tank_place()` puts it 4 rows below the bar when the bar
+  is created.  `ent_tank_tick()` / `ent_shell_tick()` run per game tick;
+  `ent_bridge_hit()` applies the 750 bonus / the shell rule; the jet dies to
+  the fireball through `ent_shell_hits()` (box per swelling shape).
+- Sprite tiles (`tools/gen_entity_gfx.py`): tank frames and explosion from the
+  cart (2 tiles each), shell shapes 1..6; the tank uses sprite palette 2
+  (black), the shell palette 0.  Entity tiles are now 109, so the jet's debris
+  tiles moved to `SPRITE_TILE_BASE + 24 + ENT_GFX_TILES`.
+- Verified in Mesen with a forced bridge section: tank drives toward the
+  bridge; shooting it with the tank over it scored 750 (860 - 110); with the
+  counter at 5 and the tank approaching it fired (shell flew 16 frames then
+  swelled, refired every 57 frames) and a plain hit scored 500.
+- Not ported: the sound effects (`$7C` = `$37` tank bonus, `$17` hit; the shell's
+  fire sound), the shell destroying enemy objects (`$A4C1`), and the same shell
+  mechanism for helicopters/ships (`$AE22-$AE92`, from level 7).

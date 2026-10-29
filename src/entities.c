@@ -325,6 +325,159 @@ ad1d:
     }
 }
 
+/* ------------------------------------------------------------------------- */
+/* The bridge tank and its shell ($ADA6-$ADCA, $A21B-$A26A, $A4EA-$A545, $A609-$A671) */
+/* ------------------------------------------------------------------------- */
+/*
+ * Every bridge section drives a tank (Atari P1) across the road.  It appears
+ * at X = ($AA & $7F) + $40 (the spawner's LFSR, so the start is fixed by the
+ * level), faces right when ($AA & $7F) < $40, and creeps one pixel every 4th
+ * frame until the bridge is destroyed ($2E != 0) or its shell is flying.  The
+ * state is the Atari's $38 (kept in ent_aux): 4/5 and 6/7 are the two tread
+ * frames facing right/left, 3,2,1 the explosion; bit 7 = destroyed.
+ *
+ * Shooting the bridge while the tank is on it destroys the tank for 750
+ * points instead of the bridge's 500.  From the fifth bridge on, shooting it
+ * with the tank close and facing it makes the tank fire a shell: a dot that
+ * flies 17 frames at 2 px/frame, then swells into a fireball (40 frames) that
+ * kills the jet; the tank refires every 57 frames while it is on screen.
+ */
+#define TANK_STATE_MIN_MOVE     4u      /* states 4..7 are the driving frames */
+#define TANK_ANIM_MASK          3u      /* driving frames change every 4th frame */
+#define TANK_EXPLODE_MASK       15u     /* explosion frames every 16th */
+#define TANK_FIRE_RIGHT         0x29u   /* range of the shot when facing right */
+#define TANK_FIRE_LEFT          0x41u
+#define TANK_BONUS_TENS         0x75u   /* atari_score_tens[16]: 750 */
+#define TANK_FIRE_BRIDGE        5u      /* bridge counter from which it shoots back */
+#define SHELL_FLY_FRAMES        0x11u
+#define SHELL_CYCLE_FRAMES      0x39u
+
+static const uint8_t tank_next[8] = { 0, 0, 1, 2, 5, 4, 7, 6 };         /* $BAAF */
+static const uint8_t shell_dy[17] = {                                    /* $B4AF */
+    0, 0, 0, 0, 0, 1, 0, 1, 0, 1, 0, 1, 0, 1, 1, 1, 1
+};
+/* Pixel extents (x offset, width, first row, end row) of the fireball
+ * shapes 2..6 inside the 8x16 sprite, for the jet collision. */
+static const uint8_t shell_box[20] = {
+    3, 2, 8, 12,  2, 4, 7, 13,  2, 4, 6, 14,  1, 6, 5, 15,  0, 8, 4, 16
+};
+
+/*
+ * These helpers take no parameters and use the file-scope e_* scratch
+ * variables: SDCC's mos6502 target allocates locals and parameters statically
+ * and RAM is almost gone.  Each documents the scratch it uses; none is live
+ * across a call into another helper unless noted.
+ */
+
+/* Slot of the live (positioned) tank in e_slot, 0xFF when there is none.
+ * Scratch: e_t. */
+static void ent_find_tank(void) {
+    e_slot = 0xFFu;
+    for (e_t = 0; e_t < MAX_ENTITIES; e_t++) {
+        if (ent_type[e_t] == ENT_AUX_TANK && !(ent_flags[e_t] & ENT_F_WAIT)) {
+            e_slot = e_t;
+            return;
+        }
+    }
+}
+
+/* (Re)start shell slot e_src at the muzzle of tank slot e_slot: 4 px into the
+ * facing direction, 6 rows above the tank's top ($A60F-$A627).  Scratch: e_c. */
+static void ent_shell_init(void) {
+    e_c = ((ent_aux[e_slot] & 0x7Fu) >= 6u);
+    ent_type[e_src] = ENT_AUX_SHELL;
+    ent_flags[e_src] = e_c ? ENT_F_LEFT : 0u;
+    ent_x[e_src] = e_c ? (uint8_t)(ent_x[e_slot] - 4u) : (uint8_t)(ent_x[e_slot] + 4u);
+    ent_y[e_src] = (uint8_t)(ent_y[e_slot] - 6u);
+    ent_aux[e_src] = 0;
+}
+
+/* The spawner met a bridge section: put the tank in a free slot.  It has no
+ * position until the bridge bar is placed (ENT_F_WAIT).  Scratch: e_t, e_c. */
+static void ent_tank_spawn(void) {
+    for (e_t = 0; e_t < MAX_ENTITIES; e_t++) {
+        if (ent_type[e_t] == ENT_AUX_TANK) {
+            return;                         /* $2F | $38 must be 0 */
+        }
+    }
+    for (e_t = 0; e_t < MAX_ENTITIES && ent_type[e_t] != ENTITY_NONE; e_t++) {
+    }
+    if (e_t == MAX_ENTITIES) {
+        return;
+    }
+    e_c = (uint8_t)(rg_lfsr_a & 0x7Fu);
+    ent_type[e_t] = ENT_AUX_TANK;
+    ent_x[e_t] = (uint8_t)(e_c + 0x40u);
+    ent_aux[e_t] = (e_c < 0x40u) ? 5u : 6u;
+    ent_flags[e_t] = ENT_F_WAIT;
+    ent_y[e_t] = 0;
+    entity_count++;
+}
+
+/* The bar in slot e_i got its position (e_i == MAX_ENTITIES: it did not get a
+ * slot): the tank drives 4 rows below its top.  Scratch: e_t. */
+static void ent_tank_place(void) {
+    for (e_t = 0; e_t < MAX_ENTITIES; e_t++) {
+        if (ent_type[e_t] == ENT_AUX_TANK && (ent_flags[e_t] & ENT_F_WAIT)) {
+            if (e_i >= MAX_ENTITIES) {
+                ent_type[e_t] = ENTITY_NONE;    /* no slot for the bar: no tank either */
+                entity_count--;
+            } else {
+                ent_y[e_t] = (uint8_t)(ent_y[e_i] + 4u);
+                ent_flags[e_t] = 0;
+            }
+            return;
+        }
+    }
+}
+
+/* The jet's shot destroyed the bridge in slot e_i ($A4EA-$A545).  Returns the
+ * score in tens: 750 when the tank is on the bridge, else 500; may make the
+ * tank fire back.  Scratch: e_slot (tank), e_l (bridge X), e_r (tank X),
+ * e_px (tank state), e_src (shell slot), e_t. */
+static uint8_t ent_bridge_hit(void) {
+    ent_find_tank();
+    if (e_slot == 0xFFu) {
+        return 0x50u;
+    }
+    e_l = ent_x[e_i];
+    e_r = ent_x[e_slot];
+    e_px = ent_aux[e_slot];
+    ent_flags[e_slot] |= ENT_F_STOP;        /* $2E is no longer 0 */
+    if (!(e_px & 0x80u) && (uint16_t)e_r + 8u > e_l &&
+        (uint16_t)e_r <= (uint16_t)e_l + 0x1Fu) {
+        ent_aux[e_slot] = (uint8_t)(e_px | 0x80u);  /* the bridge falls with the tank on it */
+        return TANK_BONUS_TENS;
+    }
+    if (hud_bridge >= TANK_FIRE_BRIDGE && !(ent_flags[e_slot] & ENT_F_SHOOT) &&
+        !(e_px & 0x80u) &&
+        (((e_px & 0x7Fu) < 6u) ? ((uint8_t)(e_l - e_r) < TANK_FIRE_RIGHT)
+                               : ((uint8_t)(e_r - e_l) < TANK_FIRE_LEFT))) {
+        for (e_src = 0; e_src < MAX_ENTITIES && ent_type[e_src] != ENTITY_NONE; e_src++) {
+        }
+        if (e_src < MAX_ENTITIES) {
+            ent_flags[e_slot] |= ENT_F_SHOOT;
+            entity_count++;
+            ent_shell_init();
+        }
+    }
+    return 0x50u;
+}
+
+/* Jet box (8x14 at e_px, e_y) against the swelling fireball in slot e_i;
+ * entirely on screen only.  Scratch: e_l, e_r, e_slot. */
+static uint8_t ent_shell_hits(void) {
+    if (ent_y[e_i] >= 232u) {
+        return 0;
+    }
+    e_slot = (uint8_t)(((ent_aux[e_i] - SHELL_FLY_FRAMES) >> 3) << 2);
+    e_l = (uint8_t)(ent_x[e_i] + shell_box[e_slot]);                   /* left */
+    e_r = (uint8_t)(e_l + shell_box[(uint8_t)(e_slot + 1u)]);          /* right */
+    return e_px < e_r && (uint8_t)(e_px + 8u) > e_l &&
+           e_y < (uint8_t)(ent_y[e_i] + shell_box[(uint8_t)(e_slot + 3u)]) &&
+           (uint8_t)(e_y + 14u) > (uint8_t)(ent_y[e_i] + shell_box[(uint8_t)(e_slot + 2u)]);
+}
+
 /* Called by the river generator after every raw row ($AB80). */
 void entities_row(void) BANKED {
     if (player_disable) {
@@ -394,6 +547,7 @@ void entities_row(void) BANKED {
             river_road_begin();
             bridge_x = e_x;
             bridge_wait = 1u;
+            ent_tank_spawn();
         }                                   /* else the game-start state: no bridge */
         return;
     }
@@ -431,8 +585,8 @@ static void ent_explode(void) {
 uint8_t entities_hit_shot(uint8_t sx, uint8_t sy) BANKED {
     for (e_i = 0; e_i < MAX_ENTITIES; e_i++) {
         e_type = ent_type[e_i];
-        if (e_type < ENT_AUX_JET) {
-            continue;
+        if (e_type < ENT_AUX_JET || e_type > ENT_AUX_FUEL) {
+            continue;                       /* explosions, the tank and its shell */
         }
         e_rows = ent_gfx_rows[e_type];
         e_w = ent_width(e_type);
@@ -440,10 +594,14 @@ uint8_t entities_hit_shot(uint8_t sx, uint8_t sy) BANKED {
             (uint16_t)sx + 2u > ent_x[e_i] &&
             (uint16_t)sy < (uint16_t)ent_y[e_i] + e_rows &&
             (uint16_t)sy + 6u > ent_y[e_i]) {
-            entities_add_score(atari_score_tens[e_type]);
-            if (e_type == ENT_AUX_BRIDGE && hud_bridge < HUD_BRIDGE_DIGIT_MAX) {
-                hud_bridge++;               /* $A3E9: a bridge hit advances the counter */
+            e_c = atari_score_tens[e_type];
+            if (e_type == ENT_AUX_BRIDGE) {
+                if (hud_bridge < HUD_BRIDGE_DIGIT_MAX) {
+                    hud_bridge++;           /* $A3E9: a bridge hit advances the counter */
+                }
+                e_c = ent_bridge_hit();
             }
+            entities_add_score(e_c);
             ent_explode();
             return 1;
         }
@@ -454,7 +612,16 @@ uint8_t entities_hit_shot(uint8_t sx, uint8_t sy) BANKED {
 uint8_t entities_check_player(uint8_t px, uint8_t py) BANKED {
     for (e_i = 0; e_i < MAX_ENTITIES; e_i++) {
         e_type = ent_type[e_i];
-        if (e_type < ENT_AUX_JET) {
+        if (e_type == ENT_AUX_SHELL) {
+            /* The fireball only kills once it is swelling ($A428: $50 >= $11). */
+            e_px = px;
+            e_y = py;
+            if (ent_aux[e_i] >= SHELL_FLY_FRAMES && ent_shell_hits()) {
+                return ENT_HIT_DEADLY;
+            }
+            continue;
+        }
+        if (e_type < ENT_AUX_JET || e_type > ENT_AUX_FUEL) {
             continue;
         }
         e_rows = ent_gfx_rows[e_type];
@@ -495,6 +662,67 @@ static uint8_t ent_touching(void) {
 }
 
 static uint8_t ent_cur;         /* frame counter value of the tick being run */
+
+/* One frame of the tank ($A21B-$A26A) for slot e_i.  Scratch: e_c. */
+static void ent_tank_tick(void) {
+    e_c = ent_aux[e_i];
+    if (ent_cur & (((e_c & 0x7Fu) >= TANK_STATE_MIN_MOVE) ? TANK_ANIM_MASK
+                                                           : TANK_EXPLODE_MASK)) {
+        return;
+    }
+    if (e_c & 0x80u) {
+        e_c = 3u;                           /* destroyed: start the explosion */
+    } else {
+        if (!(ent_flags[e_i] & (ENT_F_STOP | ENT_F_SHOOT))) {
+            ent_x[e_i] = (e_c < 6u) ? (uint8_t)(ent_x[e_i] + 1u)
+                                    : (uint8_t)(ent_x[e_i] - 1u);
+        }
+        e_c = tank_next[e_c];
+    }
+    ent_aux[e_i] = e_c;
+    if (e_c == 0u) {
+        ent_type[e_i] = ENTITY_NONE;
+        entity_count--;
+    }
+}
+
+/* One frame of the shell ($A609-$A671) for slot e_i: 17 frames of flight at
+ * 2 px/frame, then 40 frames of swelling; then it restarts at the tank while
+ * the tank is on screen.  Scratch: e_c, then the helpers' (e_slot, e_src). */
+static void ent_shell_tick(void) {
+    e_c = ent_aux[e_i];
+    if (e_c != 0u && e_c < SHELL_FLY_FRAMES) {
+        ent_x[e_i] = (ent_flags[e_i] & ENT_F_LEFT) ? (uint8_t)(ent_x[e_i] - 2u)
+                                                   : (uint8_t)(ent_x[e_i] + 2u);
+        ent_y[e_i] = (uint8_t)(ent_y[e_i] + shell_dy[e_c]);
+    }
+    e_c++;
+    if (e_c < SHELL_CYCLE_FRAMES) {
+        ent_aux[e_i] = e_c;
+        return;
+    }
+    ent_find_tank();
+    if (e_slot == 0xFFu) {
+        ent_type[e_i] = ENTITY_NONE;        /* the tank left the screen */
+        entity_count--;
+    } else {
+        e_src = e_i;
+        ent_shell_init();
+    }
+}
+
+/* Sprite frame of the tank / shell in slot e_i (tiles per frame: 2). */
+static uint8_t ent_special_frame(void) {
+    e_c = ent_aux[e_i];
+    if (ent_type[e_i] == ENT_AUX_SHELL) {
+        return (e_c < SHELL_FLY_FRAMES) ? 0u : (uint8_t)(((e_c - SHELL_FLY_FRAMES) >> 3) + 1u);
+    }
+    e_c &= 0x7Fu;
+    if (e_c >= TANK_STATE_MIN_MOVE) {
+        return (uint8_t)(e_c - TANK_STATE_MIN_MOVE);    /* driving frames 4..7 -> 0..3 */
+    }
+    return (e_c == 2u) ? 5u : 4u;                       /* explosion shapes */
+}
 
 /* One frame of the Atari patrol pass ($A271-$A2EA) for entity e_i. */
 static void ent_move(void) {
@@ -606,9 +834,15 @@ static void ent_draw(void) {
     } else {
         e_src = e_type;
         e_tile = (uint8_t)(ENT_TILE_BASE + ent_gfx_first[e_type]);
+        if (e_type >= ENT_AUX_TANK) {
+            e_c = ent_special_frame();
+            e_tile = (uint8_t)(e_tile + e_c * ent_gfx_count[e_type]);
+        }
         /* A left-moving shape is the mirror image: flip every tile and
-         * reverse the column order.  Fuel depots never flip. */
-        e_flip = ((ent_flags[e_i] & 1u) && e_type != ENT_AUX_FUEL) ? S_FLIPX : 0u;
+         * reverse the column order.  Fuel depots, the tank (it has left- and
+         * right-facing frames) and the shell never flip. */
+        e_flip = ((ent_flags[e_i] & 1u) && e_type != ENT_AUX_FUEL &&
+                  e_type < ENT_AUX_TANK) ? S_FLIPX : 0u;
     }
     e_cols = ent_gfx_cols[e_src];
     e_prop = (uint8_t)(ent_gfx_pal[e_src] | e_flip);
@@ -670,6 +904,7 @@ static void ent_draw(void) {
                 ent_aux[e_i] = 0;
                 entity_count++;
             }
+            ent_tank_place();
             bridge_wait = 0;
         }
     }
@@ -679,14 +914,36 @@ static void ent_draw(void) {
         if (e_type == ENTITY_NONE) {
             continue;
         }
-        ent_y[e_i] = (uint8_t)(ent_y[e_i] + river_scrolled);
+        if (e_type == ENT_AUX_TANK && (ent_flags[e_i] & ENT_F_WAIT)) {
+            continue;                       /* no position until the bar is placed */
+        }
+        if (e_type != ENT_AUX_SHELL) {      /* the shell stays where it burst on screen */
+            ent_y[e_i] = (uint8_t)(ent_y[e_i] + river_scrolled);
+        }
         if (ent_y[e_i] >= 232u && ent_y[e_i] < 250u) {
             ent_type[e_i] = ENTITY_NONE;
             entity_count--;
             continue;
         }
         e_type = ent_type[e_i];
-        if (e_type <= ENT_AUX_EXPLODE_LAST) {
+        if (e_type >= ENT_AUX_TANK) {
+            if (!river_freeze) {
+                for (e_n = 0; e_n < game_ticks; e_n++) {
+                    ent_cur = (uint8_t)(ent_frame + e_n);
+                    if (e_type == ENT_AUX_TANK) {
+                        ent_tank_tick();
+                    } else {
+                        ent_shell_tick();
+                    }
+                    if (ent_type[e_i] == ENTITY_NONE) {
+                        break;
+                    }
+                }
+                if (ent_type[e_i] == ENTITY_NONE) {
+                    continue;
+                }
+            }
+        } else if (e_type <= ENT_AUX_EXPLODE_LAST) {
             ent_aux[e_i] = (uint8_t)(ent_aux[e_i] + game_ticks);
             if (ent_aux[e_i] >= ENT_EXPLODE_TICKS) {
                 ent_aux[e_i] = 0;

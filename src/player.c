@@ -16,6 +16,7 @@
 #include "hud.h"
 #include "river.h"
 #include "entities.h"
+#include "entity_gfx.h"
 #include "player.h"
 
 player_state_t player;
@@ -47,7 +48,9 @@ uint8_t player_invuln;
 #define PLAYER_SHOT_WIDTH       2u
 #define PLAYER_REFUEL_RATE      3u      /* fuel units per frame on a depot */
 #define PLAYER_DEATH_STEPS      5u      /* debris shapes 6..2, 8 frames each */
-#define PLAYER_DEBRIS_TILE      (SPRITE_TILE_BASE + 112u)   /* shapes 2..6, 2 tiles each */
+/* Shapes 2..6, 2 tiles each, right after the entity tiles (entities.c puts
+ * them at SPRITE_TILE_BASE + 24). */
+#define PLAYER_DEBRIS_TILE      (SPRITE_TILE_BASE + 24u + ENT_GFX_TILES)
 
 #define PLAYER_SPRITE_TOP       0u
 #define PLAYER_SPRITE_BOTTOM    1u

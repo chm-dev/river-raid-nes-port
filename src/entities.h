@@ -23,6 +23,11 @@
 #define ENT_AUX_SHIP            13u
 #define ENT_AUX_BRIDGE          14u
 #define ENT_AUX_FUEL            15u
+/* The bridge tank (Atari P1, $38 state / $39 X / $3A Y) and the shell it
+ * fires (P0, $50 progress).  They are not shootable objects: entities.c keeps
+ * the Atari state in ent_aux (tank: $38, shell: $50). */
+#define ENT_AUX_TANK            16u
+#define ENT_AUX_SHELL           17u
 
 /* Slot arrays.  type is the aux shape index (ENTITY_NONE = free); flags bit 0
  * = moving left (Atari status bit 3), bit 1 = awake (bit 6: has been picked
@@ -31,6 +36,11 @@
 #define ENT_F_LEFT              0x01u
 #define ENT_F_AWAKE             0x02u
 #define ENT_F_LATCH             0x04u
+/* Tank only: waiting for the bridge bar to get a position; the bridge was
+ * destroyed ($2E != 0: stands still); its shell is flying ($50 >= 0). */
+#define ENT_F_WAIT              0x08u
+#define ENT_F_STOP              0x10u
+#define ENT_F_SHOOT             0x20u
 extern uint8_t ent_type[MAX_ENTITIES];
 extern uint8_t ent_x[MAX_ENTITIES];
 extern uint8_t ent_y[MAX_ENTITIES];
