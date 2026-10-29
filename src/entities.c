@@ -18,7 +18,13 @@
 #include "entities.h"
 #include "player.h"
 
-entity_t entities[MAX_ENTITIES];
+/* Separate arrays (not an array of structs): SDCC indexes these with plain
+ * absolute,X addressing, where a 5-byte struct needs a multiply per access. */
+uint8_t ent_type[MAX_ENTITIES];
+uint8_t ent_x[MAX_ENTITIES];
+uint8_t ent_y[MAX_ENTITIES];
+uint8_t ent_flags[MAX_ENTITIES];
+uint8_t ent_aux[MAX_ENTITIES];
 uint8_t entity_count;
 
 #define ENT_TILE_BASE           (SPRITE_TILE_BASE + 24u)
@@ -49,6 +55,8 @@ static uint8_t e_w;
 static uint8_t e_cols;
 static uint8_t e_flip;
 static uint8_t e_prop;
+static uint8_t e_c;
+static volatile OAM_item_t *e_o;
 static uint8_t e_oam;
 static uint8_t e_px;
 
@@ -61,11 +69,11 @@ static uint8_t ent_random(void) {
 
 void entities_clear(void) BANKED {
     for (e_i = 0; e_i < MAX_ENTITIES; e_i++) {
-        entities[e_i].type = ENTITY_NONE;
-        entities[e_i].x = 0;
-        entities[e_i].y = 0;
-        entities[e_i].flags = 0;
-        entities[e_i].aux = 0;
+        ent_type[e_i] = ENTITY_NONE;
+        ent_x[e_i] = 0;
+        ent_y[e_i] = 0;
+        ent_flags[e_i] = 0;
+        ent_aux[e_i] = 0;
     }
     entity_count = 0;
     ent_spawn_acc = 0;
@@ -137,7 +145,7 @@ void entities_add_score(uint8_t bcd_tens) BANKED {
 
 /* Water bounds under entity e_i; returns 0 when the row is unknown. */
 static uint8_t ent_bounds(void) {
-    e_slot = river_slot_at_scanline((uint8_t)(entities[e_i].y + (e_rows >> 1)));
+    e_slot = river_slot_at_scanline((uint8_t)(ent_y[e_i] + (e_rows >> 1)));
     e_r = river_right_x[e_slot];
     if (e_r == 0u) {
         return 0;
@@ -158,7 +166,7 @@ static void ent_spawn(void) {
         return;
     }
     for (e_i = 0; e_i < MAX_ENTITIES; e_i++) {
-        if (entities[e_i].type == ENTITY_NONE) {
+        if (ent_type[e_i] == ENTITY_NONE) {
             break;
         }
     }
@@ -180,33 +188,33 @@ static void ent_spawn(void) {
 
     e_x = (uint8_t)(((uint16_t)ent_random() *
                      (uint8_t)(e_r - e_l - 2u * 10u - e_w)) >> 8);
-    entities[e_i].type = e_type;
-    entities[e_i].x = (uint8_t)(e_l + SOURCE_X_OFFSET + 10u + e_x);
-    entities[e_i].y = (uint8_t)(PLAYFIELD_SCANLINE - e_rows);
-    entities[e_i].flags = (ent_random() & 1u);
-    entities[e_i].aux = 0;
+    ent_type[e_i] = e_type;
+    ent_x[e_i] = (uint8_t)(e_l + SOURCE_X_OFFSET + 10u + e_x);
+    ent_y[e_i] = (uint8_t)(PLAYFIELD_SCANLINE - e_rows);
+    ent_flags[e_i] = (ent_random() & 1u);
+    ent_aux[e_i] = 0;
     entity_count++;
 }
 
 static void ent_explode(void) {
     /* Centre the debris on the old shape. */
-    entities[e_i].y = (uint8_t)(entities[e_i].y + (e_rows >> 1) - 3u);
-    entities[e_i].type = ENT_AUX_EXPLODE_FIRST;
-    entities[e_i].aux = 0;
+    ent_y[e_i] = (uint8_t)(ent_y[e_i] + (e_rows >> 1) - 3u);
+    ent_type[e_i] = ENT_AUX_EXPLODE_FIRST;
+    ent_aux[e_i] = 0;
 }
 
 uint8_t entities_hit_shot(uint8_t sx, uint8_t sy) BANKED {
     for (e_i = 0; e_i < MAX_ENTITIES; e_i++) {
-        e_type = entities[e_i].type;
+        e_type = ent_type[e_i];
         if (e_type < ENT_AUX_JET) {
             continue;
         }
         e_rows = ent_gfx_rows[e_type];
         e_w = ent_width(e_type);
-        if ((uint16_t)sx < (uint16_t)entities[e_i].x + e_w &&
-            (uint16_t)sx + 2u > entities[e_i].x &&
-            (uint16_t)sy < (uint16_t)entities[e_i].y + e_rows &&
-            (uint16_t)sy + 6u > entities[e_i].y) {
+        if ((uint16_t)sx < (uint16_t)ent_x[e_i] + e_w &&
+            (uint16_t)sx + 2u > ent_x[e_i] &&
+            (uint16_t)sy < (uint16_t)ent_y[e_i] + e_rows &&
+            (uint16_t)sy + 6u > ent_y[e_i]) {
             entities_add_score(atari_score_tens[e_type]);
             ent_explode();
             return 1;
@@ -217,16 +225,16 @@ uint8_t entities_hit_shot(uint8_t sx, uint8_t sy) BANKED {
 
 uint8_t entities_check_player(uint8_t px, uint8_t py) BANKED {
     for (e_i = 0; e_i < MAX_ENTITIES; e_i++) {
-        e_type = entities[e_i].type;
+        e_type = ent_type[e_i];
         if (e_type < ENT_AUX_JET) {
             continue;
         }
         e_rows = ent_gfx_rows[e_type];
         e_w = ent_width(e_type);
-        if ((uint16_t)px < (uint16_t)entities[e_i].x + e_w &&
-            (uint16_t)px + 8u > entities[e_i].x &&
-            (uint16_t)py < (uint16_t)entities[e_i].y + e_rows &&
-            (uint16_t)py + 14u > entities[e_i].y) {
+        if ((uint16_t)px < (uint16_t)ent_x[e_i] + e_w &&
+            (uint16_t)px + 8u > ent_x[e_i] &&
+            (uint16_t)py < (uint16_t)ent_y[e_i] + e_rows &&
+            (uint16_t)py + 14u > ent_y[e_i]) {
             if (e_type == ENT_AUX_FUEL) {
                 return ENT_HIT_FUEL;
             }
@@ -237,69 +245,69 @@ uint8_t entities_check_player(uint8_t px, uint8_t py) BANKED {
 }
 
 static void ent_move(void) {
-    e_type = entities[e_i].type;
+    e_type = ent_type[e_i];
     if (e_type == ENT_AUX_FUEL) {
         return;
     }
     e_rows = ent_gfx_rows[e_type];
     e_w = ent_width(e_type);
     /* Ships crawl, helicopters walk, the jet flies two pixels a frame. */
-    entities[e_i].aux++;
-    if (e_type == ENT_AUX_SHIP && (entities[e_i].aux & 1u)) {
+    ent_aux[e_i]++;
+    if (e_type == ENT_AUX_SHIP && (ent_aux[e_i] & 1u)) {
         return;
     }
     e_px = (e_type == ENT_AUX_JET) ? 2u : 1u;
-    if (entities[e_i].flags & 1u) {
-        entities[e_i].x = (uint8_t)(entities[e_i].x - e_px);
+    if (ent_flags[e_i] & 1u) {
+        ent_x[e_i] = (uint8_t)(ent_x[e_i] - e_px);
     } else {
-        entities[e_i].x = (uint8_t)(entities[e_i].x + e_px);
+        ent_x[e_i] = (uint8_t)(ent_x[e_i] + e_px);
     }
     if (e_type == ENT_AUX_JET) {
         /* Crossing jets wrap at the Atari patrol limits $2C..$D4. */
-        if (entities[e_i].x >= 0xD4u) {
-            entities[e_i].x = (uint8_t)(0x2Cu + (entities[e_i].x - 0xD4u));
-        } else if (entities[e_i].x < 0x2Cu) {
-            entities[e_i].x = 0xD4u;
+        if (ent_x[e_i] >= 0xD4u) {
+            ent_x[e_i] = (uint8_t)(0x2Cu + (ent_x[e_i] - 0xD4u));
+        } else if (ent_x[e_i] < 0x2Cu) {
+            ent_x[e_i] = 0xD4u;
         }
         return;
     }
-    if (ent_bounds()) {
-        e_x = entities[e_i].x;
+    /* Banks move at most a pixel per row, so checking every 4th tick is enough. */
+    if (!(ent_aux[e_i] & 3u) && ent_bounds()) {
+        e_x = ent_x[e_i];
         if (e_x <= (uint8_t)(e_l + 2u)) {
-            entities[e_i].x = (uint8_t)(e_l + 3u);
-            entities[e_i].flags &= 0xFEu;
+            ent_x[e_i] = (uint8_t)(e_l + 3u);
+            ent_flags[e_i] &= 0xFEu;
         } else if ((uint8_t)(e_x + e_w + 2u) >= e_r) {
-            entities[e_i].x = (uint8_t)(e_r - e_w - 3u);
-            entities[e_i].flags |= 1u;
+            ent_x[e_i] = (uint8_t)(e_r - e_w - 3u);
+            ent_flags[e_i] |= 1u;
         }
     }
 }
 
 static void ent_draw(void) {
-    e_type = entities[e_i].type;
+    e_type = ent_type[e_i];
     e_tile = (uint8_t)(ENT_TILE_BASE + ent_gfx_first[e_type]);
     e_cols = ent_gfx_cols[e_type];
-    e_rows = ent_gfx_count[e_type];     /* tiles, row-major */
-    e_flip = ((entities[e_i].flags & 1u) && e_type >= ENT_AUX_JET) ? S_FLIPX : 0u;
-    e_prop = (uint8_t)(S_PAL((ent_gfx_pal[e_type] == 1u) ? 2u : 3u) | e_flip);
-    for (e_t = 0; e_t < e_rows; e_t++) {
-        if (e_oam > ENT_OAM_LAST) {
-            return;
+    /* A left-moving shape is the mirror image: flip every tile and reverse
+     * the column order.  Fuel depots and debris never flip. */
+    e_flip = ((ent_flags[e_i] & 1u) && e_type >= ENT_AUX_JET &&
+              e_type != ENT_AUX_FUEL) ? S_FLIPX : 0u;
+    e_prop = (uint8_t)(ent_gfx_pal[e_type] | e_flip);
+    for (e_t = 0; e_t < ent_gfx_rows[e_type]; e_t += 8u) {
+        e_y = (uint8_t)(ent_y[e_i] + e_t);
+        for (e_c = 0; e_c < e_cols; e_c++, e_tile++) {
+            if (e_y < HUD_SPLIT_SCANLINE || e_y >= 232u || e_oam > ENT_OAM_LAST) {
+                continue;
+            }
+            e_o = &shadow_OAM[e_oam];
+            e_o->y = e_y;
+            e_o->tile = e_tile;
+            e_o->prop = e_prop;
+            e_o->x = (uint8_t)(ent_x[e_i] +
+                               (e_flip ? (uint8_t)((e_cols - 1u - e_c) << 3)
+                                       : (uint8_t)(e_c << 3)));
+            e_oam++;
         }
-        e_y = (uint8_t)(entities[e_i].y + ((e_t / e_cols) << 3));
-        if (e_y < HUD_SPLIT_SCANLINE || e_y >= 232u) {
-            continue;
-        }
-        /* A left-moving shape is the mirror image: flip every tile and
-         * reverse the column order. */
-        e_x = (uint8_t)(e_t % e_cols);
-        if (e_flip) {
-            e_x = (uint8_t)(e_cols - 1u - e_x);
-        }
-        move_sprite(e_oam, (uint8_t)(entities[e_i].x + (e_x << 3)), e_y);
-        set_sprite_tile(e_oam, (uint8_t)(e_tile + e_t));
-        set_sprite_prop(e_oam, e_prop);
-        e_oam++;
     }
 }
 void entities_update(void) BANKED {
@@ -310,7 +318,7 @@ void entities_update(void) BANKED {
         }
         while (ent_oam_used > ENT_OAM_FIRST) {
             ent_oam_used--;
-            hide_sprite(ent_oam_used);
+            shadow_OAM[ent_oam_used].y = 240u;
         }
         return;
     }
@@ -325,22 +333,22 @@ void entities_update(void) BANKED {
     }
 
     for (e_i = 0; e_i < MAX_ENTITIES; e_i++) {
-        e_type = entities[e_i].type;
+        e_type = ent_type[e_i];
         if (e_type == ENTITY_NONE) {
             continue;
         }
-        entities[e_i].y = (uint8_t)(entities[e_i].y + river_scrolled);
-        if (entities[e_i].y >= 232u && entities[e_i].y < 250u) {
-            entities[e_i].type = ENTITY_NONE;
+        ent_y[e_i] = (uint8_t)(ent_y[e_i] + river_scrolled);
+        if (ent_y[e_i] >= 232u && ent_y[e_i] < 250u) {
+            ent_type[e_i] = ENTITY_NONE;
             entity_count--;
             continue;
         }
-        e_type = entities[e_i].type;
+        e_type = ent_type[e_i];
         if (e_type <= ENT_AUX_EXPLODE_LAST) {
-            if (++entities[e_i].aux >= ENT_EXPLODE_TICKS) {
-                entities[e_i].aux = 0;
-                if (++entities[e_i].type > ENT_AUX_EXPLODE_LAST) {
-                    entities[e_i].type = ENTITY_NONE;
+            if (++ent_aux[e_i] >= ENT_EXPLODE_TICKS) {
+                ent_aux[e_i] = 0;
+                if (++ent_type[e_i] > ENT_AUX_EXPLODE_LAST) {
+                    ent_type[e_i] = ENTITY_NONE;
                     entity_count--;
                     continue;
                 }
@@ -354,7 +362,7 @@ void entities_update(void) BANKED {
     /* Hide sprites freed since the last frame. */
     while (ent_oam_used > e_oam) {
         ent_oam_used--;
-        hide_sprite(ent_oam_used);
+        shadow_OAM[ent_oam_used].y = 240u;
     }
     ent_oam_used = e_oam;
 }

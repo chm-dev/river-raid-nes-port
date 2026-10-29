@@ -8,13 +8,13 @@
 #define ENT_GFX_SHOT    34u
 
 /* Per aux 0..15: first tile, tile count, shape rows, width in tiles and
- * palette group (1..3).  Tiles are row-major, left to right. */
+ * hardware sprite palette.  Tiles are row-major, left to right. */
 extern const uint8_t ent_gfx_first[16];
 extern const uint8_t ent_gfx_count[16];
 extern const uint8_t ent_gfx_rows[16];
 extern const uint8_t ent_gfx_cols[16];  /* width in 8-px tiles (SIZEP3) */
 extern const uint8_t ent_gfx_pal[16];
-/* [0] = enemies (sprite palette 2), [1] = fuel + explosions (palette 3). */
+/* Sprite palettes 2 and 3 (palette 0 is the jet's). */
 extern const uint8_t ent_gfx_palette[2][3];
 extern const uint8_t ent_gfx_chr[560];
 

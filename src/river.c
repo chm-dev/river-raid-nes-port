@@ -1094,16 +1094,14 @@ void river_update(void) {
         return;
     }
 
-    /* Throttle.  Generating a raw row costs about a frame of CPU, so fast is
-     * the 1 px/frame ceiling; cruise skips every 4th frame and slow scrolls
-     * every other frame. */
-    river_phase++;
+    /* Throttle.  Generating a raw row costs about a frame of CPU, so 1 px
+     * per frame is the ceiling (cruise and fast); slow scrolls every other
+     * frame. */
     if (river_speed == 0u) {
-        if (river_phase & 1u) {
+        river_phase ^= 1u;
+        if (river_phase) {
             return;
         }
-    } else if (river_speed == 1u && (river_phase & 3u) == 3u) {
-        return;
     }
 
     /* Scroll down: the playfield moves in the opposite direction to the

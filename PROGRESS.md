@@ -741,7 +741,7 @@ AltirraBridge: reuse the live server token explicitly when known, e.g.
   generates `src/entity_gfx.[ch]` (width-expanded tiles, 3-colour palettes).
 - **Shot:** one at a time (A), 6 px/frame, dies on banks/islands, entities or
   the HUD.  **Fuel depots** refuel while overlapped, enemies kill the jet.
-- **Throttle:** generating a raw row costs ~1 frame of CPU, so 2 px/frame is
+- **Throttle (revised):** slow = 0.5 px/frame, cruise = fast = 1 px/frame (the 0.75 cruise felt slow and was reverted). Generating a raw row costs ~1 frame of CPU, so 2 px/frame is
   not reachable; fast = 1 px/frame, cruise = 0.75, slow = 0.5.  Real 2x needs
   generator optimisation.
 - **Death animation:** the jet becomes two overlapping debris fragments cycling
@@ -752,3 +752,20 @@ AltirraBridge: reuse the live server token explicitly when known, e.g.
 - Open: bridge object ($0E, quad-wide) + road visuals, respawn at last bridge,
   entity fidelity (Atari spawn timing/positions, bank clamp), fuel rate,
   shot speed/guidance, sound.
+### 2026-10-29 - Entity fixes after play-testing
+
+- **Speed:** profiled with Lua cycle markers on the main-loop calls.  River
+  ~10k cycles/frame, HUD ~1k; entities were 4-5k *per entity* because
+  `entities[e_i].field` multiplies by the 5-byte struct size.  Now separate
+  arrays (`ent_type/x/y/flags/aux`), direct `shadow_OAM` writes (jet too),
+  no `/` `%` in the draw loop and the patrol-bounds check every 4th tick.
+  Loop rate with 3 entities ~0.75-0.9 per frame (was 0.5).  Cruise returned
+  to 1 px/frame.  Further headroom: spawn/bounds/draw are still the biggest
+  entity costs; the river row generator dominates.
+- **Flip:** only moving enemies flip (left = mirror shape via X-flip, with the
+  tile columns reversed for the wide ship); fuel depots and debris never flip.
+  Verified by pixel dump (left/right ships are mirror images).
+- **Palettes** now come from the real Atari row colours (`palette_altirra_ntsc.bin`)
+  by nearest classic-NES colour: helicopters sprite palette 2 (black, yellow,
+  blue), ships palette 3 (black, dark red, cyan), jet/fuel/debris share the jet's
+  palette 0 (yellow, white, red).  Black parts are only visible over water.

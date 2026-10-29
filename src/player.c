@@ -147,14 +147,15 @@ static uint8_t player_hits_terrain(void) {
 }
 
 static void player_show(uint8_t tile) {
-    move_sprite(PLAYER_SPRITE_TOP, player.x, player.y);
-    move_sprite(PLAYER_SPRITE_BOTTOM, player.x, (uint8_t)(player.y + 8u));
-    set_sprite_tile(PLAYER_SPRITE_TOP, tile);
-    set_sprite_tile(PLAYER_SPRITE_BOTTOM, (uint8_t)(tile + 1u));
-    set_sprite_prop(PLAYER_SPRITE_TOP, S_PAL(0));
-    set_sprite_prop(PLAYER_SPRITE_BOTTOM, S_PAL(0));
+    shadow_OAM[PLAYER_SPRITE_TOP].y = player.y;
+    shadow_OAM[PLAYER_SPRITE_TOP].tile = tile;
+    shadow_OAM[PLAYER_SPRITE_TOP].prop = S_PAL(0);
+    shadow_OAM[PLAYER_SPRITE_TOP].x = player.x;
+    shadow_OAM[PLAYER_SPRITE_BOTTOM].y = (uint8_t)(player.y + 8u);
+    shadow_OAM[PLAYER_SPRITE_BOTTOM].tile = (uint8_t)(tile + 1u);
+    shadow_OAM[PLAYER_SPRITE_BOTTOM].prop = S_PAL(0);
+    shadow_OAM[PLAYER_SPRITE_BOTTOM].x = player.x;
 }
-
 /* Debris frames 2..6 and back, two overlapping fragments. */
 static const uint8_t player_death_frames[PLAYER_DEATH_STEPS] = {
     2, 3, 4, 5, 6, 5, 4, 3, 2

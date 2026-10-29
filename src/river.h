@@ -52,8 +52,8 @@ extern uint16_t river_distance;
  * untouched so a test can drive playfield_scroll_y directly. */
 extern uint8_t river_freeze;
 
-/* Throttle set by the player: 0 = slow (0.5 px/frame), 1 = cruise (0.75),
- * 2 = fast (1 px/frame, the generator's CPU ceiling). */
+/* Throttle set by the player: 0 = slow (0.5 px/frame), 1 = cruise (1 px/frame),
+ * 2 = fast (same as cruise: 1 px/frame is the CPU ceiling). */
 extern uint8_t river_speed;
 
 /* 1 when the playfield advanced a pixel (raw row) in the last river_update(). */

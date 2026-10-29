@@ -23,15 +23,13 @@
 #define ENT_AUX_SHIP            13u
 #define ENT_AUX_FUEL            15u
 
-typedef struct {
-    uint8_t type;       /* aux shape index; ENTITY_NONE = free */
-    uint8_t x;
-    uint8_t y;
-    uint8_t flags;      /* bit 0: moving left */
-    uint8_t aux;        /* move / animation timer */
-} entity_t;
-
-extern entity_t entities[MAX_ENTITIES];
+/* Slot arrays.  type is the aux shape index (ENTITY_NONE = free); flags bit 0
+ * = moving left; aux is a move / animation timer. */
+extern uint8_t ent_type[MAX_ENTITIES];
+extern uint8_t ent_x[MAX_ENTITIES];
+extern uint8_t ent_y[MAX_ENTITIES];
+extern uint8_t ent_flags[MAX_ENTITIES];
+extern uint8_t ent_aux[MAX_ENTITIES];
 extern uint8_t entity_count;
 
 /* Results of entities_check_player(). */
