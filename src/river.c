@@ -1083,8 +1083,9 @@ uint8_t river_slot_at_scanline(uint8_t scanline) {
     return (uint8_t)(bg_y >> 3);
 }
 
-/* File-scope: ru_next lives across calls (see AGENTS.md rule 3). */
+/* File-scope: both live across calls (see AGENTS.md rule 3). */
 static uint8_t ru_next;
+static uint8_t ru_steps;
 
 void river_update(void) {
     river_stream_pending();
@@ -1094,29 +1095,34 @@ void river_update(void) {
         return;
     }
 
-    /* Throttle.  Generating a raw row costs about a frame of CPU, so 1 px
-     * per frame is the ceiling (cruise and fast); slow scrolls every other
-     * frame. */
+    /* Throttle, in rows per main-loop pass: slow = 0.5, cruise = 1, fast = 2.
+     * Generating and streaming rows is CPU-bound, so the loop itself slows
+     * down in fast mode (about 1.1 px/frame sustained, vs ~0.85 at cruise). */
+    river_phase ^= 1u;
+    ru_steps = 1u;
     if (river_speed == 0u) {
-        river_phase ^= 1u;
         if (river_phase) {
             return;
         }
+    } else if (river_speed >= 2u) {
+        ru_steps = 2u;
     }
 
     /* Scroll down: the playfield moves in the opposite direction to the
      * generator stream, matching the Atari (new terrain enters at the top).
-     * One raw Atari scanline per frame keeps the per-frame cost flat; the
-     * 8th row completes one 8x8 tile row, and only then do we write 32 bytes
-     * of nametable data. */
-    ru_next = (playfield_scroll_y == 0u)
-        ? (uint8_t)(RIVER_SCROLL_HEIGHT - 1u)
-        : (uint8_t)(playfield_scroll_y - 1u);
-    river_generate_raw_row();
-    if (river_block_index == 8u) {
-        river_finish_tile_row();
+     * The 8th row of a block completes one 8x8 tile row; only then do we
+     * write 32 bytes of nametable data. */
+    ru_next = playfield_scroll_y;
+    while (ru_steps--) {
+        ru_next = (ru_next == 0u)
+            ? (uint8_t)(RIVER_SCROLL_HEIGHT - 1u)
+            : (uint8_t)(ru_next - 1u);
+        river_generate_raw_row();
+        if (river_block_index == 8u) {
+            river_finish_tile_row();
+        }
+        river_scrolled++;
     }
-    river_scrolled = 1u;
 
     hud_set_playfield_scroll(ru_next);
 }

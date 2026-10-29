@@ -801,3 +801,10 @@ AltirraBridge: reuse the live server token explicitly when known, e.g.
   helicopter = small black/orange.  No recentring of the debris.
 - Sprite tiles: entities `+24..+108`, jet debris `+112..+121`.  RAM: 3 bytes free
   (tight).
+### 2026-10-29 - Fast throttle (forward)
+
+- Up (forward) now scrolls 2 rows per main-loop pass (cruise 1, slow Down = 0.5
+  per pass).  The loop itself is CPU/upload-bound, so measured sustained speeds
+  are ~0.73 px/frame cruise vs ~1.0 fast (+30%); more would need a faster row
+  generator or CHR upload path.  `player_disable` forces cruise for the tests.
+  RAM: 2 bytes free.

@@ -266,7 +266,7 @@ static void player_respawn(void) {
 
 void player_update(void) BANKED {
     if (player_disable) {
-        river_speed = 2u;       /* tests expect 1 px/frame */
+        river_speed = 1u;       /* tests expect 1 px/frame */
         if (player.alive) {
             player.alive = 0;
             hide_sprite(PLAYER_SPRITE_TOP);
