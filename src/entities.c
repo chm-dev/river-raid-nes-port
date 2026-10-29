@@ -194,6 +194,8 @@ static void sp_choose(void) {
     sp_b8 = 0;
     if (rg_flags23 & 0x80u) {
         sp_y = 0x0Eu;                       /* the bridge itself */
+        sp_b8 = 7u;
+        sp_a = (uint8_t)(rg_phase - 6u);    /* $AC00: X from the $54 phase */
         return;
     }
     sp_y = 1u;
@@ -378,8 +380,8 @@ void entities_row(void) BANKED {
     river_obj_x[0] = e_x;
     river_obj_flags[0] = (sp_y == ENT_AUX_SHIP) ? 1u : (sp_y == 0x0Eu) ? 3u : 0u;
 
-    if (sp_y < 2u || sp_y == 0x0Eu) {
-        return;                             /* blank placeholder / bridge */
+    if (sp_y < 2u) {
+        return;                             /* blank placeholder */
     }
     for (e_i = 0; e_i < MAX_ENTITIES; e_i++) {
         if (ent_type[e_i] == ENTITY_NONE) {
@@ -425,6 +427,9 @@ uint8_t entities_hit_shot(uint8_t sx, uint8_t sy) BANKED {
             (uint16_t)sy < (uint16_t)ent_y[e_i] + e_rows &&
             (uint16_t)sy + 6u > ent_y[e_i]) {
             entities_add_score(atari_score_tens[e_type]);
+            if (e_type == ENT_AUX_BRIDGE && hud_bridge < HUD_BRIDGE_DIGIT_MAX) {
+                hud_bridge++;               /* $A3E9: a bridge hit advances the counter */
+            }
             ent_explode();
             return 1;
         }

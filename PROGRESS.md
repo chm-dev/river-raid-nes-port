@@ -886,3 +886,17 @@ AltirraBridge: reuse the live server token explicitly when known, e.g.
   shift/eviction (slots are freed when the object scrolls off), bridge object
   `$0E` (the spawner builds it for timing but no entity yet).
 - RAM: 13 bytes free (was 34); 11 entity slots cost 15 bytes.
+
+### 2026-10-29 - Bridge object
+
+- The spawner now creates the `$0E` bridge entity (quad-width, 20 rows) when the
+  generator's bridge flag (`$23` bit 7) is set; X is `$54 - 6` like the model
+  (previously `sp_a` was stale for this case and no entity existed).
+- Shooting it scores 500 (`atari_score_tens[14]` = `$50`), advances the HUD
+  bridge counter (`hud_bridge`) and bursts with the object's own debris class;
+  touching it kills the jet (generic deadly-entity path).  `object_host_check.py`
+  still reports 0 mismatches (2,539 states); `nes_smoke`, `nes_scroll_hud` and
+  `nes_river` pass.  Forced-bridge screenshot: `build/bridge_probe.png`.
+- Still open: grey road + yellow centre line across the land, respawn at the
+  last cleared bridge (needs generator state snapshot), odd/even land colour on
+  level change, fuel rate parity, sound.
