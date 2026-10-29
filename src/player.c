@@ -42,7 +42,8 @@ uint8_t player_disable;
 #define PLAYER_SHOT_SPEED       6u
 #define PLAYER_SHOT_WIDTH       2u
 #define PLAYER_REFUEL_RATE      3u      /* fuel units per frame on a depot */
-#define PLAYER_DEATH_STEPS      9u      /* 4-frame steps of debris frames */
+#define PLAYER_DEATH_STEPS      5u      /* debris shapes 6..2, 8 frames each */
+#define PLAYER_DEBRIS_TILE      (SPRITE_TILE_BASE + 112u)   /* shapes 2..6, 2 tiles each */
 
 #define PLAYER_SPRITE_TOP       0u
 #define PLAYER_SPRITE_BOTTOM    1u
@@ -64,6 +65,7 @@ static uint8_t player_state;
 static uint8_t player_timer;
 static uint8_t player_fuel_tick;
 static uint8_t player_prev_pad;
+static uint8_t pl_step;
 
 /* File-scope scratch (SDCC aliases block locals across calls). */
 static uint8_t pl_pad;
@@ -116,6 +118,9 @@ void player_init_graphics(void) BANKED {
     player_load_shape(SPRITE_TILE_BASE + 0u, 7);
     player_load_shape(SPRITE_TILE_BASE + 2u, 8);
     player_load_shape(SPRITE_TILE_BASE + 4u, 9);
+    for (pl_step = 2u; pl_step <= 6u; pl_step++) {
+        player_load_shape((uint8_t)(PLAYER_DEBRIS_TILE + ((pl_step - 2u) << 1)), pl_step);
+    }
 
     hide_sprite(PLAYER_SPRITE_TOP);
     hide_sprite(PLAYER_SPRITE_BOTTOM);
@@ -161,30 +166,22 @@ static void player_show(uint8_t tile) {
     shadow_OAM[PLAYER_SPRITE_BOTTOM].prop = S_PAL(0);
     shadow_OAM[PLAYER_SPRITE_BOTTOM].x = player.x;
 }
-/* Debris frames 2..6 and back, two overlapping fragments. */
-static const uint8_t player_death_frames[PLAYER_DEATH_STEPS] = {
-    2, 3, 4, 5, 6, 5, 4, 3, 2
-};
-
-static uint8_t pl_step;
 static uint8_t pl_hit;
+static uint8_t pl_tile;
 
+/* The jet's death: the original steps $5E through shapes 6,5,4,3,2 (debris
+ * drawn in the jet's own yellow, 14 rows) every 8 frames, then goes blank. */
 static void player_death_anim(void) {
-    pl_step = (uint8_t)((PLAYER_DEAD_FRAMES - player_timer) >> 2);
+    pl_step = (uint8_t)((PLAYER_DEAD_FRAMES - player_timer) >> 3);
     if (pl_step >= PLAYER_DEATH_STEPS) {
-        hide_sprite(PLAYER_SPRITE_TOP);
-        hide_sprite(PLAYER_SPRITE_BOTTOM);
+        shadow_OAM[PLAYER_SPRITE_TOP].y = 240u;
+        shadow_OAM[PLAYER_SPRITE_BOTTOM].y = 240u;
         return;
     }
-    move_sprite(PLAYER_SPRITE_TOP, player.x, (uint8_t)(player.y + 2u));
-    set_sprite_tile(PLAYER_SPRITE_TOP, entities_tile(player_death_frames[pl_step]));
-    set_sprite_prop(PLAYER_SPRITE_TOP, S_PAL(3));
-    move_sprite(PLAYER_SPRITE_BOTTOM, player.x, (uint8_t)(player.y + 8u));
-    set_sprite_tile(PLAYER_SPRITE_BOTTOM,
-                    entities_tile(player_death_frames[(uint8_t)(PLAYER_DEATH_STEPS - 1u - pl_step)]));
-    set_sprite_prop(PLAYER_SPRITE_BOTTOM, S_PAL(3));
+    /* Shape 6 - step lives in the debris tile pair of that shape. */
+    pl_tile = (uint8_t)(PLAYER_DEBRIS_TILE + ((4u - pl_step) << 1));
+    player_show(pl_tile);
 }
-
 static void player_kill_shot(void) {
     player.shot_active = 0;
     hide_sprite(PLAYER_SHOT_SLOT);

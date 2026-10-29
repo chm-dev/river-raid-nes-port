@@ -4,18 +4,19 @@
 
 #include <stdint.h>
 
-#define ENT_GFX_TILES   35u
-#define ENT_GFX_SHOT    34u
+#define ENT_GFX_TILES   85u
+#define ENT_GFX_SHOT    84u
 
 /* Per aux 0..15: first tile, tile count, shape rows, width in tiles and
  * hardware sprite palette.  Tiles are row-major, left to right. */
 extern const uint8_t ent_gfx_first[16];
+extern const uint8_t ent_exp_first[16];  /* explosion frame 2 block; +count per frame */
 extern const uint8_t ent_gfx_count[16];
 extern const uint8_t ent_gfx_rows[16];
 extern const uint8_t ent_gfx_cols[16];  /* width in 8-px tiles (SIZEP3) */
 extern const uint8_t ent_gfx_pal[16];
 /* Sprite palettes 2 and 3 (palette 0 is the jet's). */
 extern const uint8_t ent_gfx_palette[2][3];
-extern const uint8_t ent_gfx_chr[560];
+extern const uint8_t ent_gfx_chr[1360];
 
 #endif

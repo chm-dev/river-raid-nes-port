@@ -34,7 +34,7 @@ uint8_t entity_count;
 #define ent_width(type)         ((uint8_t)(ent_gfx_cols[type] << 3))
 #define ENT_SPAWN_PIXELS        56u     /* scrolled rows between spawns */
 #define ENT_MIN_WATER           40u
-#define ENT_EXPLODE_TICKS       4u
+#define ENT_EXPLODE_TICKS       8u      /* Atari: type 2..6 advance every 8th frame */
 
 static uint8_t ent_rng = 0x5Au;
 static uint8_t ent_spawn_acc;
@@ -57,6 +57,7 @@ static uint8_t e_cols;
 static uint8_t e_flip;
 static uint8_t e_prop;
 static uint8_t e_c;
+static uint8_t e_src;
 static volatile OAM_item_t *e_o;
 static uint8_t e_oam;
 static uint8_t e_px;
@@ -197,9 +198,11 @@ static void ent_spawn(void) {
     entity_count++;
 }
 
+/* The explosion keeps the object's own shape class (colours, height, width)
+ * in the high nibble of flags and only swaps the pixels for debris frames
+ * 2..6, as the Atari does ($0500 type changes, $050B aux stays). */
 static void ent_explode(void) {
-    /* Centre the debris on the old shape. */
-    ent_y[e_i] = (uint8_t)(ent_y[e_i] + (e_rows >> 1) - 3u);
+    ent_flags[e_i] = (uint8_t)((ent_type[e_i] << 4) | (ent_flags[e_i] & 1u));
     ent_type[e_i] = ENT_AUX_EXPLODE_FIRST;
     ent_aux[e_i] = 0;
 }
@@ -287,14 +290,24 @@ static void ent_move(void) {
 
 static void ent_draw(void) {
     e_type = ent_type[e_i];
-    e_tile = (uint8_t)(ENT_TILE_BASE + ent_gfx_first[e_type]);
-    e_cols = ent_gfx_cols[e_type];
-    /* A left-moving shape is the mirror image: flip every tile and reverse
-     * the column order.  Fuel depots and debris never flip. */
-    e_flip = ((ent_flags[e_i] & 1u) && e_type >= ENT_AUX_JET &&
-              e_type != ENT_AUX_FUEL) ? S_FLIPX : 0u;
-    e_prop = (uint8_t)(ent_gfx_pal[e_type] | e_flip);
-    for (e_t = 0; e_t < ent_gfx_rows[e_type]; e_t += 8u) {
+    if (e_type <= ENT_AUX_EXPLODE_LAST) {
+        /* Debris frame (e_type - 2) of the original object's class. */
+        e_src = (uint8_t)(ent_flags[e_i] >> 4);
+        e_tile = (uint8_t)(ENT_TILE_BASE + ent_exp_first[e_src]);
+        for (e_t = ENT_AUX_EXPLODE_FIRST; e_t < e_type; e_t++) {
+            e_tile = (uint8_t)(e_tile + ent_gfx_count[e_src]);
+        }
+        e_flip = 0u;
+    } else {
+        e_src = e_type;
+        e_tile = (uint8_t)(ENT_TILE_BASE + ent_gfx_first[e_type]);
+        /* A left-moving shape is the mirror image: flip every tile and
+         * reverse the column order.  Fuel depots never flip. */
+        e_flip = ((ent_flags[e_i] & 1u) && e_type != ENT_AUX_FUEL) ? S_FLIPX : 0u;
+    }
+    e_cols = ent_gfx_cols[e_src];
+    e_prop = (uint8_t)(ent_gfx_pal[e_src] | e_flip);
+    for (e_t = 0; e_t < ent_gfx_rows[e_src]; e_t += 8u) {
         e_y = (uint8_t)(ent_y[e_i] + e_t);
         for (e_c = 0; e_c < e_cols; e_c++, e_tile++) {
             if (e_y < HUD_SPLIT_SCANLINE || e_y >= 232u || e_oam > ENT_OAM_LAST) {

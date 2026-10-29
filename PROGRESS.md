@@ -784,3 +784,20 @@ AltirraBridge: reuse the live server token explicitly when known, e.g.
   (aux 8<->9, 10<->11 every 2nd frame).  Tests updated for the new water colour.
 - Altirra server note: a stale `AltirraBridgeServer` may hold port 6502; kill
   all of them before starting, and remember `a.quit()` removes the token.
+### 2026-10-29 - Death animations matched to the Atari
+
+- **Jet:** `$5E` steps 6,5,4,3,2 (8 frames each) then 1,0 (blank) after a crash;
+  COLPM2 stays `$1E`, so the debris is the jet's yellow.  NES: the extracted
+  player shapes 6..2 (14 rows, two tiles each, palette 0) at
+  `PLAYER_DEBRIS_TILE`, 8 frames per step, then hidden.
+- **Enemies / fuel:** an Atari explosion only changes the object's *type*
+  (`$0500`: 2->3->4->5->6->0, every 8th frame, `A271` + `$BB24`); the aux
+  (`$050B`: colour strip, row count, `$BB60`) and size register (`$0521`) stay.
+  So each class bursts differently: the debris frames (shape `$B900+$BB40[type]`)
+  are read for the object's full height, in the object's own colours and
+  width.  `tools/gen_entity_gfx.py` now builds those per class
+  (`ent_exp_first`); the explosion keeps the class in the high nibble of
+  `ent_flags`.  Fuel = tall pink/white cloud, ship = wide dark/red/cyan,
+  helicopter = small black/orange.  No recentring of the debris.
+- Sprite tiles: entities `+24..+108`, jet debris `+112..+121`.  RAM: 3 bytes free
+  (tight).
