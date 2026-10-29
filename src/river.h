@@ -53,11 +53,15 @@ extern uint16_t river_distance;
 extern uint8_t river_freeze;
 
 /* Throttle set by the player: 0 = slow (0.5 px/frame), 1 = cruise (1 px/frame),
- * 2 = fast (2 rows per loop pass). */
+ * 2 = fast (2 rows per frame). */
 extern uint8_t river_speed;
 
 /* Pixels (raw rows) the playfield advanced in the last river_update(): 0..2. */
 extern uint8_t river_scrolled;
+
+/* Frames elapsed since the previous main-loop pass (1..4), set in main().  All
+ * game logic scales with this so a slow pass never slows the game down. */
+extern uint8_t game_ticks;
 
 /* Collision-ring slot (== nametable row) under a playfield scanline
  * (36..239). */

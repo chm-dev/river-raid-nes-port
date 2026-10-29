@@ -356,8 +356,7 @@ These are documented in full in `docs/ATARI_RE_SPEC.md`; don't re-derive them.
 5. RAM is tight: 36 bytes free (queue 64 B, tile buffer 320 B, ring arrays
    150 B, debug hooks 64 B).  Phase 5 will need to reclaim some of it
    (e.g. gate `river_debug_*` behind a macro, shrink `RIVER_Q_MAX`).
-6. Remaining perf headroom: `river_convert_row` (~4.3k cycles/frame) and
-   `river_render_row` (~3k) dominate; `hud_update` costs ~2k/frame.
+6. Perf: see the 2026-10-29 performance entry; entities (~4k/pass) are the next cost.
 
 ## Handy commands
 
@@ -808,3 +807,34 @@ AltirraBridge: reuse the live server token explicitly when known, e.g.
   are ~0.73 px/frame cruise vs ~1.0 fast (+30%); more would need a faster row
   generator or CHR upload path.  `player_disable` forces cruise for the tests.
   RAM: 2 bytes free.
+### 2026-10-29 - Performance: time-based game, direct VRAM buffer, asm hot loops
+
+- **Symptom:** speed changes slowed the whole game.  Profiled with Lua exec
+  callbacks (cycle deltas between function entries, results written to unused
+  CHR-RAM at $1E00 and read with `mesen_read_memory memoryType NesChrRam`).
+  The GBDK NMI spins ~6.4k cycles (faked LCD wait to scanline 36), so a pass
+  has only ~23k cycles before it overruns into a second frame.
+- **Measured (jet invulnerable, ~3 enemies):** before 0.74 px/frame cruise
+  (0.66 passes/frame fast).  After: slow 0.50, cruise 1.00 (1.00 passes/frame,
+  max pass 22.8k), fast 1.52 px/frame (0.95 passes/frame, ~4% of passes still
+  overrun).  Fast cannot reach 2.0: two rows + a classification slice per pass
+  exceed the budget.
+- **Hand-written 6502** (all in their own functions, see lessons): row
+  conversion (5.7k -> 2.2k), `river_fill`, row clear, entity sprite emit.
+  `river_convert_row_c` stays as the host reference.
+- **Direct transfer-buffer writes** (`river_put`): entries are
+  `[op=$81-4n][0][hi][lo][data][0]`; library vars `valid`($82 bit 7 = flush),
+  `num_cycles_x8` (start 171, entry costs n+5, unsigned!), `pos_w`, `pos_old`.
+  Pattern data must be **planar** (8 plane-0 bytes then 8 plane-1 bytes);
+  `set_bkg_data` de-interleaves, raw puts must do it themselves.  It never
+  blocks: a full buffer makes the job retry next pass.  Only used with the
+  display on (`river_live`).
+- **Streaming job:** tile rows are classified/uploaded in slices
+  (`RIVER_JOB_COLS`=12) and generation waits until done; the upload queue is gone.
+- **Time-based logic:** `game_ticks` (main.c, from `sys_time`, clamp 4) scales
+  scroll (half-row accumulator `river_acc`), enemy patrol (gated by
+  `river_freeze`, not by scroll), explosions, rotor animation, steering,
+  shot speed, fuel and death timers.  The scroll runs ahead of the generator
+  by at most `RIVER_MAX_OWED` rows (generator lead is 8).
+- `hud_update` refreshes one field per pass.  `player_invuln` test hook added.
+  Makefile now builds the banked modules with `-Wf-bo1`.  RAM: 34 bytes free.

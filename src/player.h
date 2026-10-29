@@ -32,6 +32,7 @@ extern player_state_t player;
 
 /* Test hook: freeze the jet (hidden, no fuel burn, no collisions). */
 extern uint8_t player_disable;
+extern uint8_t player_invuln;
 
 void player_init(void) BANKED;
 

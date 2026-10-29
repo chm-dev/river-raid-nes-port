@@ -5,6 +5,7 @@
 #include "nes/nes.h"
 #include "river.h"
 volatile uint8_t playfield_scroll_y;
+uint8_t game_ticks = 1;
 void hud_set_playfield_scroll(uint8_t y){ playfield_scroll_y=y; }
 void set_bkg_data(uint8_t f,uint8_t n,const uint8_t*d){(void)f;(void)n;(void)d;}
 void set_vram_byte(uint8_t*a,uint8_t v){(void)a;(void)v;}

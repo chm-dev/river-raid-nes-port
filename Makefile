@@ -18,9 +18,13 @@ LDFLAGS := -mmos6502:nes -Isrc -Wm-yoA -Wl-j -Wl-m -Wf--opt-code-size
 
 all: $(ROM)
 
+# Modules placed in switchable ROM bank 1 (same list as $bankedSources in build.ps1).
+BANKED := entities entity_gfx player
+BANKFLAGS = $(if $(filter $(basename $(notdir $<)),$(BANKED)),-Wf-bo1)
+
 build/obj/%.o: src/%.c
 	@mkdir -p build/obj
-	$(LCC) $(CFLAGS) -c -o $@ $<
+	$(LCC) $(CFLAGS) $(BANKFLAGS) -c -o $@ $<
 
 $(ROM): $(OBJ)
 	@mkdir -p roms

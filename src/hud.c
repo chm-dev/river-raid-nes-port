@@ -556,13 +556,20 @@ void hud_init_graphics(void) {
     hud_refresh_all();
 }
 
+/* One field per call: each HUD field is refreshed every sixth pass, which keeps
+ * the per-pass cost low (the score/hi-score tile conversion alone is ~1k). */
+static uint8_t hud_phase;
+
 void hud_update(void) {
-    hud_write_score();
-    hud_write_hi();
-    hud_write_bridge();
-    hud_write_game();
-    hud_write_lives();
-    hud_write_fuel();
+    switch (hud_phase) {
+    case 0: hud_write_score(); break;
+    case 1: hud_write_hi(); break;
+    case 2: hud_write_bridge(); break;
+    case 3: hud_write_game(); break;
+    case 4: hud_write_lives(); break;
+    default: hud_write_fuel(); hud_phase = 0xFFu; break;
+    }
+    hud_phase++;
 }
 
 void hud_set_playfield_scroll(uint8_t y) {

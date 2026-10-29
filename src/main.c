@@ -31,6 +31,8 @@
 volatile uint16_t frame_counter;
 volatile uint16_t vbl_events;
 volatile uint16_t split_events;
+uint8_t game_ticks = 1u;
+static uint8_t main_last;
 
 static void vbl_handler(void) NO_OVERLAY_LOCALS;
 static void lcd_handler(void) NO_OVERLAY_LOCALS;
@@ -88,8 +90,16 @@ void main(void) {
     DISPLAY_ON;
     SHOW_SPRITES;
 
+    main_last = (uint8_t)sys_time;
     for (;;) {
+        /* Wait for a new frame, but only if none passed during the last
+         * pass: an overrun pass starts the next one at once (catch-up). */
         vsync();
+        game_ticks = (uint8_t)((uint8_t)sys_time - main_last);
+        main_last = (uint8_t)sys_time;
+        if (game_ticks > 4u) {
+            game_ticks = 4u;
+        }
         frame_counter++;
         hud_update();
         river_update();

@@ -23,6 +23,10 @@ player_state_t player;
 /* Test hook: when non-zero the jet is hidden and player_update() does nothing. */
 uint8_t player_disable;
 
+/* Test hook: when non-zero the jet never crashes and never runs out of fuel
+ * (used to measure sustained scroll speed). */
+uint8_t player_invuln;
+
 #define PLAYER_WIDTH                8u
 #define PLAYER_HEIGHT                14u
 #define PLAYER_STEER_SPEED      1u
@@ -68,6 +72,7 @@ static uint8_t player_prev_pad;
 static uint8_t pl_step;
 
 /* File-scope scratch (SDCC aliases block locals across calls). */
+static uint8_t pl_ticks;
 static uint8_t pl_pad;
 static uint8_t pl_row;
 static uint8_t pl_l;
@@ -197,11 +202,12 @@ static void player_update_shot(void) {
         player.shot_y = (uint8_t)(player.y - 6u);
         player.shot_active = 1;
     } else {
-        if (player.shot_y < (uint8_t)(HUD_SPLIT_SCANLINE + PLAYER_SHOT_SPEED + 6u)) {
+        pl_row = (uint8_t)(PLAYER_SHOT_SPEED * pl_ticks);
+        if (player.shot_y < (uint8_t)(HUD_SPLIT_SCANLINE + pl_row + 6u)) {
             player_kill_shot();
             return;
         }
-        player.shot_y -= PLAYER_SHOT_SPEED;
+        player.shot_y = (uint8_t)(player.shot_y - pl_row);
     }
 
     pl_slot = river_slot_at_scanline(player.shot_y);
@@ -285,6 +291,7 @@ void player_update(void) BANKED {
         player_state = PLAYER_STATE_READY;
     }
 
+    pl_ticks = game_ticks;
     pl_pad = joypad();
 
     if (player_state == PLAYER_STATE_READY) {
@@ -302,7 +309,7 @@ void player_update(void) BANKED {
     if (player_state != PLAYER_STATE_PLAY) {
         if (player_timer != 0u) {
             player_death_anim();
-            player_timer--;
+            player_timer = (player_timer > pl_ticks) ? (uint8_t)(player_timer - pl_ticks) : 0u;
         } else if (player_state == PLAYER_STATE_DEAD) {
             player_respawn();
         } else if ((pl_pad & J_START) && !(player_prev_pad & J_START)) {
@@ -320,12 +327,14 @@ void player_update(void) BANKED {
     player.bank = PLAYER_BANK_NONE;
     if (pl_pad & J_LEFT) {
         if (player.x > PLAYER_X_MIN) {
-            player.x -= PLAYER_STEER_SPEED;
+            player.x = (player.x - PLAYER_X_MIN > pl_ticks)
+                ? (uint8_t)(player.x - pl_ticks) : PLAYER_X_MIN;
         }
         player.bank = 1;
     } else if (pl_pad & J_RIGHT) {
         if (player.x < PLAYER_X_MAX) {
-            player.x += PLAYER_STEER_SPEED;
+            player.x = (PLAYER_X_MAX - player.x > pl_ticks)
+                ? (uint8_t)(player.x + pl_ticks) : PLAYER_X_MAX;
         }
         player.bank = 2;
     }
@@ -334,8 +343,9 @@ void player_update(void) BANKED {
     river_speed = (pl_pad & J_DOWN) ? 0u : (pl_pad & J_UP) ? 2u : 1u;
 
     /* Fuel. */
-    if (++player_fuel_tick >= PLAYER_FUEL_FRAMES) {
-        player_fuel_tick = 0;
+    player_fuel_tick = (uint8_t)(player_fuel_tick + pl_ticks);
+    if (player_fuel_tick >= PLAYER_FUEL_FRAMES) {
+        player_fuel_tick = (uint8_t)(player_fuel_tick - PLAYER_FUEL_FRAMES);
         if (hud_fuel != 0u) {
             hud_fuel--;
         }
@@ -357,7 +367,10 @@ void player_update(void) BANKED {
             ? 255u : (uint8_t)(hud_fuel + PLAYER_REFUEL_RATE);
     }
 
-    if (hud_fuel == 0u || pl_hit == ENT_HIT_DEADLY || player_hits_terrain()) {
+    if (player_invuln) {
+        hud_fuel = 255u;
+    } else if (hud_fuel == 0u || pl_hit == ENT_HIT_DEADLY ||
+               player_hits_terrain()) {
         player_crash();
     }
     player_prev_pad = pl_pad;

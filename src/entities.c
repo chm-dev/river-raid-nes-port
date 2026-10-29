@@ -61,6 +61,7 @@ static uint8_t e_src;
 static volatile OAM_item_t *e_o;
 static uint8_t e_oam;
 static uint8_t e_px;
+static uint8_t e_n;
 
 static uint8_t ent_random(void) {
     ent_rng ^= (uint8_t)(ent_rng << 7);
@@ -288,6 +289,42 @@ static void ent_move(void) {
     }
 }
 
+static uint8_t e_off;
+static uint8_t e_ex;
+static uint8_t e_dx;
+
+/* Write e_cols consecutive sprites (one 8-pixel row of an entity) at OAM byte
+ * offset e_off, stopping at the entity sprite budget.  Hand-written: the C
+ * version took ~190 cycles per sprite, this ~45. */
+static void ent_emit_row(void) {
+    __asm
+        ldx     _e_off
+        ldy     _e_cols
+    1$:
+        cpx     #176
+        bcs     2$
+        lda     _e_y
+        sta     _shadow_OAM,x
+        lda     _e_tile
+        sta     _shadow_OAM+1,x
+        inc     _e_tile
+        lda     _e_prop
+        sta     _shadow_OAM+2,x
+        lda     _e_px
+        sta     _shadow_OAM+3,x
+        clc
+        adc     _e_dx
+        sta     _e_px
+        inx
+        inx
+        inx
+        inx
+        dey
+        bne     1$
+    2$:
+        stx     _e_off
+    __endasm;
+}
 static void ent_draw(void) {
     e_type = ent_type[e_i];
     if (e_type <= ENT_AUX_EXPLODE_LAST) {
@@ -307,24 +344,26 @@ static void ent_draw(void) {
     }
     e_cols = ent_gfx_cols[e_src];
     e_prop = (uint8_t)(ent_gfx_pal[e_src] | e_flip);
-    for (e_t = 0; e_t < ent_gfx_rows[e_src]; e_t += 8u) {
-        e_y = (uint8_t)(ent_y[e_i] + e_t);
-        for (e_c = 0; e_c < e_cols; e_c++, e_tile++) {
-            if (e_y < HUD_SPLIT_SCANLINE || e_y >= 232u || e_oam > ENT_OAM_LAST) {
-                continue;
-            }
-            e_o = &shadow_OAM[e_oam];
-            e_o->y = e_y;
-            e_o->tile = e_tile;
-            e_o->prop = e_prop;
-            e_o->x = (uint8_t)(ent_x[e_i] +
-                               (e_flip ? (uint8_t)((e_cols - 1u - e_c) << 3)
-                                       : (uint8_t)(e_c << 3)));
-            e_oam++;
-        }
+    e_rows = ent_gfx_rows[e_src];
+    e_y = ent_y[e_i];
+    e_ex = ent_x[e_i];
+    if (e_flip) {
+        e_ex = (uint8_t)(e_ex + ((e_cols - 1u) << 3));
+        e_dx = (uint8_t)-8;
+    } else {
+        e_dx = 8u;
     }
-}
-void entities_update(void) BANKED {
+    e_off = (uint8_t)(e_oam << 2);
+    for (e_t = 0; e_t < e_rows; e_t += 8u, e_y = (uint8_t)(e_y + 8u)) {
+        if (e_y < HUD_SPLIT_SCANLINE || e_y >= 232u || e_off >= 176u) {
+            e_tile = (uint8_t)(e_tile + e_cols);
+            continue;
+        }
+        e_px = e_ex;
+        ent_emit_row();
+    }
+    e_oam = (uint8_t)(e_off >> 2);
+}void entities_update(void) BANKED {
     if (player_disable) {
         /* Test hook: no entities while the jet is frozen. */
         if (entity_count != 0u) {
@@ -339,7 +378,7 @@ void entities_update(void) BANKED {
 
     e_px = river_scrolled;
     e_oam = ENT_OAM_FIRST;
-    ent_anim++;
+    ent_anim = (uint8_t)(ent_anim + game_ticks);
 
     ent_spawn_acc = (uint8_t)(ent_spawn_acc + e_px);
     if (ent_spawn_acc >= ENT_SPAWN_PIXELS) {
@@ -360,7 +399,8 @@ void entities_update(void) BANKED {
         }
         e_type = ent_type[e_i];
         if (e_type <= ENT_AUX_EXPLODE_LAST) {
-            if (++ent_aux[e_i] >= ENT_EXPLODE_TICKS) {
+            ent_aux[e_i] = (uint8_t)(ent_aux[e_i] + game_ticks);
+            if (ent_aux[e_i] >= ENT_EXPLODE_TICKS) {
                 ent_aux[e_i] = 0;
                 if (++ent_type[e_i] > ENT_AUX_EXPLODE_LAST) {
                     ent_type[e_i] = ENTITY_NONE;
@@ -369,13 +409,17 @@ void entities_update(void) BANKED {
                 }
             }
         } else {
-            if (river_scrolled != 0u) {
-                ent_move();
+            /* Patrol speed is per frame and independent of the scroll
+             * speed; the world stands still while the river is frozen. */
+            if (!river_freeze) {
+                for (e_n = 0; e_n < game_ticks; e_n++) {
+                    ent_move();
+                }
             }
             /* Rotor animation: the Atari swaps the two shapes of a helicopter
              * (aux 8<->9, 10<->11, `$BB24` remap) every second frame. */
-            if (e_type >= 8u && e_type <= 11u && !(ent_anim & 1u)) {
-                ent_type[e_i] ^= 1u;
+            if (e_type >= 8u && e_type <= 11u) {
+                ent_type[e_i] = (uint8_t)((e_type & 0xFEu) | ((ent_anim >> 1) & 1u));
             }
         }
         ent_draw();
