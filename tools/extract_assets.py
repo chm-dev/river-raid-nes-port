@@ -346,8 +346,19 @@ def write_header(tables: dict) -> None:
         "#ifdef ATARI_DATA_IMPL",
         "",
     ]
-    for _, definition, _ in arrays:
-        parts.append(definition)
+    # Tables only the Python tools read (tools/gen_entity_gfx.py parses this
+    # text); the ROM does not link them, which keeps the fixed bank small.
+    tool_only = {"atari_obj_shape", "atari_obj_shape_off", "atari_obj_color",
+                 "atari_obj_color_off", "atari_hud_seed", "atari_marquee_raw",
+                 "atari_type_remap", "atari_shot_freq", "atari_fx_auf",
+                 "atari_flash_colors", "atari_spawn_x"}
+    for name, definition, _ in arrays:
+        if name in tool_only:
+            parts.append("#ifdef ATARI_DATA_TOOLS")
+            parts.append(definition)
+            parts.append("#endif")
+        else:
+            parts.append(definition)
     parts.append("#else")
     parts.append("")
     for name, _, is16 in arrays:

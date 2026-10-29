@@ -78,6 +78,9 @@ async function main() {
         if (dist >= golden.length) break;
 
         for (let s = Math.max(0, dist - RING); s < dist; s++) {
+            // Tile rows 1 and 2 are the game-start road (recoloured land);
+            // the golden stream models the object-free river.
+            if (s === 1 || s === 2) continue;
             const slot = (((FIRST_SLOT - s) % RING) + RING) % RING;
             const want = golden[s];
             let ok = true;

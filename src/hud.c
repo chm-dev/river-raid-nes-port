@@ -60,10 +60,19 @@ static const palette_color_t playfield_palette[4] = {
     BG_COLOR_BLACK, BG_COLOR_GREEN, BG_COLOR_BROWN, BG_COLOR_BLUE
 };
 
-/* Gauge labels and fraction are black; sprite palette entry 1 is black. */
-static const palette_color_t gauge_sprite_palette[4] = {
-    0x0Fu, 0x0Fu, 0x0Fu, 0x0Fu
+/* The land alternates between $D2 and $D6 each level (it changes at the road). */
+static const palette_color_t playfield_alt_palette[4] = {
+    BG_COLOR_BLACK, BG_COLOR_BRIGHT_GREEN, BG_COLOR_BROWN, BG_COLOR_BLUE
 };
+
+/* Road rows: the land pixels become grey ($06/$08) and the yellow centre line
+ * ($1C); black is the road's dark edge and the bank outline. */
+static const palette_color_t road_palette[4] = {
+    BG_COLOR_BLACK, BG_COLOR_GRAY, 0x38u, BG_COLOR_BLUE
+};
+
+/* Gauge labels and fraction are plane-0 sprites on sprite palette 2, whose
+ * entry 1 is black (set up in entities_init_graphics). */
 
 /* Fuel marker: 4-pixel yellow column in two stacked sprites (8 + 2 px),
  * starting just below the gauge's top markers and ending just above the
@@ -272,8 +281,6 @@ static void hud_build_life_tile(void) {
 static void hud_init_gauge_sprites(void) {
     uint8_t i;
 
-    set_sprite_palette(1, 1, gauge_sprite_palette);
-
     hud_build_gauge_letter(HUD_GAUGE_E_TILE, 0x47u, 0x4Bu, 0u);
     hud_build_gauge_letter(HUD_GAUGE_F_TILE, 0x4Au, 0x4Eu, 4u);
     hud_build_gauge_fraction();
@@ -282,21 +289,21 @@ static void hud_init_gauge_sprites(void) {
     set_sprite_data(HUD_FUEL_BAR_TILE2, 1, fuel_bar_tile2);
 
     set_sprite_tile(HUD_GAUGE_E_SLOT, HUD_GAUGE_E_TILE);
-    set_sprite_prop(HUD_GAUGE_E_SLOT, S_PAL(1));
+    set_sprite_prop(HUD_GAUGE_E_SLOT, S_PAL(2));
     move_sprite(HUD_GAUGE_E_SLOT, HUD_GAUGE_E_X, HUD_GAUGE_LABEL_Y - 1u);
 
     for (i = 0; i < 4u; i++) {
         uint8_t slot = (uint8_t)(HUD_FRAC_SLOT + i);
 
         set_sprite_tile(slot, (uint8_t)(HUD_FRAC_TILE + i));
-        set_sprite_prop(slot, S_PAL(1));
+        set_sprite_prop(slot, S_PAL(2));
         move_sprite(slot,
                     (uint8_t)(HUD_FRAC_X + (i & 1u) * 8u),
                     (uint8_t)(HUD_FRAC_Y + (i >> 1) * 8u - 1u));
     }
 
     set_sprite_tile(HUD_GAUGE_F_SLOT, HUD_GAUGE_F_TILE);
-    set_sprite_prop(HUD_GAUGE_F_SLOT, S_PAL(1));
+    set_sprite_prop(HUD_GAUGE_F_SLOT, S_PAL(2));
     move_sprite(HUD_GAUGE_F_SLOT, HUD_GAUGE_F_X, HUD_GAUGE_LABEL_Y - 1u);
 
     set_sprite_tile(HUD_FUEL_BAR_SLOT, HUD_FUEL_BAR_TILE);
@@ -518,6 +525,8 @@ static void hud_refresh_all(void) {
 void hud_init_palette(void) {
     set_bkg_palette(HUD_PALETTE, 1, hud_palette);
     set_bkg_palette(PLAYFIELD_PALETTE, 1, playfield_palette);
+    set_bkg_palette(PLAYFIELD_ALT_PALETTE, 1, playfield_alt_palette);
+    set_bkg_palette(ROAD_PALETTE, 1, road_palette);
 }
 
 void hud_init_graphics(void) {

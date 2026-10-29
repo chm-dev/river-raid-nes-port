@@ -55,9 +55,10 @@ def nearest(c, candidates):
 PAL0 = [0x28, 0x30, 0x16]
 PAL2 = [0x0F, 0x28, 0x02]      # helicopters: black, yellow, darkest blue ($02; water is the brighter $11)
 PAL3 = [0x0F, 0x06, 0x2C]      # ship: black, dark red, cyan
-PALETTES = {0: PAL0, 2: PAL2, 3: PAL3}
+PAL1 = [0x0B, 0x08, 0x18]      # bridge stripes: Atari $12 / $14 + $22 / $18 (dark green, brown, olive)
+PALETTES = {0: PAL0, 1: PAL1, 2: PAL2, 3: PAL3}
 HW_PAL = {a: 2 for a in (8, 9, 10, 11)}
-HW_PAL.update({7: 0, 13: 3, 14: 3, 12: 0, 15: 0})
+HW_PAL.update({7: 0, 13: 3, 14: 1, 12: 0, 15: 0})
 
 
 def value_for(a, r):
@@ -143,8 +144,8 @@ extern const uint8_t ent_gfx_count[16];
 extern const uint8_t ent_gfx_rows[16];
 extern const uint8_t ent_gfx_cols[16];  /* width in 8-px tiles (SIZEP3) */
 extern const uint8_t ent_gfx_pal[16];
-/* Sprite palettes 2 and 3 (palette 0 is the jet's). */
-extern const uint8_t ent_gfx_palette[2][3];
+/* Sprite palettes 1 (bridge), 2 (helicopters) and 3 (ships); palette 0 is the jet's. */
+extern const uint8_t ent_gfx_palette[3][3];
 extern const uint8_t ent_gfx_chr[{len(flat)}];
 
 #endif
@@ -166,8 +167,8 @@ out_c += carr("const uint8_t ent_gfx_count[16]", count)
 out_c += carr("const uint8_t ent_gfx_rows[16]", rows_of)
 out_c += carr("const uint8_t ent_gfx_cols[16]", cols_of)
 out_c += carr("const uint8_t ent_gfx_pal[16]", pal)
-out_c += "const uint8_t ent_gfx_palette[2][3] = {\n" + "".join(
-    "    { " + ", ".join(f"0x{c:02X}" for c in PALETTES[g]) + " },\n" for g in (2, 3)) + "};\n"
+out_c += "const uint8_t ent_gfx_palette[3][3] = {\n" + "".join(
+    "    { " + ", ".join(f"0x{c:02X}" for c in PALETTES[g]) + " },\n" for g in (1, 2, 3)) + "};\n"
 out_c += carr(f"const uint8_t ent_gfx_chr[{len(flat)}]", flat)
 (ROOT / "src" / "entity_gfx.h").write_text(out_h)
 (ROOT / "src" / "entity_gfx.c").write_text(out_c)

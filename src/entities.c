@@ -39,6 +39,8 @@ static uint8_t ent_frame;       /* $18: free-running frame counter */
 static uint8_t ent_wake_acc;    /* frames since the last wake-up draw */
 static uint8_t sp_hold;         /* $32: rows left until the new object is built */
 static uint8_t sp_slot;         /* entity slot of the object being built */
+static uint8_t bridge_wait;     /* a bridge road is scheduled; its bar is not created yet */
+static uint8_t bridge_x;        /* X of that bar */
 static uint8_t ent_anim;
 static uint8_t ent_oam_used;
 
@@ -81,6 +83,7 @@ void entities_clear(void) BANKED {
     }
     entity_count = 0;
     sp_hold = 0;
+    bridge_wait = 0;
     river_obj_count = 0x0Bu;
 }
 
@@ -91,15 +94,15 @@ void entities_init(void) BANKED {
 void entities_init_graphics(void) BANKED {
     palette_color_t pal[4];
 
+    /* Sprite palettes 1..3 (bridge, helicopters, ships); the HUD label
+     * sprites use entry 1 of palette 2, which is black. */
     pal[0] = BG_COLOR_BLACK;
-    pal[1] = ent_gfx_palette[0][0];
-    pal[2] = ent_gfx_palette[0][1];
-    pal[3] = ent_gfx_palette[0][2];
-    set_sprite_palette(2, 1, pal);
-    pal[1] = ent_gfx_palette[1][0];
-    pal[2] = ent_gfx_palette[1][1];
-    pal[3] = ent_gfx_palette[1][2];
-    set_sprite_palette(3, 1, pal);
+    for (e_i = 0; e_i < 3u; e_i++) {
+        pal[1] = ent_gfx_palette[e_i][0];
+        pal[2] = ent_gfx_palette[e_i][1];
+        pal[3] = ent_gfx_palette[e_i][2];
+        set_sprite_palette((uint8_t)(e_i + 1u), 1, pal);
+    }
     set_sprite_data(ENT_TILE_BASE, ENT_GFX_TILES, ent_gfx_chr);
 }
 
@@ -383,6 +386,17 @@ void entities_row(void) BANKED {
     if (sp_y < 2u) {
         return;                             /* blank placeholder */
     }
+    if (sp_y == ENT_AUX_BRIDGE) {
+        if (rg_countdown == 1u) {
+            /* The road is painted into the river rows; the bar is created in
+             * entities_update() once the road's tile rows are on the ring
+             * (the generator runs ahead of what the display can address). */
+            river_road_begin();
+            bridge_x = e_x;
+            bridge_wait = 1u;
+        }                                   /* else the game-start state: no bridge */
+        return;
+    }
     for (e_i = 0; e_i < MAX_ENTITIES; e_i++) {
         if (ent_type[e_i] == ENTITY_NONE) {
             break;
@@ -638,6 +652,25 @@ static void ent_draw(void) {
         while (ent_wake_acc >= 16u) {
             ent_wake_acc = (uint8_t)(ent_wake_acc - 16u);
             ent_wake();
+        }
+    }
+
+    if (bridge_wait) {
+        /* Put the bar on the road once the road's top is on the ring: bar
+         * rows 2..16 of the shape sit on the 16 road rows. */
+        e_y = river_road_top();
+        if (e_y != 0xFFu && (e_y < 232u || e_y >= 250u)) {
+            for (e_i = 0; e_i < MAX_ENTITIES && ent_type[e_i] != ENTITY_NONE; e_i++) {
+            }
+            if (e_i < MAX_ENTITIES) {
+                ent_type[e_i] = ENT_AUX_BRIDGE;
+                ent_x[e_i] = bridge_x;
+                ent_y[e_i] = (uint8_t)(e_y - 2u - river_scrolled);
+                ent_flags[e_i] = 0;
+                ent_aux[e_i] = 0;
+                entity_count++;
+            }
+            bridge_wait = 0;
         }
     }
 

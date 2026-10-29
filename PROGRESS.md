@@ -887,16 +887,61 @@ AltirraBridge: reuse the live server token explicitly when known, e.g.
   `$0E` (the spawner builds it for timing but no entity yet).
 - RAM: 13 bytes free (was 34); 11 entity slots cost 15 bytes.
 
-### 2026-10-29 - Bridge object
+### 2026-10-29 - Bridge and road, redone from the Atari behaviour
 
-- The spawner now creates the `$0E` bridge entity (quad-width, 20 rows) when the
-  generator's bridge flag (`$23` bit 7) is set; X is `$54 - 6` like the model
-  (previously `sp_a` was stale for this case and no entity existed).
-- Shooting it scores 500 (`atari_score_tens[14]` = `$50`), advances the HUD
-  bridge counter (`hud_bridge`) and bursts with the object's own debris class;
-  touching it kills the jet (generic deadly-entity path).  `object_host_check.py`
-  still reports 0 mismatches (2,539 states); `nes_smoke`, `nes_scroll_hud` and
-  `nes_river` pass.  Forced-bridge screenshot: `build/bridge_probe.png`.
-- Still open: grey road + yellow centre line across the land, respawn at the
-  last cleared bridge (needs generator state snapshot), odd/even land colour on
-  level change, fuel rate parity, sound.
+The first bridge port was wrong: it spawned a bridge sprite at the start of
+level 1, drew the bar in the ship palette (black/dark red/cyan), and had no
+road.  Captured the real behaviour with AltirraBridge
+(`tools/atari_bridge_capture.py`, screenshots in `build/atari_bridge/`) and the
+DLI code at `$B5D3`:
+
+- **The road is not in the river rows.**  The DLI recolours `COLPF0` (the land)
+  per scanline from table `$B4E5` (20 values, top first: dark edge x3, grey x5,
+  yellow x2, grey x6, dark edge x4) for every object slot whose status byte
+  (`$0042+X`, a copy of `$23` at spawn) has bit 7 set.  So any slot spawned
+  while `$23` bit 7 is set paints a road over its 20 rows, across both banks.
+- **Game start:** the spawner makes a `$0E` object at the first attempt (status
+  `$84`), but its type is cleared at once, so the start shows the road only,
+  with no bar.  A real bridge (type `$0E`, quad width, shape rows 2..16 are the
+  striped bar, rows 17-18 the pillars) exists only in the last section of a
+  level (`$5D == 1`).  Colours `$12/$14/$18/$22` are olive greens, not the ship
+  palette.
+- **Land colour:** `$AFD0` = `($23 & 4) ^ $D6`, so odd levels are `$D2` (dark)
+  and even levels `$D6` (bright); the colour changes at the road (old below,
+  new above).
+- **Capture pitfall:** poking `$5A >= 3` with `$5D = 1` makes consecutive bridge
+  sections (two roads, two bars).  A natural bridge needs `$5D = 1`, `$5A = 2`.
+
+NES implementation:
+
+- `river.c`: a road is 16 raw rows (two tile rows = one 16x16 attribute row)
+  painted into the generated rows (`river_road_paint`: land pixel 1 -> black
+  edge / grey / yellow line, profile `river_road_profile`), starting on an odd
+  ring slot; those tile rows use BG palette 3 (black, grey `$00`, yellow `$38`,
+  water).  The margin columns 0-3/28-31 get solid road tiles `TILE_ROAD_A/B`
+  (253/254; 255 is the "none" sentinel), written through `river_put` kind 3
+  (staged in `river_tile_pat`) together with the attribute byte; the slot pair
+  is remembered in `river_road_slot` and restored to land one lap later.
+  Every tile row also picks BG palette 2 (dark land) or 1 (bright land) from
+  `river_land_alt`, which flips when a bridge road ends (`rg_countdown == 1`).
+  The game-start road is scheduled by `river_init()` (`-DRIVER_NO_START_ROAD`
+  for the host harness).
+- `entities.c`: a bridge at `rg_countdown == 1` schedules the road and sets
+  `bridge_wait`; `entities_update()` creates the bar (aux 14, palette 1) once
+  `river_road_top()` is representable (the generator runs ahead of the ring's
+  hidden rows, so the slot's scanline wraps for a few frames).  The game-start
+  `$0E` attempt only keeps the spawner timing.  Shooting it scores 500 and
+  increments the bridge counter.
+- Sprite palette 1 is now the bridge (olive); the HUD label sprites moved to
+  sprite palette 2 (entry 1 is black).
+- ROM: Atari tables only the Python tools read are now behind
+  `ATARI_DATA_TOOLS` (generator `tools/extract_assets.py`), which freed ~660
+  bytes of the fixed bank.  **RAM is down to 1 byte free.**
+- Tests: `nes_smoke` accepts road attribute bytes, `nes_river_cache` skips the
+  start-road tile rows (steps 1-2), host harness defines
+  `RIVER_NO_START_ROAD`.  All Mesen suites, `host_river.ps1` (19,999 rows) and
+  `object_host_check.py` (0 mismatches) pass.
+- Differences from the Atari: the road is 16 scanlines instead of 20 and has
+  three tones (black edge, grey, yellow) instead of four; the bar's stripes use
+  three NES colours.  Still open: respawn at the last bridge, fuel rate
+  parity, sound, a visual check of a natural level-1 bridge in play.

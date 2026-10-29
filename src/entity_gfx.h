@@ -15,8 +15,8 @@ extern const uint8_t ent_gfx_count[16];
 extern const uint8_t ent_gfx_rows[16];
 extern const uint8_t ent_gfx_cols[16];  /* width in 8-px tiles (SIZEP3) */
 extern const uint8_t ent_gfx_pal[16];
-/* Sprite palettes 2 and 3 (palette 0 is the jet's). */
-extern const uint8_t ent_gfx_palette[2][3];
+/* Sprite palettes 1 (bridge), 2 (helicopters) and 3 (ships); palette 0 is the jet's. */
+extern const uint8_t ent_gfx_palette[3][3];
 extern const uint8_t ent_gfx_chr[1360];
 
 #endif

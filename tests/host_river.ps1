@@ -5,7 +5,7 @@ $ErrorActionPreference = 'Stop'
 $root = Split-Path $PSScriptRoot -Parent
 $out = Join-Path $env:TEMP 'river_host'
 New-Item -ItemType Directory -Force $out | Out-Null
-zig cc -std=c11 -O1 -w -I"$PSScriptRoot/host" -I"$root/src" -include stdlib.h `
+zig cc -std=c11 -O1 -w -DRIVER_NO_START_ROAD -I"$PSScriptRoot/host" -I"$root/src" -include stdlib.h `
     -o "$out/harness.exe" "$PSScriptRoot/host/main.c" "$root/src/river.c" "$root/src/atari_data.c"
 if ($LASTEXITCODE) { throw 'host build failed' }
 & "$out/harness.exe" $Rows | Set-Content "$out/rows.txt"

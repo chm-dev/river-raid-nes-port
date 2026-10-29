@@ -268,7 +268,10 @@ async function main() {
         hexArray(riverRow));
 
     const attr1 = await readBytes(0x27C0, 64, 'NesPpuMemory');
-    check('playfield attributes use palette 2 (0xAA)', attr1.every(v => v === 0xaa),
+    // Palette 2 (dark land) is 0xAA; the start road makes one pair of tile
+    // rows palette 3 (upper half 0x0F, lower half 0xF0 of the byte).
+    check('playfield attributes use palette 2 (0xAA) or the road palette',
+        attr1.every(v => [0xaa, 0xaf, 0xfa, 0xff].includes(v)),
         [...new Set(attr1)].map(v => v.toString(16)).join(','));
 
     // ---------------------------------------------------------------------

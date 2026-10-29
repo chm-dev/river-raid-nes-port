@@ -84,6 +84,15 @@ uint8_t river_slot_at_scanline(uint8_t scanline);
 
 void river_init(void);
 
+/* Schedule a 16-scanline road (grey with a yellow centre line) over the land
+ * on the next whole pair of tile rows. */
+void river_road_begin(void);
+
+/* Scanline of the scheduled road's top edge once its first tile row has been
+ * written, else 0xFF.  Values 232..249 mean it is still above the hidden rows
+ * (wrapped to the bottom of the window): try again later. */
+uint8_t river_road_top(void);
+
 /* Advance the playfield by one pixel and stream the next hidden row when
  * the fine scroll crosses a tile boundary. */
 void river_update(void);

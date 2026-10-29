@@ -747,10 +747,25 @@ static const uint8_t river_black_pat[16] = {
     0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00
 };
 
+/* Solid road tiles for the land margins (see TILE_ROAD_A).  Interleaved
+ * 2bpp, top to bottom; 0 = dark edge (black), 1 = grey, 2 = yellow line.  A
+ * road is 16 raw rows; the first tile row holds rows 1..8 (raw row 8 on top),
+ * so its top line is the yellow one. */
+static const uint8_t river_road_a_pat[16] = {
+    0x00, 0xFF, 0xFF, 0x00, 0xFF, 0x00, 0xFF, 0x00,
+    0xFF, 0x00, 0xFF, 0x00, 0x00, 0x00, 0x00, 0x00
+};
+static const uint8_t river_road_b_pat[16] = {
+    0x00, 0x00, 0x00, 0x00, 0xFF, 0x00, 0xFF, 0x00,
+    0xFF, 0x00, 0xFF, 0x00, 0xFF, 0x00, 0x00, 0xFF
+};
+
 static void river_cache_init(void) {
     set_bkg_data(TILE_LAND, 1, river_land_pat);
     set_bkg_data(TILE_WATER, 1, river_water_pat);
     set_bkg_data(TILE_BLACK, 1, river_black_pat);
+    set_bkg_data(TILE_ROAD_A, 1, river_road_a_pat);
+    set_bkg_data(TILE_ROAD_B, 1, river_road_b_pat);
     river_alloc = 0u;
 }
 
@@ -1086,6 +1101,21 @@ static void vp_copy_ids(void) {
     __endasm;
 }
 
+/* Margin tiles / attribute bytes: staged in river_tile_pat, which is free once a\n * tile row has been classified and only its stripe is left to write. */
+static void vp_copy_misc(void) {
+    __asm
+        ldx     _vp_dst
+        ldy     #0
+    1$:
+        lda     _river_tile_pat,y
+        sta     0x0100,x
+        inx
+        iny
+        dec     _vp_n
+        bne     1$
+    __endasm;
+}
+
 static uint8_t river_put(void) {
     vp_v = _vram_transfer_buffer_valid;
     _vram_transfer_buffer_valid = (uint8_t)(vp_v & 0x7Fu);
@@ -1106,6 +1136,8 @@ static uint8_t river_put(void) {
         vp_copy_pat_lo();
     } else if (vp_kind == 1u) {
         vp_copy_pat_hi();
+    } else if (vp_kind == 3u) {
+        vp_copy_misc();
     } else {
         vp_copy_ids();
     }
@@ -1140,6 +1172,19 @@ static uint8_t river_put(void) { return 1u; }
 #define RIVER_JOB_COLS  12u   /* columns classified per pass, at most */
 
 static uint8_t river_black_rows;      /* ring slots still holding black */
+
+/* Roads (the Atari recolours the land of a bridge object's 20 rows per
+ * scanline from DLI table $B4E5).  A road is 16 consecutive raw rows painted
+ * into the generated rows, starting up to 8 rows after the spawn row
+ * so that it fills two whole tile rows (one 16x16 attribute row) and gets
+ * BG palette ROAD_PALETTE.  The two margin tiles on each side and the
+ * attribute bytes are written with the tile row; the slot pair is remembered
+ * so that the next lap restores land. */
+static uint8_t river_road_left;       /* raw rows until the road ends (16 + wait at the start) */
+static uint8_t river_road_slot;       /* first (odd) slot of the road, or 0xFF */
+static uint8_t river_road_stage;      /* margin/attribute writes done for the job */
+static uint8_t river_land_alt;        /* land colour: 0 = $D2, 1 = $D6 */
+static uint8_t river_job_pal;         /* BG palette of the pending tile row */
 static uint8_t river_pending_slot;
 static uint8_t river_job;             /* tile row waiting for classification */
 static uint8_t river_job_col;
@@ -1168,6 +1213,88 @@ static uint8_t river_emit_pattern(void) {
     return river_put();
 }
 
+/* Tile of the land margins this row needs, or 0xFF when they are already
+ * right: road tiles on a road row, land again on the slots a road used. */
+static uint8_t river_margin_id(void) {
+    if (river_job_pal == ROAD_PALETTE) {
+        return (river_pending_slot & 1u) ? TILE_ROAD_A : TILE_ROAD_B;
+    }
+    if (river_pending_slot == river_road_slot ||
+        (uint8_t)(river_pending_slot + 1u) == river_road_slot) {
+        return TILE_LAND;
+    }
+    return 0xFFu;
+}
+
+/* Land margins and the 16x16 attribute row (palette) of a tile row.  The
+ * palette of a pair of tile rows is written with the first (odd-slot) row; an
+ * attribute byte covers four tile rows, so the half belonging to the other
+ * pair is derived from the road slot and land colour.  0 when the buffer is
+ * full. */
+static uint8_t river_emit_extra(void) {
+    if (river_road_stage == 0u) {
+        rj_c = river_margin_id();
+        if (rj_c == 0xFFu) {
+            river_road_stage = 2u;
+        } else {
+            for (rj_n = 0; rj_n < RIVER_LEFT_COL; rj_n++) {
+                river_tile_pat[rj_n] = rj_c;
+            }
+            rj_addr = (uint16_t)(PPU_NT1_BASE + ((uint16_t)river_pending_slot << 5));
+            vp_hi = (uint8_t)(rj_addr >> 8);
+            vp_lo = (uint8_t)rj_addr;
+            vp_n = RIVER_LEFT_COL;
+            vp_kind = 3u;
+            vp_src = 0u;
+            if (!river_put()) {
+                return 0u;
+            }
+            river_road_stage = 1u;
+        }
+    }
+    if (river_road_stage == 1u) {
+        rj_addr = (uint16_t)(PPU_NT1_BASE + ((uint16_t)river_pending_slot << 5) +
+                             RIVER_LEFT_COL + RIVER_TILE_COLS);
+        vp_hi = (uint8_t)(rj_addr >> 8);
+        vp_lo = (uint8_t)rj_addr;
+        vp_n = RIVER_LEFT_COL;
+        vp_kind = 3u;
+        vp_src = 0u;
+        if (!river_put()) {
+            return 0u;
+        }
+        river_road_stage = 2u;
+    }
+    if (river_road_stage == 2u) {
+        if (river_pending_slot & 1u) {
+            rj_c = (uint8_t)(river_job_pal * 5u);
+            if ((river_pending_slot & 3u) == 3u) {
+                rj_c |= (uint8_t)(rj_c << 4);   /* lower pair; the upper half is a placeholder */
+            } else {
+                /* The pair below was written just before: the road if it is
+                 * the road slot, else the current land colour. */
+                rj_n = (river_road_slot == (uint8_t)(river_pending_slot + 2u)) ? ROAD_PALETTE :
+                       river_land_alt ? PLAYFIELD_ALT_PALETTE : PLAYFIELD_PALETTE;
+                rj_c |= (uint8_t)((rj_n * 5u) << 4);
+            }
+            for (rj_n = 0; rj_n < 8u; rj_n++) {
+                river_tile_pat[rj_n] = rj_c;
+            }
+            rj_addr = (uint16_t)(PPU_NT1_ATTR + (uint16_t)((river_pending_slot >> 2) << 3));
+            vp_hi = (uint8_t)(rj_addr >> 8);
+            vp_lo = (uint8_t)rj_addr;
+            vp_n = 8u;
+            vp_kind = 3u;
+            vp_src = 0u;
+            if (!river_put()) {
+                return 0u;
+            }
+        }
+        river_road_stage = 3u;
+    }
+    return 1u;
+}
+
 /* Write the 24 river columns of the pending row (and, for the first rows of
  * the game, the land margins); 0 when the buffer is full. */
 static uint8_t river_emit_stripe(void) {
@@ -1180,6 +1307,10 @@ static uint8_t river_emit_stripe(void) {
         }
         river_job_margin = 1u;
     }
+    if (river_live && river_road_stage != 3u && !river_emit_extra()) {
+        return 0u;
+    }
+    rj_addr = (uint16_t)(PPU_NT1_BASE + ((uint16_t)river_pending_slot << 5));
     rj_addr += RIVER_LEFT_COL;
     if (!river_live) {
         for (rj_n = 0; rj_n < RIVER_TILE_COLS; rj_n++) {
@@ -1243,6 +1374,14 @@ static void river_run_job(void) {
     if (river_black_rows) {
         river_black_rows--;
     }
+    if (river_job_pal == ROAD_PALETTE) {
+        if (river_pending_slot & 1u) {
+            river_road_slot = river_pending_slot;
+        }
+    } else if ((uint8_t)(river_pending_slot + 1u) == river_road_slot) {
+        river_road_slot = 0xFFu;        /* both road rows are land again */
+    }
+    river_road_stage = 0u;
     river_job_margin = 0u;
     memset(river_col_kind, 3, sizeof(river_col_kind));
     river_job = 0u;
@@ -1251,6 +1390,38 @@ static void river_run_job(void) {
 /* ------------------------------------------------------------------------- */
 /* Ring / row generation                                                     */
 /* ------------------------------------------------------------------------- */
+
+/* Road profile by raw rows left (16 = first row): 0 black edge, 1 grey (the
+ * land pixels unchanged), 2 yellow centre line.  Symmetric, like the Atari's
+ * $B4E5 scanline colours. */
+static const uint8_t river_road_profile[17] = {
+    1, 0, 0, 1, 1, 1, 1, 1, 2, 2, 1, 1, 1, 1, 1, 0, 0
+};
+
+/* Recolour the land pixels (value 1) of the raw row just rendered, or count
+ * down the rows before the road starts.  No calls inside: locals are safe. */
+static void river_road_paint(void) {
+    uint8_t i, b, m, v;
+
+    if (river_road_left <= 16u) {
+        v = river_road_profile[river_road_left];
+        if (v != 1u) {
+            for (i = 0; i < 48u; i++) {
+                b = river_raw_row[i];
+                m = (uint8_t)(b & 0x55u & (uint8_t)~(b >> 1));
+                b &= (uint8_t)~(m | (uint8_t)(m << 1));
+                if (v == 2u) {
+                    b |= (uint8_t)(m << 1);
+                }
+                river_raw_row[i] = b;
+            }
+        }
+        river_job_margin = 2u;          /* the pending tile row holds road */
+    }
+    if (--river_road_left == 0u && rg_countdown == 1u) {
+        river_land_alt ^= 1u;           /* the land changes colour at the bridge */
+    }
+}
 
 /* Generate one raw Atari scanline and add it to the pending 8x8 tile row. */
 static void river_generate_raw_row(void) {
@@ -1263,6 +1434,10 @@ static void river_generate_raw_row(void) {
     }
 
     river_step_state();
+
+    if (river_road_left != 0u) {
+        river_road_paint();
+    }
 
     /* $AB80: the object spawner runs right after the row renderer.  It only
      * has work while an object is being built or every 16th row. */
@@ -1309,6 +1484,9 @@ static void river_generate_raw_row(void) {
 /* The 8th raw row completed: queue the tile row for classification. */
 static void river_finish_tile_row(void) {
     river_pending_slot = river_slot;
+    river_job_pal = (river_job_margin == 2u) ? ROAD_PALETTE :
+                    river_land_alt ? PLAYFIELD_ALT_PALETTE : PLAYFIELD_PALETTE;
+    river_job_margin = 0u;
     river_job = 1u;
     river_job_col = 0u;
     river_block_index = 0;
@@ -1399,6 +1577,11 @@ void river_init(void) {
         }
     }
 
+    river_road_left = 0;
+    river_road_slot = 0xFFu;
+    river_road_stage = 0;
+    river_land_alt = 0;
+    river_job_pal = PLAYFIELD_PALETTE;
     river_step = 0;
     river_distance = 0;
     river_block_index = 0;
@@ -1424,6 +1607,47 @@ void river_init(void) {
     river_finish_tile_row();
     while (river_job) {
         river_run_job();
+    }
+
+    /* The game starts on a road, as on the Atari: the first rows above the
+     * very first tile row (no bridge object, only the recoloured land). */
+#ifndef RIVER_NO_START_ROAD         /* the host check compares a road-free model */
+    river_road_begin();
+#endif
+}
+
+/* Scanline of the top edge of a ring slot (the slot may be in the hidden rows
+ * above the window, which map to 0..35).  Slots that are still further above
+ * wrap to the bottom of the window (large values). */
+static uint8_t river_slot_top(uint8_t slot) {
+    uint16_t bg_y = ((uint16_t)slot * 8u + RIVER_SCROLL_HEIGHT - playfield_scroll_y) %
+                    RIVER_SCROLL_HEIGHT;
+
+    return (bg_y >= (uint16_t)(RIVER_SCROLL_HEIGHT - PLAYFIELD_SCANLINE))
+        ? (uint8_t)(bg_y - (RIVER_SCROLL_HEIGHT - PLAYFIELD_SCANLINE))
+        : (uint8_t)(bg_y + PLAYFIELD_SCANLINE);
+}
+
+/* Scanline of the top edge of the road once its first tile row has been
+ * written (river_road_slot is set), else 0xFF.  The road's second tile row is
+ * the slot above the first. */
+uint8_t river_road_top(void) {
+    return (river_road_slot == 0xFFu) ? 0xFFu
+                                      : river_slot_top((uint8_t)(river_road_slot - 1u));
+}
+
+/* Schedule a 16-row road on the next whole pair of tile rows.  Called by the
+ * spawner on the last raw row of a tile row, and at the start of the game. */
+void river_road_begin(void) {
+    /* Slot of the next tile row; the road's first tile row must be an odd
+     * slot (the first of its 16x16 attribute row). */
+    rj_c = (river_slot == 0u) ? (uint8_t)(RIVER_RING_ROWS - 1u)
+                              : (uint8_t)(river_slot - 1u);
+    river_road_left = 16u;
+    if (!(rj_c & 1u)) {
+        river_road_left = 24u;          /* skip one tile row */
+        rj_c = (rj_c == 0u) ? (uint8_t)(RIVER_RING_ROWS - 1u)
+                            : (uint8_t)(rj_c - 1u);
     }
 }
 

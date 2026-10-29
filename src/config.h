@@ -107,7 +107,14 @@
 #define TILE_WATER              1u
 #define TILE_BLACK              2u      /* solid black: the empty world at game start */
 #define TILE_RIVER_BASE         3u
-#define TILE_RIVER_COUNT        253u    /* exact per-row river cache */
+#define TILE_RIVER_COUNT        250u    /* exact per-row river cache */
+/* Solid road tiles for the land margins beside the river (columns 0-3 and
+ * 28-31) in the two tile rows of a road.  A road is 16 scanlines, the grey
+ * body with a yellow centre line; the Atari recolours the land per scanline,
+ * the NES uses its own BG palette 3.  ROAD_A is the first (lower) tile row,
+ * ROAD_B the second.  See river_road_* in river.c. */
+#define TILE_ROAD_A             253u
+#define TILE_ROAD_B             254u    /* 255 is kept free: river_margin_id() uses 0xFF for "none" */
 
 #define BG_TABLE_BIT            0x10u   /* PPUCTRL bit 4: BG pattern table */
 #define SPRITE_TILE_BASE        64u     /* sprites share the HUD table */
@@ -169,7 +176,9 @@
 #define BG_COLOR_BRIGHT_GREEN   0x19u   /* land on odd levels ($D6, 008300) */
 
 #define HUD_PALETTE             0u
-#define PLAYFIELD_PALETTE       2u
+#define PLAYFIELD_PALETTE       2u      /* odd levels: dark green land ($D2) */
+#define PLAYFIELD_ALT_PALETTE   1u      /* even levels: bright green land ($D6) */
+#define ROAD_PALETTE            3u      /* black, grey road, yellow line, water */
 
 /* ------------------------------------------------------------------------- */
 /* Playfield nametable                                                       */
