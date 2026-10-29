@@ -49,17 +49,15 @@ uint8_t hud_lives;
 uint8_t hud_game;
 uint8_t hud_bridge;
 
+/* The backdrop is black (Atari COLBK, needed for the river's black pixels), so
+ * the gray band is pixel value 1 of the HUD tiles: black ink is value 0 (the
+ * backdrop), yellow ink is value 2, white spare is value 3. */
 static const palette_color_t hud_palette[4] = {
-    BG_COLOR_GRAY, BG_COLOR_BLACK, BG_COLOR_YELLOW, BG_COLOR_WHITE
-};
-
-/* Palette 1 recolours the shared plane-0 digits yellow. */
-static const palette_color_t hud_yellow_palette[4] = {
-    BG_COLOR_GRAY, BG_COLOR_YELLOW, BG_COLOR_BLACK, BG_COLOR_WHITE
+    BG_COLOR_BLACK, BG_COLOR_GRAY, BG_COLOR_YELLOW, BG_COLOR_WHITE
 };
 
 static const palette_color_t playfield_palette[4] = {
-    BG_COLOR_BLACK, BG_COLOR_GREEN, BG_COLOR_RED, BG_COLOR_BLUE
+    BG_COLOR_BLACK, BG_COLOR_GREEN, BG_COLOR_BROWN, BG_COLOR_BLUE
 };
 
 /* Gauge labels and fraction are black; sprite palette entry 1 is black. */
@@ -131,8 +129,9 @@ static uint8_t spread_right(uint8_t v) {
     return out;
 }
 
-/* Load one charset glyph as two 16x8 background tiles.  Yellow art goes on
- * plane 1 (palette entry 2); black art goes on plane 0 (entry 1). */
+/* Load one charset glyph as two 16x8 background tiles on the gray band
+ * (value 1 = plane 0).  Black ink clears plane 0 (value 0, the backdrop);
+ * yellow ink also sets plane 1 (value 2). */
 static void hud_wide_glyph(uint8_t dest, uint8_t code, uint8_t yellow) {
     const uint8_t *src = atari_charset + (uint16_t)(code & 0x7Fu) * 8u;
     uint8_t row;
@@ -141,16 +140,42 @@ static void hud_wide_glyph(uint8_t dest, uint8_t code, uint8_t yellow) {
         uint8_t l = spread_left(src[row]);
         uint8_t r = spread_right(src[row]);
 
-        wide_tile_buf[row * 2u] = yellow ? 0u : l;
+        wide_tile_buf[row * 2u] = (uint8_t)~l;
         wide_tile_buf[row * 2u + 1u] = yellow ? l : 0u;
-        wide_tile_buf[16u + row * 2u] = yellow ? 0u : r;
+        wide_tile_buf[16u + row * 2u] = (uint8_t)~r;
         wide_tile_buf[16u + row * 2u + 1u] = yellow ? r : 0u;
     }
     set_bkg_data(dest, 2, wide_tile_buf);
 }
 
+/* Load the ten charset digits (and a solid gray blank) as 8x8 tiles: black
+ * digits at TILE_DIGIT_BASE, yellow digits at TILE_DIGIT_YELLOW_BASE. */
+static void hud_load_digits(void) {
+    uint8_t d;
+    uint8_t row;
+
+    for (row = 0; row < 8u; row++) {
+        wide_tile_buf[row * 2u] = 0xFFu;
+        wide_tile_buf[row * 2u + 1u] = 0u;
+    }
+    set_bkg_data(TILE_BLANK, 1, wide_tile_buf);
+
+    for (d = 0; d < 10u; d++) {
+        const uint8_t *src = atari_charset + (uint16_t)(GLYPH_0 + d) * 8u;
+
+        for (row = 0; row < 8u; row++) {
+            wide_tile_buf[row * 2u] = (uint8_t)~src[row];
+            wide_tile_buf[row * 2u + 1u] = 0u;
+            wide_tile_buf[16u + row * 2u] = (uint8_t)~src[row];
+            wide_tile_buf[16u + row * 2u + 1u] = src[row];
+        }
+        set_bkg_data((uint8_t)(TILE_DIGIT_BASE + d), 1, wide_tile_buf);
+        set_bkg_data((uint8_t)(TILE_DIGIT_YELLOW_BASE + d), 1, wide_tile_buf + 16);
+    }
+}
+
 /* Convert 3 BCD bytes (6 digits) to tile IDs, suppressing leading zeros.
- * `base` is TILE_DIGIT_BASE; the palette attribute selects black or yellow. */
+ * `base` is TILE_DIGIT_BASE (black) or TILE_DIGIT_YELLOW_BASE. */
 static void hud_bcd_tiles(const uint8_t bcd[3], uint8_t out[6], uint8_t base) {
     uint8_t digits[6];
     uint8_t started = 0;
@@ -300,7 +325,7 @@ static void hud_write_score(void) {
     uint8_t i;
     uint8_t changed = 0;
 
-    hud_bcd_tiles(hud_score_bcd, tiles, TILE_DIGIT_BASE);
+    hud_bcd_tiles(hud_score_bcd, tiles, TILE_DIGIT_YELLOW_BASE);
     for (i = 0; i < 6u; i++) {
         if (tiles[i] != shown_score[i]) {
             changed = 1u;
@@ -337,11 +362,11 @@ static void hud_write_bridge(void) {
         value = HUD_BRIDGE_DIGIT_MAX;
     }
     if (value >= 10u) {
-        tiles[0] = (uint8_t)(TILE_DIGIT_BASE + value / 10u);
-        tiles[1] = (uint8_t)(TILE_DIGIT_BASE + value % 10u);
+        tiles[0] = (uint8_t)(TILE_DIGIT_YELLOW_BASE + value / 10u);
+        tiles[1] = (uint8_t)(TILE_DIGIT_YELLOW_BASE + value % 10u);
     } else {
         tiles[0] = TILE_BLANK;
-        tiles[1] = (uint8_t)(TILE_DIGIT_BASE + value);
+        tiles[1] = (uint8_t)(TILE_DIGIT_YELLOW_BASE + value);
     }
     if (tiles[0] != shown_bridge[0] || tiles[1] != shown_bridge[1]) {
         set_bkg_tiles(HUD_BRIDGE_DIGIT_X, HUD_BRIDGE_ROW, 2, 1, tiles);
@@ -492,22 +517,17 @@ static void hud_refresh_all(void) {
 
 void hud_init_palette(void) {
     set_bkg_palette(HUD_PALETTE, 1, hud_palette);
-    set_bkg_palette(1u, 1, hud_yellow_palette);
     set_bkg_palette(PLAYFIELD_PALETTE, 1, playfield_palette);
 }
 
 void hud_init_graphics(void) {
     uint8_t i;
 
-    /* Shared digits: blank at tile 0, then glyphs $50-$59 at 1..10.  All
-     * art is plane 0; the attribute quadrants choose black or yellow. */
-    _current_1bpp_colors = 0x0001;
+    /* Blank (solid gray) at tile 0, black digits 1..10, yellow digits 48..57. */
     /* HUD tiles live in the $1000 pattern table (shared with sprites); the
      * playfield uses $0000.  Select it for the BG loads below only. */
     shadow_PPUCTRL |= BG_TABLE_BIT;
-    set_bkg_1bpp_data(TILE_BLANK, 1, atari_charset);
-    set_bkg_1bpp_data(TILE_DIGIT_BASE, 10,
-                      atari_charset + (uint16_t)GLYPH_0 * 8u);
+    hud_load_digits();
 
     /* River tiles are generated by river_init_tiles() during river_init(). */
 
@@ -516,16 +536,10 @@ void hud_init_graphics(void) {
     shadow_PPUCTRL &= (uint8_t)~BG_TABLE_BIT;
     hud_init_gauge_sprites();
 
-    /* Palette 0 everywhere, then palette 1 on the yellow digit quadrants:
-     * score x=11..16 y=1, bridge counter x=29..30 y=2.  HI score and the
-     * game digit stay on palette 0 (black). */
+    /* Palette 0 everywhere; yellow vs black text is chosen by tile art. */
     for (i = 0; i < 64; i++) {
         hud_vram_byte((uint16_t)(PPU_NT0_ATTR + i), 0x00u);
     }
-    hud_vram_byte((uint16_t)(PPU_NT0_ATTR + 2u), 0x04u); /* x=10..11 top */
-    hud_vram_byte((uint16_t)(PPU_NT0_ATTR + 3u), 0x05u); /* x=12..15 top */
-    hud_vram_byte((uint16_t)(PPU_NT0_ATTR + 4u), 0x01u); /* x=16..17 top */
-    hud_vram_byte((uint16_t)(PPU_NT0_ATTR + 7u), 0x50u); /* x=28..31 bottom */
 
     hud_score_bcd[0] = 0;
     hud_score_bcd[1] = 0;

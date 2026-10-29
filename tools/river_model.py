@@ -60,6 +60,20 @@ def tpl_bytes(width: int, length: int) -> bytes:
     return TPL_STREAM[p : p + width * length]
 
 
+# Template widths drawn with black bodies on the NES: the large hills that carry
+# blue highlights.  Small hills (3, 6, 7) keep the brown + black shades.
+NES_BLACK_HILLS = (4, 5, 8, 9, 10)
+
+
+def nes_edge_black(b: int) -> int:
+    """NES recolour: turn pixel value 2 (outline, near-black on the Atari) into
+    value 0 (black backdrop) so value 2 can be the hills' brown.  Used for
+    bank patterns and 0xAA edge fills when `nes_edges` is set."""
+    hi = b & 0xAA
+    lo = (b << 1) & 0xAA
+    return b & ~(hi & ~lo) & 0xFF
+
+
 def _b(x: int) -> int:
     return x & 0xFF
 
@@ -71,6 +85,7 @@ def _s(x: int) -> int:
 
 @dataclass
 class RiverState:
+    nes_edges: bool = False   # NES recolour of outline pixels (see nes_edge_black)
     left: int = 0x20          # $52
     width: int = 0x14         # $53
     phase: int = 0x36         # $54
@@ -260,6 +275,8 @@ class RiverState:
             if not edge:
                 if hit:
                     value = 0xAA
+            if self.nes_edges and value == 0xAA:
+                value = 0
             row[p : p + y + 1] = bytes([value]) * (y + 1)
             p += y
             b4 += y
@@ -270,6 +287,8 @@ class RiverState:
             t = tpl_bytes(self.bc, self.be)
             off = (self.bb << 8 | self.ba) - 0xBC00
             chunk = TPL_STREAM[off : off + self.bc]
+            if self.nes_edges and self.bc in NES_BLACK_HILLS:
+                chunk = bytes(nes_edge_black(v) for v in chunk)
             row[p : p + self.bc] = chunk
             p += self.bc
             b4 += self.bc
@@ -284,7 +303,10 @@ class RiverState:
                 index = _b(index + 0x10)
             table = BANK_MAIN if index < 0x10 else BANK_ISLAND
             off = index & 0x0F
-            row[p : p + 2] = table[off : off + 2]
+            seg = table[off : off + 2]
+            if self.nes_edges:
+                seg = bytes(nes_edge_black(v) for v in seg)
+            row[p : p + 2] = seg
             p += 2
             b4 += 2
             dbg.append(("pat", index, off, p, b4))

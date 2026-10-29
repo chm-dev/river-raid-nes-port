@@ -325,6 +325,20 @@ These are documented in full in `docs/ATARI_RE_SPEC.md`; don't re-derive them.
 
 ## Next step — Phase 5
 
+0. **Bridge and road visuals belong here (decided 2026-10-29, not yet built).**
+   The road (grey with a yellow centre line, across the land) at the start of
+   the river and at level transitions is not in the NES river palette and is
+   probably produced on the Atari by per-scanline colour changes (DLI); this is
+   **unverified**, so capture it with AltirraBridge first (DLI list, `$B2A5`
+   VBI colour code, bridge rows of `river_rows_157.bin`).  The bridge itself
+   is an object (`type $0F`, shared with fuel; `$A3E9` collision/score/
+   advance-section code), and level transitions drive the bridge counter,
+   `$2E`, and the odd/even land colour (`BG_COLOR_BRIGHT_GREEN`).  The
+   generator already flags those rows (`RIVER_FLAG_BRIDGE` in the collision
+   ring; rows currently render as plain river).  Candidate NES approach:
+   gray/yellow road tiles in the playfield pattern table with the playfield
+   attribute table (or the split handler) switching those rows to HUD palette
+   0 (`black, gray, yellow, white`); prototype before committing.
 1. Start Phase 5 (player jet, entities, collisions).  Feed the entity slots
    into `river_obj_count/river_obj_aux/river_obj_x/river_obj_flags` so the
    bank-avoidance clamp matches the original.
@@ -658,3 +672,37 @@ AltirraBridge: reuse the live server token explicitly when known, e.g.
   strip of yellow/white/black dashes across the full width.  This is believed
   to be the bridge row at the end of a level (`flags23 & 0x80`); bridge
   visuals are still an open Phase 5 item.
+
+### 2026-10-29 - Atari-like palette
+
+- Playfield colours now follow the Atari registers: land `$D2` -> NES `$09`
+  (dark green), water `$84` -> NES `$01` (dark blue), picked by Lab distance
+  against the Mesen default and NES-classic palettes.  `BG_COLOR_BRIGHT_GREEN`
+  (`$19`) is reserved for the odd-level `$D6` land colour (Phase 5).
+- The **backdrop is now black** (Atari COLBK), so pixel value 0 is real black.
+  The HUD gray band is therefore pixel value 1 of the HUD tiles (blank tile 0
+  is solid gray); black text is value 0, yellow text value 2.  Black digits
+  are tiles 1..10 and yellow digits (score, bridge) tiles 48..57; HUD
+  attributes are all palette 0.  Sprite palettes are unchanged.
+- Bank outlines (Atari value 2, `$20`) are redrawn as value 0 (black) in the
+  raw row: `river_edge_black()` on bank patterns and 0xAA edge/flash fills.
+  Value 2 is NES `$07` (dark brown) and is used by the small hills
+  (templates width 3, 6, 7: brown + black).  The large blue-highlight hills
+  (widths 4, 5, 8, 9, 10) are also run through `river_edge_black()` so their
+  bodies are black.
+- The Python model has `nes_edges` (default off, so Altirra validation is
+  untouched) and `NES_BLACK_HILLS`; the golden generators and
+  `tests/host/compare.py` turn it on, so NES raw rows differ from the Atari's
+  exactly in those pixels.
+
+### 2026-10-29 - Black world at game start
+
+- Like the Atari, the ring now starts solid black (`TILE_BLACK` = playfield
+  tile 2, cache slots 253) and the river scrolls in from the top with black
+  below it.  The first `RIVER_RING_ROWS` stripes also write the land margin
+  columns (`river_black_rows`); collision bounds of the black rows are 0/0.
+- Not reproduced yet: the grey road with a yellow centre line across the land
+  at the start of the river (and at level transitions).  Needs the bridge
+  work below.
+- `nes_smoke.mjs` waits 5 s for the river to fill the screen before the colour
+  check and accepts an all-black ring row 3.

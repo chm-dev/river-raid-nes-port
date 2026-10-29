@@ -38,6 +38,7 @@ def planes(b0: int, b1: int) -> tuple[int, int]:
 def main() -> None:
     count = int(sys.argv[1]) if len(sys.argv) > 1 else 120
     st = initial_state(0)
+    st.nes_edges = True
     rows = []
     for _ in range(count):
         raw = [bytes(st.step()) for _ in range(8)]

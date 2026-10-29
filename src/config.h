@@ -57,8 +57,8 @@
  * Background tile allocation (256 BG slots, all of CHR-RAM):
  *
  *   0         blank / space glyph
- *   1..10     digits 0..9 (plane 0 art, shared by black and yellow text;
- *             the palette is selected per HUD attribute quadrant)
+ *   1..10     black digits 0..9 (gray band = value 1, ink = backdrop black)
+ *   48..57    yellow digits 0..9 (ink = value 2); score and bridge use these
  *   11..26    gauge frame built from charset glyphs $47-$4E
  *             (5 cells: top 47/48/49/48/4A, bottom 4B/4C/4D/4C/4E)
  *   27..28    wide "P1" label (two tiles)
@@ -68,8 +68,8 @@
  *
  * These HUD tiles (0..46) live in pattern table $1000, shared with the
  * sprites (which start at SPRITE_TILE_BASE).  The playfield uses its own
- * table $0000: 0 solid land, 1 solid water, 2..255 exact river cache
- * (254 slots).  main.c flips PPUCTRL bit 4 between the HUD and playfield
+ * table $0000: 0 solid land, 1 solid water, 2 solid black, 3..255 exact
+ * river cache (253 slots).  main.c flips PPUCTRL bit 4 between the HUD and playfield
  * passes of the split.
  *
  * The river cache is filled at runtime: each visible 8x8 block is uploaded
@@ -82,7 +82,8 @@
  */
 
 #define TILE_BLANK              0u
-#define TILE_DIGIT_BASE         1u      /* 10 tiles: 1..10 */
+#define TILE_DIGIT_BASE         1u      /* 10 black digits: 1..10 */
+#define TILE_DIGIT_YELLOW_BASE  48u     /* 10 yellow digits: 48..57 */
 #define TILE_GAUGE_BASE         11u     /* 16 tiles: 8 glyphs x 2 halves */
 #define TILE_GAUGE_TL           (TILE_GAUGE_BASE + 0u)
 #define TILE_GAUGE_T            (TILE_GAUGE_BASE + 2u)
@@ -104,8 +105,9 @@
  * HUD IDs.  Playfield table layout: 0 land, 1 water, 2..255 river cache. */
 #define TILE_LAND               0u
 #define TILE_WATER              1u
-#define TILE_RIVER_BASE         2u
-#define TILE_RIVER_COUNT        254u    /* exact per-row river cache */
+#define TILE_BLACK              2u      /* solid black: the empty world at game start */
+#define TILE_RIVER_BASE         3u
+#define TILE_RIVER_COUNT        253u    /* exact per-row river cache */
 
 #define BG_TABLE_BIT            0x10u   /* PPUCTRL bit 4: BG pattern table */
 #define SPRITE_TILE_BASE        64u     /* sprites share the HUD table */
@@ -143,20 +145,28 @@
 /* Background palettes                                                       */
 /* ------------------------------------------------------------------------- */
 /*
- * Palette 0 (HUD): gray band, black labels, yellow highlights, white spare.
- * Palette 2 (playfield): black, bank green, outline red, water blue.
+ * Palette 0 (HUD): backdrop black, gray band, yellow highlights, white spare.
+ * (Black text is pixel value 0; the backdrop is black like Atari COLBK so the
+ * river's black hill pixels need no remapping.)
+ * Palette 2 (playfield): black, bank green, black outline, water blue.
  * The HUD is a single palette so black and yellow text can share 16x16
  * attribute cells; the source uses exactly these two text colours.
  */
 
 #define BG_COLOR_BLACK          0x0Fu
 #define BG_COLOR_WHITE          0x30u
-#define BG_COLOR_GREEN          0x1Au
-#define BG_COLOR_RED            0x06u
-#define BG_COLOR_BLUE           0x12u
+/* Playfield colours match the Atari registers (palette_altirra_ntsc.bin):
+ * land $D2 (003900) -> NES $09, water $84 (123EB2) -> NES $01, outline $20
+ * (0C0000) -> NES $07 (dark brown) for the hills only.  Bank outlines are
+ * redrawn as pixel value 0 (black backdrop, see river_edge_black) so edges
+ * stay black while the hills keep brown + black shades.  Colours were chosen
+ * by Lab distance against both the Mesen default and NES-classic palettes. */
+#define BG_COLOR_GREEN          0x09u
+#define BG_COLOR_BROWN          0x07u
+#define BG_COLOR_BLUE           0x01u
 #define BG_COLOR_YELLOW         0x28u
 #define BG_COLOR_GRAY           0x00u
-#define BG_COLOR_BRIGHT_GREEN   0x2Au
+#define BG_COLOR_BRIGHT_GREEN   0x19u   /* land on odd levels ($D6, 008300) */
 
 #define HUD_PALETTE             0u
 #define PLAYFIELD_PALETTE       2u

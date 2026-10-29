@@ -5,6 +5,7 @@ sys.path.insert(0, str(pathlib.Path(__file__).resolve().parents[2] / 'tools'))
 from river_model import initial_state
 lines=open(sys.argv[1]).read().split("\n")
 st=initial_state(0)
+st.nes_edges = True
 exp={}
 N=0
 for ln in lines:

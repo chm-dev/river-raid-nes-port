@@ -68,6 +68,7 @@ def state(st) -> list[int]:
 def main() -> None:
     n = int(sys.argv[1]) if len(sys.argv) > 1 else 400
     st = initial_state()
+    st.nes_edges = True  # rows as the NES port builds them (outline -> black)
     entries = []
     for tile_row in range(n):
         collision = None

@@ -38,6 +38,7 @@ const SHOT = path.resolve('build/phase3_smoke.png');
  * HUD tiles and all sprites share table $1000 (sprites start at tile 64). */
 const TILE_LAND = 0;
 const TILE_WATER = 1;
+const TILE_BLACK = 2;
 const HUD_CHR = 0x1000;
 const SPRITE_TILE_BASE = 64;
 const TILE_GAUGE_TL = 11;
@@ -53,6 +54,7 @@ const TILE_HI_WIDE = 29;
 const TILE_BRIDGE_WIDE = 31;
 const TILE_GAME_WIDE = 39;
 const TILE_DIGIT_BASE = 1;
+const TILE_DIGIT_YELLOW_BASE = 48;
 const GLYPH_0 = 80;      // charset code, not a tile ID
 
 let failures = 0;
@@ -135,13 +137,13 @@ async function main() {
     // Palettes
     // ---------------------------------------------------------------------
     const palette = await readBytes(0, 16, 'NesPaletteRam');
-    check('HUD palette 0 = gray black yellow white',
-        eq(palette.slice(0, 4), [0x00, 0x0f, 0x28, 0x30]), hexArray(palette.slice(0, 4)));
-    check('playfield palette 2 = backdrop 00 + 1A 06 12',
-        eq(palette.slice(8, 12), [0x00, 0x1a, 0x06, 0x12]), hexArray(palette.slice(8, 12)));
+    check('HUD palette 0 = black backdrop, gray, yellow, white',
+        eq(palette.slice(0, 4), [0x0f, 0x00, 0x28, 0x30]), hexArray(palette.slice(0, 4)));
+    check('playfield palette 2 = backdrop 0F + 09 07 01',
+        eq(palette.slice(8, 12), [0x0f, 0x09, 0x07, 0x01]), hexArray(palette.slice(8, 12)));
     const spritePalette = await readBytes(16, 16, 'NesPaletteRam');
-    check('player sprite palette 0 = backdrop 00 + 28 30 16',
-        eq(spritePalette.slice(0, 4), [0x00, 0x28, 0x30, 0x16]),
+    check('player sprite palette 0 = backdrop 0F + 28 30 16',
+        eq(spritePalette.slice(0, 4), [0x0f, 0x28, 0x30, 0x16]),
         hexArray(spritePalette.slice(0, 4)));
 
     // ---------------------------------------------------------------------
@@ -150,7 +152,7 @@ async function main() {
     const blankChr = await readBytes(HUD_CHR, 16, 'NesChrRam');
     const zeros = Array(8).fill(0x00);
     const ff = Array(8).fill(0xff);
-    check('blank/space tile 0 is empty', eq(blankChr, [...zeros, ...zeros]),
+    check('blank/space tile 0 is solid gray (value 1)', eq(blankChr, [...ff, ...zeros]),
         hexArray(blankChr));
 
     const landChr = await readBytes(TILE_LAND * 16, 16, 'NesChrRam');
@@ -158,16 +160,23 @@ async function main() {
         hexArray(landChr));
 
     const fillChr = await readBytes(HUD_CHR + TILE_GAUGE_T * 16, 16, 'NesChrRam');
-    const gaugeTop = [0xff, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00,
+    /* Gray band is plane 0; the black ink pixels clear it. */
+    const gaugeTop = [0x00, 0xff, 0xff, 0xff, 0xff, 0xff, 0xff, 0xff,
                       0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00];
-    check('gauge frame top rule is one pixel',
+    check('gauge frame top rule is one pixel row of black ink',
         eq(fillChr, gaugeTop), hexArray(fillChr));
 
     const digit0Chr = await readBytes(HUD_CHR + TILE_DIGIT_BASE * 16, 16, 'NesChrRam');
-    check('shared digit 0 is glyph 0 on plane 0',
-        eq(digit0Chr, [0x00, 0x3c, 0x66, 0x66, 0x66, 0x66, 0x3c, 0x00,
+    check('black digit 0 is inverted glyph 0 on plane 0',
+        eq(digit0Chr, [0xff, 0xc3, 0x99, 0x99, 0x99, 0x99, 0xc3, 0xff,
                        ...zeros]),
         hexArray(digit0Chr));
+
+    const yellow0Chr = await readBytes(HUD_CHR + TILE_DIGIT_YELLOW_BASE * 16, 16, 'NesChrRam');
+    check('yellow digit 0 has the glyph on plane 1',
+        eq(yellow0Chr, [0xff, 0xc3, 0x99, 0x99, 0x99, 0x99, 0xc3, 0xff,
+                        0x00, 0x3c, 0x66, 0x66, 0x66, 0x66, 0x3c, 0x00]),
+        hexArray(yellow0Chr));
 
     const playerChr = await readBytes(0x1000 + SPRITE_TILE_BASE * 16, 16, 'NesChrRam');
     check('player sprite CHR is populated', playerChr.some(v => v !== 0),
@@ -193,7 +202,7 @@ async function main() {
         eq(row1.slice(1, 3), [TILE_P1_WIDE, TILE_P1_WIDE + 1]),
         hexArray(row1.slice(1, 3)));
     check('row 1 score is a single yellow 0 (leading zeros blank)',
-        eq(row1.slice(11, 17), [SPACE, SPACE, SPACE, SPACE, SPACE, TILE_DIGIT_BASE]),
+        eq(row1.slice(11, 17), [SPACE, SPACE, SPACE, SPACE, SPACE, TILE_DIGIT_YELLOW_BASE]),
         hexArray(row1.slice(11, 17)));
     check('row 1 HI label (wide, aligned with BRIDGE)',
         eq(row1.slice(20, 22), [TILE_HI_WIDE, TILE_HI_WIDE + 1]),
@@ -217,15 +226,14 @@ async function main() {
         eq(row2.slice(20, 28), [...Array(8)].map((_, i) => TILE_BRIDGE_WIDE + i)),
         hexArray(row2.slice(20, 28)));
     check('row 2 bridge number 1',
-        row2[29] === SPACE && row2[30] === TILE_DIGIT_BASE + 1,
+        row2[29] === SPACE && row2[30] === TILE_DIGIT_YELLOW_BASE + 1,
         hexArray(row2.slice(29, 31)));
 
     check('row 3 game number 1', row3[5] === TILE_DIGIT_BASE + 1, `tile=${row3[5]}`);
 
     const attr0 = await readBytes(0x23C0, 8, 'NesPpuMemory');
-    check('yellow digit quadrants use palette 1',
-        attr0[2] === 0x04 && attr0[3] === 0x05 && attr0[4] === 0x01 &&
-        attr0[7] === 0x50,
+    check('HUD attributes are all palette 0 (colour comes from tile art)',
+        attr0.every(v => v === 0),
         hexArray(attr0));
     check('row 3 gauge frame floor (4B 4C 4D 4C 4E)',
         eq(row3.slice(9, 19), [
@@ -249,14 +257,15 @@ async function main() {
     check('all 30 playfield ring rows are populated', ringFilled);
 
     const riverRow = nt1.slice(3 * 32, 3 * 32 + 32);
-    check('playfield row 3 has four land tiles on each side',
-        riverRow.slice(0, 4).every(v => v === TILE_LAND) &&
-        riverRow.slice(28).every(v => v === TILE_LAND),
+    // The world starts black (the river scrolls in from the top), so a ring row
+    // is either still all black or already a generated row with land margins.
+    const rowBlack = riverRow.every(v => v === TILE_BLACK);
+    check('playfield row 3 is black or a generated river row',
+        rowBlack ||
+        (riverRow.slice(0, 4).every(v => v === TILE_LAND) &&
+         riverRow.slice(28).every(v => v === TILE_LAND) &&
+         riverRow.slice(4, 28).some(v => v !== TILE_LAND && v !== TILE_BLACK)),
         hexArray(riverRow));
-    check('playfield row 3 contains river tiles',
-        riverRow.slice(4, 28).every(v => v >= TILE_LAND) &&
-        riverRow.slice(4, 28).some(v => v !== TILE_LAND),
-        hexArray(riverRow.slice(4, 28)));
 
     const attr1 = await readBytes(0x27C0, 64, 'NesPpuMemory');
     check('playfield attributes use palette 2 (0xAA)', attr1.every(v => v === 0xaa),
@@ -301,6 +310,10 @@ async function main() {
     const scroll = await readU16(scrollAddr);
     check('playfield scroll is advancing', scroll > 0, `scroll=${scroll}`);
 
+    // The river scrolls in from a black screen; wait until it has filled the
+    // playfield (about 26 tile rows at 1 px/frame) before the colour check.
+    await sleep(5000);
+
     // The split is stable; a frozen scroll makes the 1-pixel check exact.
     await callTool('mesen_playback', { action: 'pause' });
     await sleep(150);
@@ -316,8 +329,8 @@ async function main() {
     const isGray = (r, g, b) => r > 80 && r < 130 && Math.abs(r - g) < 8 && Math.abs(g - b) < 8;
     const isBlack = (r, g, b) => r < 40 && g < 40 && b < 40;
     const isYellow = (r, g, b) => r > 150 && g > 140 && b < 100;
-    const isGreen = (r, g, b) => g > 90 && r < 130 && b < 80;
-    const isBlue = (r, g, b) => b > 90 && r < 80 && g < 80;
+    const isGreen = (r, g, b) => g > 50 && g < 140 && r < 60 && b < 60;
+    const isBlue = (r, g, b) => b > 100 && r < 80 && g < 80;
     const isPlayfield = (r, g, b) => isGreen(r, g, b) || isBlue(r, g, b);
     const grayAt = y => countRow(shot, y, isGray);
     const blackAt = y => countRow(shot, y, isBlack);

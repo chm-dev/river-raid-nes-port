@@ -41,7 +41,8 @@ const TILE_GAUGE_BL = 19;
 const TILE_GAUGE_B = 21;
 const TILE_GAUGE_BC = 23;
 const TILE_GAUGE_BR = 25;
-const TILE_DIGIT_BASE = 1;
+const TILE_DIGIT_BASE = 1;          /* black digits */
+const TILE_DIGIT_YELLOW_BASE = 48;  /* yellow digits (score, bridge) */
 const HUD_FUEL_BAR_SLOT = 54;
 const HUD_FUEL_BAR_SLOT2 = 55;
 const HUD_LIFE_SLOT = 44;
@@ -267,13 +268,13 @@ async function main() {
     const row3 = nt0.slice(96, 128);
 
     check('score digits update to 123456',
-        eq(row1.slice(11, 17), [1, 2, 3, 4, 5, 6].map(d => TILE_DIGIT_BASE + d)),
+        eq(row1.slice(11, 17), [1, 2, 3, 4, 5, 6].map(d => TILE_DIGIT_YELLOW_BASE + d)),
         hexArray(row1.slice(11, 17)));
     check('high score stays a single black 0',
         eq(row1.slice(25, 31), [0, 0, 0, 0, 0, TILE_DIGIT_BASE]),
         hexArray(row1.slice(25, 31)));
     check('bridge digit updates to 3',
-        row2[29] === 0 && row2[30] === TILE_DIGIT_BASE + 3,
+        row2[29] === 0 && row2[30] === TILE_DIGIT_YELLOW_BASE + 3,
         hexArray(row2.slice(29, 31)));
     check('game row keeps the gauge floor',
         eq(row3.slice(9, 19), [

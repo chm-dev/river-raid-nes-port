@@ -389,6 +389,16 @@ static void river_clamp_decision(void) {
 /* Row renderer ($AA7A-$AB7E)                                                */
 /* ------------------------------------------------------------------------- */
 
+/* NES recolour: Atari pixel value 2 (outline, near black) becomes value 0
+ * (black backdrop) on bank edges, so value 2 is free for the hills' brown.
+ * Mirrors nes_edge_black() in tools/river_model.py. */
+static uint8_t river_edge_black(uint8_t b) {
+    uint8_t hi = (uint8_t)(b & 0xAAu);
+    uint8_t lo = (uint8_t)((uint8_t)(b << 1) & 0xAAu);
+
+    return (uint8_t)(b & (uint8_t)~(hi & (uint8_t)~lo));
+}
+
 static void river_fill(uint8_t y, uint8_t value, uint8_t edge) {
     uint8_t i;
 
@@ -397,6 +407,9 @@ static void river_fill(uint8_t y, uint8_t value, uint8_t edge) {
     }
     if (!edge && rg_hit_flash) {
         value = 0xAAu;
+    }
+    if (value == 0xAAu) {
+        value = 0u;
     }
     for (i = 0; i <= y; i++) {
         river_raw_row[rg_row_pos + i] = value;
@@ -408,8 +421,18 @@ static void river_fill(uint8_t y, uint8_t value, uint8_t edge) {
 static void river_copy_template(void) {
     uint8_t i;
 
-    for (i = 0; i < rg_bc; i++) {
-        river_raw_row[rg_row_pos + i] = atari_river_templates[rg_tpl_off + i];
+    /* Large hills (widths 4, 5, 8, 9, 10: the ones with blue highlights) are
+     * drawn black instead of brown; small hills keep brown + black.  Mirrors
+     * NES_BLACK_HILLS in tools/river_model.py. */
+    if (rg_bc == 4u || rg_bc == 5u || rg_bc >= 8u) {
+        for (i = 0; i < rg_bc; i++) {
+            river_raw_row[rg_row_pos + i] =
+                river_edge_black(atari_river_templates[rg_tpl_off + i]);
+        }
+    } else {
+        for (i = 0; i < rg_bc; i++) {
+            river_raw_row[rg_row_pos + i] = atari_river_templates[rg_tpl_off + i];
+        }
     }
     rg_row_pos = (uint8_t)(rg_row_pos + rg_bc);
     rg_row_b4 = (uint8_t)(rg_row_b4 + rg_bc);
@@ -426,8 +449,8 @@ static void river_pattern(uint8_t index, uint8_t flash) {
     table = (index < 0x10u) ? atari_bank_patterns
                             : atari_bank_patterns_island;
     off = (uint8_t)(index & 0x0Fu);
-    river_raw_row[rg_row_pos] = table[off];
-    river_raw_row[rg_row_pos + 1u] = table[off + 1u];
+    river_raw_row[rg_row_pos] = river_edge_black(table[off]);
+    river_raw_row[rg_row_pos + 1u] = river_edge_black(table[off + 1u]);
     rg_row_pos = (uint8_t)(rg_row_pos + 2u);
     rg_row_b4 = (uint8_t)(rg_row_b4 + 2u);
 }
@@ -658,9 +681,15 @@ static const uint8_t river_water_pat[16] = {
     0xFF, 0xFF, 0xFF, 0xFF, 0xFF, 0xFF, 0xFF, 0xFF
 };
 
+static const uint8_t river_black_pat[16] = {
+    0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00,
+    0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00
+};
+
 static void river_cache_init(void) {
     set_bkg_data(TILE_LAND, 1, river_land_pat);
     set_bkg_data(TILE_WATER, 1, river_water_pat);
+    set_bkg_data(TILE_BLACK, 1, river_black_pat);
     river_alloc = 0u;
 }
 
@@ -730,6 +759,7 @@ static uint8_t river_q_n;
 static uint8_t river_q_head;
 static uint8_t river_eager;
 static uint8_t river_row_pending;
+static uint8_t river_black_rows;      /* ring slots still holding black */
 static uint8_t river_split_pending;   /* columns 10..19 not classified yet */
 static uint8_t river_pending_slot;
 static uint8_t river_sp_n;
@@ -855,11 +885,23 @@ static void river_finish_tile_row(void) {
     river_distance = river_step;
 }
 
-/* Write the 20 river columns of the pending row.  Columns 0-5 and 26-31 are
- * land in every ring row (river_init fills them once). */
+/* Write the river columns of the pending row.  The margin columns are land in
+ * every generated row, but the ring starts out solid black (the empty world
+ * the river scrolls into at game start), so the first RIVER_ROWS stripes also
+ * write the margins. */
 static void river_write_stripe(void) {
-    river_w_addr = (uint16_t)(PPU_NT1_BASE + RIVER_LEFT_COL +
+    river_w_addr = (uint16_t)(PPU_NT1_BASE +
                               ((uint16_t)river_pending_slot << 5));
+    if (river_black_rows) {
+        for (river_sp_n = 0; river_sp_n < RIVER_LEFT_COL; river_sp_n++) {
+            set_vram_byte((uint8_t *)(river_w_addr + river_sp_n), TILE_LAND);
+            set_vram_byte((uint8_t *)(river_w_addr + RIVER_LEFT_COL +
+                                      RIVER_TILE_COLS + river_sp_n),
+                          TILE_LAND);
+        }
+        river_black_rows--;
+    }
+    river_w_addr += RIVER_LEFT_COL;
     for (river_sp_n = 0; river_sp_n < RIVER_TILE_COLS; river_sp_n++) {
         set_vram_byte((uint8_t *)(river_w_addr + river_sp_n),
                       river_row_ids[river_sp_n]);
@@ -986,19 +1028,18 @@ void river_init(void) {
         set_vram_byte((uint8_t *)(PPU_NT1_ATTR + i), 0xAAu);
     }
 
-    /* Fill the ring with a straight channel.  Generating 30 full tile rows
-     * at boot would take ~240 raw rows; the procedural rows replace this
-     * channel as the playfield scrolls (one tile row every 8 pixels). */
+    /* Start with an empty (black) world, like the Atari: the river scrolls
+     * into view from the top and everything below it is black.  The
+     * procedural rows replace the black ones as the playfield scrolls. */
     {
         uint8_t c;
         for (i = 0; i < RIVER_ROWS; i++) {
             river_w_addr = (uint16_t)(PPU_NT1_BASE + ((uint16_t)i << 5));
             for (c = 0; c < RIVER_COLS; c++) {
-                set_vram_byte((uint8_t *)(river_w_addr + c),
-                              (c >= 6u && c < 26u) ? TILE_WATER : TILE_LAND);
+                set_vram_byte((uint8_t *)(river_w_addr + c), TILE_BLACK);
             }
-            river_left_x[i] = 3u;
-            river_right_x[i] = 28u;
+            river_left_x[i] = 0u;
+            river_right_x[i] = 0u;
         }
     }
 
@@ -1011,6 +1052,7 @@ void river_init(void) {
     river_q_head = 0;
     river_row_pending = 0;
     river_split_pending = 0;
+    river_black_rows = RIVER_RING_ROWS;
     memset(river_col_kind, 3, sizeof(river_col_kind));
     hud_set_playfield_scroll(0);
 
