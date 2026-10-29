@@ -19,6 +19,7 @@ import {
     readBytes,
     readU8,
     readU16,
+    writeBytes,
     symbolsFromNoi,
     requireSymbol,
     sleep,
@@ -63,6 +64,11 @@ async function main() {
 
     for (let f = 0; f < FRAMES; f++) {
         await callTool('mesen_step', { cpuType: 'Nes', count: 1, stepType: 'PpuFrame' });
+        if (f === 2) {
+            /* After crt0 has cleared RAM: freeze the jet, un-freeze the river. */
+            await writeBytes(requireSymbol(sym, 'player_disable'), [1]);
+            await writeBytes(requireSymbol(sym, 'river_freeze'), [0]);
+        }
         const dist = await readU16(distAddr);
         const scroll = await readU8(scrollAddr);
         const nt = await readBytes(0x2400, 960, 'NesPpuMemory');

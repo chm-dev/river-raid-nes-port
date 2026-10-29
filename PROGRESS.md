@@ -1,7 +1,7 @@
 # Project Progress & Session Handoff
 
 **Last updated:** 2026-10-29
-**Current phase:** Phase 5 IN PROGRESS — jet steering/terrain crash done; entities, shot, fuel pick-ups, scoring next
+**Current phase:** Phase 5 IN PROGRESS — jet, shot, entities, throttle done; bridge, respawn-at-bridge, audio-free polish next
 **Phase 1:** COMPLETE (reverse engineering + asset extraction)
 **Phase 2:** COMPLETE (scaffolding, build pipeline, boot ROM, Mesen smoke test)
 **Phase 3:** COMPLETE (HUD, deferred LCD split, playfield ring, 1-px scroll test)
@@ -718,3 +718,37 @@ AltirraBridge: reuse the live server token explicitly when known, e.g.
   `nes_river` set it. All three suites pass. RAM: 11 bytes free.
 - Not done: shot, entities, fuel refill, bridge, scoring, respawn at the last
   bridge, fast throttle, fuel rate parity, fine collision within a tile row.
+### 2026-10-29 - Phase 5 slice 2: shot, entities, throttle, death animation
+
+- **Banked code.** The fixed bank ($C000-$FFFF) overflowed (the linker silently
+  ran past $FFFF and makenes grew the ROM).  `entities.c`, `entity_gfx.c` and
+  `player.c` now build with `-Wf-bo1` (`$bankedSources` in `build.ps1`; the
+  Makefile still needs the same) and their public functions are `BANKED`.
+  Fixed bank now ends ~$FBB6; ROM is 4 x 16 KiB.  Never call banked functions
+  from an ISR.  ~1 KB of fixed-bank headroom left.
+- **RAM:** `river_obj_*` arrays shrank to 1 slot (generator clamp hook, unused
+  for now: `river_obj_count = 0x0B`).  8 bytes free.
+- **Entities** (`entities.c`): 8 slots, spawn every 56 scrolled rows just above
+  the visible river inside the water (simplified: the Atari pre-places objects
+  in the generator so the bank clamp makes room).  Types from
+  `atari_spawn_types` (+ ~25% fuel); ships crawl, helicopters walk, jets
+  cross and wrap at $2C..$D4; explosions use aux 2..6 debris frames.  Scores
+  via `atari_score_tens` (tens, BCD) + hi-score tracking.
+- **Atari object sizes (important):** `SIZEP3` per aux is `$BBA2[aux]`:
+  aux 13 ship = double width, aux 14 (`$0E` bridge object, 20 rows) = quad
+  width, everything else 8 px.  Left-moving objects use the mirror shape
+  (`$BB40[type+0x10]`), done with hardware X-flip.  `tools/gen_entity_gfx.py`
+  generates `src/entity_gfx.[ch]` (width-expanded tiles, 3-colour palettes).
+- **Shot:** one at a time (A), 6 px/frame, dies on banks/islands, entities or
+  the HUD.  **Fuel depots** refuel while overlapped, enemies kill the jet.
+- **Throttle:** generating a raw row costs ~1 frame of CPU, so 2 px/frame is
+  not reachable; fast = 1 px/frame, cruise = 0.75, slow = 0.5.  Real 2x needs
+  generator optimisation.
+- **Death animation:** the jet becomes two overlapping debris fragments cycling
+  aux 2..6 (36 frames), then hidden until respawn (not yet checked visually).
+- `player_disable` also clears entities and forces `river_speed = 2` so the
+  1 px/frame test cadence holds.  `nes_river_cache` writes the hooks after
+  frame 2 (crt0 clears RAM).  All four suites pass.
+- Open: bridge object ($0E, quad-wide) + road visuals, respawn at last bridge,
+  entity fidelity (Atari spawn timing/positions, bank clamp), fuel rate,
+  shot speed/guidance, sound.

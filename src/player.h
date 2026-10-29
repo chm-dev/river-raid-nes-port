@@ -8,6 +8,7 @@
 #ifndef PLAYER_H
 #define PLAYER_H
 
+#include <nes/nes.h>
 #include <stdint.h>
 
 #define PLAYER_START_X          120u
@@ -32,13 +33,13 @@ extern player_state_t player;
 /* Test hook: freeze the jet (hidden, no fuel burn, no collisions). */
 extern uint8_t player_disable;
 
-void player_init(void);
+void player_init(void) BANKED;
 
 /* Load the three 14-row flight shapes into the sprite pattern table.
  * Called while the display is off; Phase 5 adds the metasprite instances. */
-void player_init_graphics(void);
+void player_init_graphics(void) BANKED;
 
 /* Phase 5: read joypad, apply throttle/banking, move the shot and fuel. */
-void player_update(void);
+void player_update(void) BANKED;
 
 #endif /* PLAYER_H */

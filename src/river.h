@@ -36,12 +36,13 @@ extern uint8_t river_island_left_x[RIVER_ROWS];
 extern uint8_t river_island_right_x[RIVER_ROWS];
 extern uint8_t river_flags[RIVER_ROWS];
 
-/* Object-avoidance inputs used by the generator's bank clamp.  Phase 5
- * fills these from the entity slots; Phase 4 leaves them empty. */
+/* Object-avoidance inputs for the generator's bank clamp.  One slot (the
+ * newest spawn): river_obj_count = 0 while it is within the generator's
+ * reach, 0x0B (none) otherwise.  x is the Atari HPOS (= NES screen X). */
 extern uint8_t river_obj_count;
-extern uint8_t river_obj_aux[11];
-extern uint8_t river_obj_x[11];
-extern uint8_t river_obj_flags[11];
+extern uint8_t river_obj_aux[1];
+extern uint8_t river_obj_x[1];
+extern uint8_t river_obj_flags[1];
 extern uint8_t river_obj_v37;
 
 /* Number of tile rows generated so far (also the demo scroll distance). */
@@ -51,9 +52,12 @@ extern uint16_t river_distance;
  * untouched so a test can drive playfield_scroll_y directly. */
 extern uint8_t river_freeze;
 
-/* Throttle set by the player: 0 = slow (scroll every other frame),
- * 1 = cruise (1 px/frame).  A fast setting is still to do. */
+/* Throttle set by the player: 0 = slow (0.5 px/frame), 1 = cruise (0.75),
+ * 2 = fast (1 px/frame, the generator's CPU ceiling). */
 extern uint8_t river_speed;
+
+/* 1 when the playfield advanced a pixel (raw row) in the last river_update(). */
+extern uint8_t river_scrolled;
 
 /* Collision-ring slot (== nametable row) under a playfield scanline
  * (36..239). */

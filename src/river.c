@@ -78,9 +78,9 @@ static uint8_t rg_hit_flash;
 
 /* Object-avoidance inputs.  Phase 4 has no objects; Phase 5 fills these. */
 uint8_t river_obj_count;
-uint8_t river_obj_aux[11];
-uint8_t river_obj_x[11];
-uint8_t river_obj_flags[11];
+uint8_t river_obj_aux[1];
+uint8_t river_obj_x[1];
+uint8_t river_obj_flags[1];
 uint8_t river_obj_v37;
 
 static uint8_t rg_row_left;
@@ -122,7 +122,8 @@ uint8_t river_flags[RIVER_ROWS];
 uint16_t river_distance;
 uint8_t river_freeze;
 uint8_t river_speed = 1u;
-static uint8_t river_slow_phase;
+uint8_t river_scrolled;
+static uint8_t river_phase;
 
 /* Test hooks: last generated 48-byte row and the state after it.  These are
  * exported through the .noi file so Mesen tests can compare the C port with
@@ -1017,13 +1018,11 @@ void river_init(void) {
     rg_b1 = 0;
     rg_b7 = 0;
     rg_hit_flash = 0;
-    river_obj_count = 0;
+    river_obj_count = 0x0Bu;
     river_obj_v37 = 0;
-    for (i = 0; i < 11u; i++) {
-        river_obj_aux[i] = 0;
-        river_obj_x[i] = 0;
-        river_obj_flags[i] = 0;
-    }
+    river_obj_aux[0] = 0;
+    river_obj_x[0] = 0;
+    river_obj_flags[0] = 0;
 
     /* Playfield attributes: palette 2 (all four 16x16 blocks in each byte). */
     for (i = 0; i < 64u; i++) {
@@ -1084,36 +1083,42 @@ uint8_t river_slot_at_scanline(uint8_t scanline) {
     return (uint8_t)(bg_y >> 3);
 }
 
-void river_update(void) {
-    uint8_t next;
+/* File-scope: ru_next lives across calls (see AGENTS.md rule 3). */
+static uint8_t ru_next;
 
+void river_update(void) {
     river_stream_pending();
 
+    river_scrolled = 0;
     if (river_freeze) {
         return;
     }
 
-    /* Throttle: the slow setting scrolls every other frame. */
+    /* Throttle.  Generating a raw row costs about a frame of CPU, so fast is
+     * the 1 px/frame ceiling; cruise skips every 4th frame and slow scrolls
+     * every other frame. */
+    river_phase++;
     if (river_speed == 0u) {
-        river_slow_phase ^= 1u;
-        if (river_slow_phase) {
+        if (river_phase & 1u) {
             return;
         }
+    } else if (river_speed == 1u && (river_phase & 3u) == 3u) {
+        return;
     }
 
     /* Scroll down: the playfield moves in the opposite direction to the
-     * generator stream, matching the Atari (new terrain enters at the top). */
-    next = (playfield_scroll_y == 0u)
+     * generator stream, matching the Atari (new terrain enters at the top).
+     * One raw Atari scanline per frame keeps the per-frame cost flat; the
+     * 8th row completes one 8x8 tile row, and only then do we write 32 bytes
+     * of nametable data. */
+    ru_next = (playfield_scroll_y == 0u)
         ? (uint8_t)(RIVER_SCROLL_HEIGHT - 1u)
         : (uint8_t)(playfield_scroll_y - 1u);
-
-    /* One raw Atari scanline per frame keeps the per-frame cost flat.  The
-     * 8th row completes one 8x8 tile row; only then do we write 32 bytes of
-     * nametable data. */
     river_generate_raw_row();
     if (river_block_index == 8u) {
         river_finish_tile_row();
     }
+    river_scrolled = 1u;
 
-    hud_set_playfield_scroll(next);
+    hud_set_playfield_scroll(ru_next);
 }

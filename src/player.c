@@ -15,6 +15,7 @@
 #include "atari_data.h"
 #include "hud.h"
 #include "river.h"
+#include "entities.h"
 #include "player.h"
 
 player_state_t player;
@@ -33,6 +34,12 @@ uint8_t player_disable;
 #define PLAYER_STATE_PLAY       0u
 #define PLAYER_STATE_DEAD       1u
 #define PLAYER_STATE_OVER       2u
+
+#define PLAYER_SHOT_SLOT        47u
+#define PLAYER_SHOT_SPEED       6u
+#define PLAYER_SHOT_WIDTH       2u
+#define PLAYER_REFUEL_RATE      3u      /* fuel units per frame on a depot */
+#define PLAYER_DEATH_STEPS      9u      /* 4-frame steps of debris frames */
 
 #define PLAYER_SPRITE_TOP       0u
 #define PLAYER_SPRITE_BOTTOM    1u
@@ -63,7 +70,7 @@ static uint8_t pl_r;
 static uint8_t pl_slot;
 static uint8_t pl_probe;
 
-void player_init(void) {
+void player_init(void) BANKED {
     player.x = PLAYER_START_X;
     player.y = PLAYER_START_Y;
     player.speed = 1;
@@ -97,7 +104,7 @@ static void player_load_shape(uint8_t first_tile, uint8_t shape) {
     set_sprite_data(first_tile, 2, player_tile_buf);
 }
 
-void player_init_graphics(void) {
+void player_init_graphics(void) BANKED {
     set_sprite_palette(0, 1, player_palette);
 
     /* Tile pairs: 0/1 bank-left, 2/3 bank-right, 4/5 straight. */
@@ -144,9 +151,79 @@ static void player_show(uint8_t tile) {
     move_sprite(PLAYER_SPRITE_BOTTOM, player.x, (uint8_t)(player.y + 8u));
     set_sprite_tile(PLAYER_SPRITE_TOP, tile);
     set_sprite_tile(PLAYER_SPRITE_BOTTOM, (uint8_t)(tile + 1u));
+    set_sprite_prop(PLAYER_SPRITE_TOP, S_PAL(0));
+    set_sprite_prop(PLAYER_SPRITE_BOTTOM, S_PAL(0));
+}
+
+/* Debris frames 2..6 and back, two overlapping fragments. */
+static const uint8_t player_death_frames[PLAYER_DEATH_STEPS] = {
+    2, 3, 4, 5, 6, 5, 4, 3, 2
+};
+
+static uint8_t pl_step;
+static uint8_t pl_hit;
+
+static void player_death_anim(void) {
+    pl_step = (uint8_t)((PLAYER_DEAD_FRAMES - player_timer) >> 2);
+    if (pl_step >= PLAYER_DEATH_STEPS) {
+        hide_sprite(PLAYER_SPRITE_TOP);
+        hide_sprite(PLAYER_SPRITE_BOTTOM);
+        return;
+    }
+    move_sprite(PLAYER_SPRITE_TOP, player.x, (uint8_t)(player.y + 2u));
+    set_sprite_tile(PLAYER_SPRITE_TOP, entities_tile(player_death_frames[pl_step]));
+    set_sprite_prop(PLAYER_SPRITE_TOP, S_PAL(3));
+    move_sprite(PLAYER_SPRITE_BOTTOM, player.x, (uint8_t)(player.y + 8u));
+    set_sprite_tile(PLAYER_SPRITE_BOTTOM,
+                    entities_tile(player_death_frames[(uint8_t)(PLAYER_DEATH_STEPS - 1u - pl_step)]));
+    set_sprite_prop(PLAYER_SPRITE_BOTTOM, S_PAL(3));
+}
+
+static void player_kill_shot(void) {
+    player.shot_active = 0;
+    hide_sprite(PLAYER_SHOT_SLOT);
+}
+
+/* Fire, fly and test the single player shot. */
+static void player_update_shot(void) {
+    if (!player.shot_active) {
+        if (!(pl_pad & J_A)) {
+            return;
+        }
+        player.shot_x = (uint8_t)(player.x + 3u);
+        player.shot_y = (uint8_t)(player.y - 6u);
+        player.shot_active = 1;
+    } else {
+        if (player.shot_y < (uint8_t)(HUD_SPLIT_SCANLINE + PLAYER_SHOT_SPEED + 6u)) {
+            player_kill_shot();
+            return;
+        }
+        player.shot_y -= PLAYER_SHOT_SPEED;
+    }
+
+    pl_slot = river_slot_at_scanline(player.shot_y);
+    pl_l = river_left_x[pl_slot];
+    pl_r = river_right_x[pl_slot];
+    pl_row = (uint8_t)(player.shot_x - SOURCE_X_OFFSET);
+    if (pl_r != 0u &&
+        (pl_row < pl_l || (uint8_t)(pl_row + PLAYER_SHOT_WIDTH) > pl_r ||
+         ((river_flags[pl_slot] & RIVER_FLAG_ISLAND) &&
+          pl_row < river_island_right_x[pl_slot] &&
+          (uint8_t)(pl_row + PLAYER_SHOT_WIDTH) > river_island_left_x[pl_slot]))) {
+        player_kill_shot();
+        return;
+    }
+    if (entities_hit_shot(player.shot_x, player.shot_y)) {
+        player_kill_shot();
+        return;
+    }
+    move_sprite(PLAYER_SHOT_SLOT, player.shot_x, player.shot_y);
+    set_sprite_tile(PLAYER_SHOT_SLOT, entities_shot_tile());
+    set_sprite_prop(PLAYER_SHOT_SLOT, S_PAL(0));
 }
 
 static void player_crash(void) {
+    player_kill_shot();
     hide_sprite(PLAYER_SPRITE_TOP);
     hide_sprite(PLAYER_SPRITE_BOTTOM);
     river_freeze = 1u;
@@ -169,6 +246,7 @@ static void player_respawn(void) {
         player.x = (uint8_t)(SOURCE_X_OFFSET + ((pl_l + pl_r) >> 1) -
                              (PLAYER_WIDTH >> 1));
     }
+    entities_clear();
     player.alive = 1;
     player.speed = 1;
     hud_fuel = 255u;
@@ -178,10 +256,15 @@ static void player_respawn(void) {
     player_state = PLAYER_STATE_PLAY;
 }
 
-void player_update(void) {
+void player_update(void) BANKED {
     if (player_disable) {
-        hide_sprite(PLAYER_SPRITE_TOP);
-        hide_sprite(PLAYER_SPRITE_BOTTOM);
+        river_speed = 2u;       /* tests expect 1 px/frame */
+        if (player.alive) {
+            player.alive = 0;
+            hide_sprite(PLAYER_SPRITE_TOP);
+            hide_sprite(PLAYER_SPRITE_BOTTOM);
+            player_kill_shot();
+        }
         return;
     }
 
@@ -189,6 +272,7 @@ void player_update(void) {
 
     if (player_state != PLAYER_STATE_PLAY) {
         if (player_timer != 0u) {
+            player_death_anim();
             player_timer--;
         } else if (player_state == PLAYER_STATE_DEAD) {
             player_respawn();
@@ -217,8 +301,8 @@ void player_update(void) {
         player.bank = 2;
     }
 
-    /* Throttle: down = slow, otherwise cruise. */
-    river_speed = (pl_pad & J_DOWN) ? 0u : 1u;
+    /* Throttle: down = slow, up = fast, otherwise cruise. */
+    river_speed = (pl_pad & J_DOWN) ? 0u : (pl_pad & J_UP) ? 2u : 1u;
 
     /* Fuel. */
     if (++player_fuel_tick >= PLAYER_FUEL_FRAMES) {
@@ -236,7 +320,15 @@ void player_update(void) {
         player_show(PLAYER_TILE_STRAIGHT);
     }
 
-    if (hud_fuel == 0u || player_hits_terrain()) {
+    player_update_shot();
+
+    pl_hit = entities_check_player(player.x, player.y);
+    if (pl_hit == ENT_HIT_FUEL) {
+        hud_fuel = (hud_fuel > (uint8_t)(255u - PLAYER_REFUEL_RATE))
+            ? 255u : (uint8_t)(hud_fuel + PLAYER_REFUEL_RATE);
+    }
+
+    if (hud_fuel == 0u || pl_hit == ENT_HIT_DEADLY || player_hits_terrain()) {
         player_crash();
     }
     player_prev_pad = pl_pad;
