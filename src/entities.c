@@ -1,11 +1,11 @@
 /*
  * entities.c - enemies, fuel depots and explosions.
  *
- * Simplified against the Atari spawner: objects appear just above the
- * visible river at a random X inside the water, scroll down with the river
- * and patrol between the banks (the Atari instead pre-places them in the
- * generator and lets the bank clamp make room).  Types, shapes and scores
- * come from the extracted Atari tables.
+ * Objects are placed by a port of the Atari spawner ($AB80-$AE96, called by
+ * the river generator after each row) and patrol with the Atari rules: they
+ * stand still until a wake-up lottery picks them, then walk on alternate
+ * frames and turn at the banks.  Types, shapes and scores come from the
+ * extracted Atari tables.
  */
 #include <nes/nes.h>
 #include <stdint.h>
@@ -32,12 +32,13 @@ uint8_t entity_count;
 #define ENT_OAM_LAST            43u
 /* Atari SIZEP3: ships are double width, the $0E bridge object quad width. */
 #define ent_width(type)         ((uint8_t)(ent_gfx_cols[type] << 3))
-#define ENT_SPAWN_PIXELS        56u     /* scrolled rows between spawns */
-#define ENT_MIN_WATER           40u
 #define ENT_EXPLODE_TICKS       8u      /* Atari: type 2..6 advance every 8th frame */
 
 static uint8_t ent_rng = 0x5Au;
-static uint8_t ent_spawn_acc;
+static uint8_t ent_frame;       /* $18: free-running frame counter */
+static uint8_t ent_wake_acc;    /* frames since the last wake-up draw */
+static uint8_t sp_hold;         /* $32: rows left until the new object is built */
+static uint8_t sp_slot;         /* entity slot of the object being built */
 static uint8_t ent_anim;
 static uint8_t ent_oam_used;
 
@@ -79,7 +80,8 @@ void entities_clear(void) BANKED {
         ent_aux[e_i] = 0;
     }
     entity_count = 0;
-    ent_spawn_acc = 0;
+    sp_hold = 0;
+    river_obj_count = 0x0Bu;
 }
 
 void entities_init(void) BANKED {
@@ -146,27 +148,238 @@ void entities_add_score(uint8_t bcd_tens) BANKED {
     }
 }
 
-/* Water bounds under entity e_i; returns 0 when the row is unknown. */
-static uint8_t ent_bounds(void) {
-    e_slot = river_slot_at_scanline((uint8_t)(ent_y[e_i] + (e_rows >> 1)));
-    e_r = river_right_x[e_slot];
-    if (e_r == 0u) {
-        return 0;
-    }
-    e_l = (uint8_t)(river_left_x[e_slot] + SOURCE_X_OFFSET);
-    e_r = (uint8_t)(e_r + SOURCE_X_OFFSET);
-    return 1;
+/* ------------------------------------------------------------------------- */
+/* Spawner: a port of the Atari object block $AB80-$AE96                      */
+/* ------------------------------------------------------------------------- */
+/*
+ * The Atari does not drop objects at random: every 16th generated row
+ * (rg_rowcount & 15 == 0) it picks an object from the generator's own state
+ * (level, LFSR bytes, river width/island flags) and places it relative to
+ * the bank that was just drawn.  While the object is "under construction"
+ * ($32 rows) nothing else spawns and the generator's bank clamp steers
+ * around it (river_obj_*).  tools/object_model.py is the Python twin; it
+ * replays a live Altirra trace row for row (tools/object_validate.py).
+ *
+ * The scratch variables are the e_* file statics: entities_row() is only
+ * called from the river generator, never from inside an entity loop.
+ */
+#define sp_a            e_t     /* 6502 accumulator */
+#define sp_c            e_c     /* carry */
+#define sp_y            e_type  /* object type (the Y register) */
+#define sp_b3           e_l     /* $B3 */
+#define sp_b5           e_r     /* $B5 (+2 near the bridge) */
+#define sp_b8           e_n     /* $B8: 5 = ship, 7 = bridge */
+#define sp_left         e_src   /* status bit 3: start moving left */
+#define sp_island       e_w     /* island flag, $2D bit 7 */
+#define sp_aa           e_cols  /* $AA copy */
+#define sp_b1           e_prop  /* $B1 */
+#define SP_CB           0x2Eu   /* $CB (NTSC); the PAL ROM uses $2F */
+
+static void sp_adc(uint8_t v) {
+    uint16_t s = (uint16_t)sp_a + v + sp_c;
+
+    sp_a = (uint8_t)s;
+    sp_c = (uint8_t)(s >> 8);
 }
 
-static void ent_spawn(void) {
-    e_slot = river_slot_at_scanline(PLAYFIELD_SCANLINE);
-    if (river_flags[e_slot] & (RIVER_FLAG_ISLAND | RIVER_FLAG_BRIDGE)) {
+static void sp_sbc(uint8_t v) {
+    int16_t s = (int16_t)sp_a - v - (int16_t)(1u - sp_c);
+
+    sp_a = (uint8_t)s;
+    sp_c = (s >= 0) ? 1u : 0u;
+}
+
+/* $AC00-$AC8A: which object (sp_y, sp_b8) this attempt produces. */
+static void sp_choose(void) {
+    sp_b8 = 0;
+    if (rg_flags23 & 0x80u) {
+        sp_y = 0x0Eu;                       /* the bridge itself */
         return;
     }
-    e_r = river_right_x[e_slot];
-    e_l = river_left_x[e_slot];
-    if (e_r == 0u || (uint8_t)(e_r - e_l) < ENT_MIN_WATER) {
+    sp_y = 1u;
+    if (rg_rowcount != 0u) {
+        /* The odd 16-row slot: blank unless the level is high. */
+        sp_a = (uint8_t)(rg_level - 8u);
+        if (sp_a & 0x80u) {
+            return;
+        }
+        if (sp_a < 0x20u && (uint8_t)(sp_a << 3) < rg_lfsr_b) {
+            return;
+        }
+    } else {
+        sp_y = 0;
+        if ((uint8_t)(rg_countdown + rg_section_timer) >= 0x12u) {
+            return;                         /* just after a bridge */
+        }
+        sp_a = (rg_level < SP_CB) ? rg_level : SP_CB;
+        sp_a = (uint8_t)((uint8_t)(0x3Fu - sp_a) << 1);
+        if (sp_a >= rg_lfsr_b) {
+            /* Fuel instead of an enemy, ~half the time, rarer as the level
+             * rises. */
+            if (rg_lfsr_a & 0x40u) {
+                return;
+            }
+            sp_y = ENT_AUX_FUEL;
+            return;
+        }
+    }
+    sp_y = atari_spawn_types[rg_lfsr_b & 7u];
+    if (sp_y == 7u && rg_level < 5u) {
+        sp_y = 0x0Du;
+    }
+    if (sp_y == 0x0Cu && (rg_rowcount != 0u || rg_level < 3u)) {
+        sp_y = 8u;
+    }
+    if (sp_y == 0x0Du) {
+        sp_b8 = 5u;
+    }
+}
+
+/* $AC8C-$AD29: X offset in sp_a (before +$20 and the bank), and sp_left.
+ * May demote the object to a blank (sp_y = 1) when the river is too narrow. */
+static void sp_pick_x(void) {
+    sp_left = 0;
+    sp_b5 = rg_b5;
+    sp_aa = rg_lfsr_a;
+    if (rg_island_width != rg_margin) {
+        sp_b3 = (rg_island_width > rg_margin) ? rg_island_width : rg_margin;
+    } else {
+        sp_b3 = rg_island_width;
+        if (rg_level & 1u) {
+            /* Odd level, steady width: anywhere inside the channel. */
+            sp_a = sp_b8 ? 0x37u : 0x3Fu;
+            sp_b1 = (uint8_t)(sp_a - sp_b5);
+            sp_a = (uint8_t)((sp_aa & 0x3Fu) + sp_b5);
+            if (sp_a >= sp_b1) {
+                sp_a = sp_b1;
+            }
+            sp_a = (uint8_t)(sp_a + rg_phase);
+            if ((sp_aa & 0x80u) && sp_y != ENT_AUX_FUEL) {
+                sp_left = 1u;
+            }
+            return;
+        }
+    }
+
+    sp_island = rg_island_flags & 0x80u;
+    if ((sp_island ? 0x0Du : 0x0Eu) < sp_b3 && sp_y != 7u) {
+        sp_y = 1u;
         return;
+    }
+    if (rg_countdown == 1u) {
+        sp_b5 = (uint8_t)(sp_b5 + 2u);
+        sp_c = 1u;
+    } else {
+        sp_c = ((sp_island ? 0x0Au : 0x0Du) < sp_b3) ? 1u : 0u;
+    }
+    if (sp_c && sp_y == 0x0Du) {
+        sp_b8 = 0;
+        sp_y = 8u;
+    }
+
+    {
+        uint16_t t = (uint16_t)sp_b3 << 2;
+
+        sp_c = (uint8_t)((t >> 8) & 1u);
+        sp_a = (uint8_t)t;
+    }
+    if (sp_a != 0u && sp_island) {
+        sp_a ^= 0xFFu;
+        sp_adc(0x41u);
+        river_obj_v37 = sp_aa;
+        if (!(sp_aa & 0x80u)) {
+            goto ad1d;
+        }
+        sp_a ^= 0xFFu;
+        sp_adc(0x80u);
+        if (sp_a != 0u) {
+            goto ad14;
+        }
+    }
+    if (sp_aa & 0x80u) {
+        goto ad19;
+    }
+ad14:
+    sp_c = 1u;
+    sp_adc(sp_b5);
+    if (sp_a != 0u) {
+        return;
+    }
+ad19:
+    sp_a ^= 0xFFu;
+    sp_adc(0x81u);
+ad1d:
+    sp_c = (sp_y >= ENT_AUX_FUEL) ? 1u : 0u;
+    sp_sbc(8u);
+    sp_sbc(sp_b5);
+    if (sp_b8) {
+        sp_sbc(8u);
+    }
+    if (sp_y != ENT_AUX_FUEL) {
+        sp_left = 1u;
+    }
+}
+
+/* Called by the river generator after every raw row ($AB80). */
+void entities_row(void) BANKED {
+    if (player_disable) {
+        /* Test hook: the object-free river that tools/river_model.py models. */
+        river_obj_count = 0x0Bu;
+        return;
+    }
+    if (river_obj_count != 0x0Bu) {
+        if (sp_hold != 0u) {
+            sp_hold--;
+            return;
+        }
+        river_obj_count = 0x0Bu;
+    }
+    if (rg_rowcount & 0x0Fu) {
+        return;
+    }
+
+    sp_choose();
+    if (sp_y >= 2u && sp_y != 0x0Eu) {
+        sp_pick_x();
+    }
+
+    /* $AD37: the offset is relative to the left bank (held inside 0x18..0x28
+     * while the generator is pulling the banks back to the centre). */
+    sp_a = (uint8_t)(sp_a + 0x20u);
+    e_x = rg_left;
+    if (rg_margin_flag & 0x80u) {
+        if (e_x < 0x18u) {
+            e_x = 0x18u;
+        }
+        if (e_x >= 0x28u) {
+            e_x = 0x28u;
+        }
+    }
+    e_x = (uint8_t)(e_x + sp_a);
+
+    /* $AD5E: a few helicopters become the fast type-10 ones from level 13,
+     * one at a time. */
+    if (sp_y == 8u && rg_countdown < 0x0Eu && !(rg_lfsr_c & 0x70u) &&
+        rg_level >= 0x0Du) {
+        for (e_i = 0; e_i < MAX_ENTITIES; e_i++) {
+            if (ent_type[e_i] == 10u || ent_type[e_i] == 11u) {
+                break;
+            }
+        }
+        if (e_i == MAX_ENTITIES) {
+            sp_y = 10u;
+        }
+    }
+
+    /* $AD88: the generator avoids the object for BB60[type]+4 rows. */
+    sp_hold = (uint8_t)(atari_obj_yoff[sp_y] + 3u);
+    river_obj_count = 0;
+    river_obj_aux[0] = sp_y;
+    river_obj_x[0] = e_x;
+    river_obj_flags[0] = (sp_y == ENT_AUX_SHIP) ? 1u : (sp_y == 0x0Eu) ? 3u : 0u;
+
+    if (sp_y < 2u || sp_y == 0x0Eu) {
+        return;                             /* blank placeholder / bridge */
     }
     for (e_i = 0; e_i < MAX_ENTITIES; e_i++) {
         if (ent_type[e_i] == ENTITY_NONE) {
@@ -176,25 +389,16 @@ static void ent_spawn(void) {
     if (e_i == MAX_ENTITIES) {
         return;
     }
-
-    e_t = ent_random();
-    e_type = atari_spawn_types[e_t & 7u];
-    if (((e_t >> 3) & 3u) == 0u) {
-        e_type = ENT_AUX_FUEL;
-    } else if (e_type == 12u && hud_bridge < 3u) {
-        e_type = 8u;
-    } else if (e_type == 7u && hud_bridge < 5u) {
-        e_type = ENT_AUX_SHIP;
-    }
-    e_rows = ent_gfx_rows[e_type];
-    e_w = ent_width(e_type);
-
-    e_x = (uint8_t)(((uint16_t)ent_random() *
-                     (uint8_t)(e_r - e_l - 2u * 10u - e_w)) >> 8);
-    ent_type[e_i] = e_type;
-    ent_x[e_i] = (uint8_t)(e_l + SOURCE_X_OFFSET + 10u + e_x);
-    ent_y[e_i] = (uint8_t)(PLAYFIELD_SCANLINE - e_rows);
-    ent_flags[e_i] = (ent_random() & 1u);
+    sp_slot = e_i;
+    e_rows = ent_gfx_rows[sp_y];
+    ent_type[e_i] = sp_y;
+    ent_x[e_i] = e_x;
+    /* The object sits just above the newest generated row (scanline
+     * PLAYFIELD_SCANLINE + owed - 9); entities_update() adds this pass's
+     * scroll to it again, so take it off here. */
+    ent_y[e_i] = (uint8_t)(PLAYFIELD_SCANLINE + river_owed - 10u - e_rows -
+                           river_scrolled);
+    ent_flags[e_i] = (uint8_t)(ENT_F_LATCH | (sp_left ? ENT_F_LEFT : 0u));
     ent_aux[e_i] = 0;
     entity_count++;
 }
@@ -249,43 +453,77 @@ uint8_t entities_check_player(uint8_t px, uint8_t py) BANKED {
     return ENT_HIT_NONE;
 }
 
+/* Atari status bit 0 (set by the DLI from the P3/playfield collision): the
+ * object overlaps a bank or island outline. */
+static uint8_t ent_touching(void) {
+    e_slot = river_slot_at_scanline((uint8_t)(ent_y[e_i] + (e_rows >> 1)));
+    e_r = river_right_x[e_slot];
+    if (e_r == 0u) {
+        return 0;
+    }
+    e_l = river_left_x[e_slot];
+    e_px = (uint8_t)(ent_x[e_i] - SOURCE_X_OFFSET);
+    if (e_px <= (uint8_t)(e_l + 2u) || (uint8_t)(e_px + e_w + 2u) >= e_r) {
+        return 1;
+    }
+    if ((river_flags[e_slot] & RIVER_FLAG_ISLAND) &&
+        river_island_left_x[e_slot] < river_island_right_x[e_slot] &&
+        e_px < (uint8_t)(river_island_right_x[e_slot] + 2u) &&
+        (uint8_t)(e_px + e_w + 2u) > river_island_left_x[e_slot]) {
+        return 1;
+    }
+    return 0;
+}
+
+static uint8_t ent_cur;         /* frame counter value of the tick being run */
+
+/* One frame of the Atari patrol pass ($A271-$A2EA) for entity e_i. */
 static void ent_move(void) {
     e_type = ent_type[e_i];
-    if (e_type == ENT_AUX_FUEL) {
-        return;
+    if (e_type >= 14u || rg_level < 2u) {
+        return;                 /* fuel/bridge never move; level 1 is static */
     }
     e_rows = ent_gfx_rows[e_type];
     e_w = ent_width(e_type);
-    /* Ships crawl, helicopters walk, the jet flies two pixels a frame. */
-    ent_aux[e_i]++;
-    if (e_type == ENT_AUX_SHIP && (ent_aux[e_i] & 1u)) {
-        return;
+    if (e_type != ENT_AUX_JET) {
+        /* The big helicopter moves a quarter of the frames, everything else
+         * on alternate frames (slot parity against the frame counter), and
+         * only once the wake-up lottery has picked it. */
+        if ((e_type == 12u && (ent_cur & 2u)) || ((e_i ^ ent_cur) & 1u) ||
+            !(ent_flags[e_i] & ENT_F_AWAKE)) {
+            return;
+        }
+        if (ent_touching()) {
+            /* Turn round once per contact; a new object starts latched. */
+            if (!(ent_flags[e_i] & ENT_F_LATCH)) {
+                ent_flags[e_i] ^= ENT_F_LEFT;
+                ent_flags[e_i] |= ENT_F_LATCH;
+            }
+        } else {
+            ent_flags[e_i] &= (uint8_t)~ENT_F_LATCH;
+        }
     }
-    e_px = (e_type == ENT_AUX_JET) ? 2u : 1u;
-    if (ent_flags[e_i] & 1u) {
-        ent_x[e_i] = (uint8_t)(ent_x[e_i] - e_px);
-    } else {
-        ent_x[e_i] = (uint8_t)(ent_x[e_i] + e_px);
-    }
-    if (e_type == ENT_AUX_JET) {
-        /* Crossing jets wrap at the Atari patrol limits $2C..$D4. */
-        if (ent_x[e_i] >= 0xD4u) {
-            ent_x[e_i] = (uint8_t)(0x2Cu + (ent_x[e_i] - 0xD4u));
-        } else if (ent_x[e_i] < 0x2Cu) {
+    /* Walk one pixel; everything wraps at the patrol limits $2C..$D4. */
+    if (ent_flags[e_i] & ENT_F_LEFT) {
+        if (--ent_x[e_i] < 0x2Cu) {
             ent_x[e_i] = 0xD4u;
         }
-        return;
+    } else if (++ent_x[e_i] >= 0xD5u) {
+        ent_x[e_i] = 0x2Cu;
     }
-    /* Banks move at most a pixel per row, so checking every 4th tick is enough. */
-    if (!(ent_aux[e_i] & 3u) && ent_bounds()) {
-        e_x = ent_x[e_i];
-        if (e_x <= (uint8_t)(e_l + 2u)) {
-            ent_x[e_i] = (uint8_t)(e_l + 3u);
-            ent_flags[e_i] &= 0xFEu;
-        } else if ((uint8_t)(e_x + e_w + 2u) >= e_r) {
-            ent_x[e_i] = (uint8_t)(e_r - e_w - 3u);
-            ent_flags[e_i] |= 1u;
-        }
+}
+
+/* $A1FF-$A219: every 16 frames a random slot (0..10, the upper ones twice as
+ * likely) is allowed to start patrolling.  Until then it stands still, which
+ * is why some of the early helicopters never move. */
+static void ent_wake(void) {
+    e_t = (uint8_t)(ent_random() & 0x0Fu);
+    if (e_t >= 11u) {
+        e_t = (uint8_t)(e_t - 5u);
+    }
+    if (e_t < MAX_ENTITIES && ent_type[e_t] >= ENT_AUX_JET &&
+        !(river_obj_count == 0u && e_t == sp_slot)) {
+        ent_flags[e_t] |= ENT_F_AWAKE;
     }
 }
 
@@ -297,6 +535,16 @@ static uint8_t e_dx;
  * offset e_off, stopping at the entity sprite budget.  Hand-written: the C
  * version took ~190 cycles per sprite, this ~45. */
 static void ent_emit_row(void) {
+#ifndef __SDCC
+    /* Host build (tests/host/spawn_main.c): same thing in C. */
+    for (e_n = e_cols; e_n != 0u && e_off < 176u; e_n--, e_off = (uint8_t)(e_off + 4u)) {
+        shadow_OAM[e_off >> 2].y = e_y;
+        shadow_OAM[e_off >> 2].tile = e_tile++;
+        shadow_OAM[e_off >> 2].attr = e_prop;
+        shadow_OAM[e_off >> 2].x = e_px;
+        e_px = (uint8_t)(e_px + e_dx);
+    }
+#else
     __asm
         ldx     _e_off
         ldy     _e_cols
@@ -324,6 +572,7 @@ static void ent_emit_row(void) {
     2$:
         stx     _e_off
     __endasm;
+#endif
 }
 static void ent_draw(void) {
     e_type = ent_type[e_i];
@@ -376,14 +625,15 @@ static void ent_draw(void) {
         return;
     }
 
-    e_px = river_scrolled;
     e_oam = ENT_OAM_FIRST;
     ent_anim = (uint8_t)(ent_anim + game_ticks);
 
-    ent_spawn_acc = (uint8_t)(ent_spawn_acc + e_px);
-    if (ent_spawn_acc >= ENT_SPAWN_PIXELS) {
-        ent_spawn_acc = 0;
-        ent_spawn();
+    if (!river_freeze) {
+        ent_wake_acc = (uint8_t)(ent_wake_acc + game_ticks);
+        while (ent_wake_acc >= 16u) {
+            ent_wake_acc = (uint8_t)(ent_wake_acc - 16u);
+            ent_wake();
+        }
     }
 
     for (e_i = 0; e_i < MAX_ENTITIES; e_i++) {
@@ -413,6 +663,7 @@ static void ent_draw(void) {
              * speed; the world stands still while the river is frozen. */
             if (!river_freeze) {
                 for (e_n = 0; e_n < game_ticks; e_n++) {
+                    ent_cur = (uint8_t)(ent_frame + e_n);
                     ent_move();
                 }
             }
@@ -424,6 +675,8 @@ static void ent_draw(void) {
         }
         ent_draw();
     }
+
+    ent_frame = (uint8_t)(ent_frame + game_ticks);
 
     /* Hide sprites freed since the last frame. */
     while (ent_oam_used > e_oam) {

@@ -45,6 +45,13 @@ extern uint8_t river_obj_x[1];
 extern uint8_t river_obj_flags[1];
 extern uint8_t river_obj_v37;
 
+/* Generator state read by the object spawner (Atari zero-page names in
+ * river.c) and the number of scrolled rows the generator still owes. */
+extern uint8_t rg_left, rg_phase, rg_rowcount, rg_island_flags, rg_countdown;
+extern uint8_t rg_island_width, rg_margin, rg_margin_flag, rg_level;
+extern uint8_t rg_section_timer, rg_flags23, rg_lfsr_a, rg_lfsr_b, rg_lfsr_c, rg_b5;
+extern uint8_t river_owed;
+
 /* Number of tile rows generated so far (also the demo scroll distance). */
 extern uint16_t river_distance;
 
@@ -55,6 +62,14 @@ extern uint8_t river_freeze;
 /* Throttle set by the player: 0 = slow (0.5 px/frame), 1 = cruise (1 px/frame),
  * 2 = fast (2 rows per frame). */
 extern uint8_t river_speed;
+
+/* Actual scroll velocity in 1/32 row per frame.  It eases toward the
+ * throttle's target at RIVER_ACCEL per frame; reset it to cruise on restart. */
+#define RIVER_VEL_SLOW      16u
+#define RIVER_VEL_CRUISE    32u
+#define RIVER_VEL_FAST      64u
+#define RIVER_ACCEL         1u
+extern uint8_t river_vel;
 
 /* Pixels (raw rows) the playfield advanced in the last river_update(): 0..2. */
 extern uint8_t river_scrolled;

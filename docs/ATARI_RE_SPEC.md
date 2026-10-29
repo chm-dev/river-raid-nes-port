@@ -634,6 +634,32 @@ shows every aux with its real colours.
 * The plan's expected 80/500 point awards still need a dynamic confirmation;
   the table above is the authoritative in-ROM data.
 
+### 7.5 Spawner and patrol (verified on a live trace, 2026-10-29)
+
+`$AB80-$AE96` runs after every generated row; `tools/object_model.py` is a
+line-for-line Python translation validated by `tools/object_validate.py`.
+
+* `$32` counts down the rows a freshly placed object is "under construction"
+  (`BB60[type]+4`); the generator's bank clamp reads slot `$4E`'s aux/X/size
+  while it is.  A new attempt happens only when `$4E == 11` and
+  `$2F & $0F == 0`.
+* Type choice: `$2F != 0` rows give blanks (type 1) below level 8, and real
+  objects above it with probability `(level-8)*8/256`; `$2F == 0` rows give
+  nothing when `$5D+$5A >= $12`, a real object when
+  `2*(63-min(level,$CB)) < $AB`, else fuel unless `$AA` bit 6.  Real objects
+  use `BB1C[$AB & 7]`: type 7 needs level >= 5 (else ship), type $C needs
+  `$2F == 0` and level >= 3 (else helicopter 8), ship sets `$B8 = 5`.
+* X = `$52` (held to `$18..$28` when `$052D` bit 7) + `$20` + offset; the
+  offset has an odd-level shortcut when `$5F == $2C`, and an island branch
+  that sets `$37` (= `$AA`) for the clamp.  Status bit 3 (left) comes from
+  `$AA` bit 7; bit 4 starts set (turn latch).
+* Patrol (`$A271`): needs level >= 2; jets (7) always move; everything else
+  needs status bit 6 (set by the wake lottery every 16 frames on a random
+  slot `RANDOM & 15`, `-5` if `>= 11`), `(slot ^ $B1) & 1 == 0` (`$B1 =
+  $18 ^ $33`, i.e. alternate frames) and, for type $C, `$18 & 2 == 0`.
+  Status bit 0 is the DLI's P3/PF1 collision (bank outline): on contact it
+  flips bit 3 once (bit 4 latch), otherwise it clears the latch.  X wraps at
+  `$2C/$D4`.
 ## 8. HUD
 
 The HUD is three mode-6 rows of **20 characters** (ANTIC mode 6 fetches 20

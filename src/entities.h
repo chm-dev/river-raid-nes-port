@@ -14,7 +14,7 @@
 #include <nes/nes.h>
 #include <stdint.h>
 
-#define MAX_ENTITIES            8u
+#define MAX_ENTITIES            11u     /* the Atari has 11 object slots */
 #define ENTITY_NONE             0u
 
 #define ENT_AUX_EXPLODE_FIRST   2u
@@ -24,7 +24,12 @@
 #define ENT_AUX_FUEL            15u
 
 /* Slot arrays.  type is the aux shape index (ENTITY_NONE = free); flags bit 0
- * = moving left; aux is a move / animation timer. */
+ * = moving left (Atari status bit 3), bit 1 = awake (bit 6: has been picked
+ * by the wake-up lottery), bit 2 = turn latch (bit 4); aux is an animation
+ * timer. */
+#define ENT_F_LEFT              0x01u
+#define ENT_F_AWAKE             0x02u
+#define ENT_F_LATCH             0x04u
 extern uint8_t ent_type[MAX_ENTITIES];
 extern uint8_t ent_x[MAX_ENTITIES];
 extern uint8_t ent_y[MAX_ENTITIES];
@@ -43,8 +48,12 @@ void entities_init(void) BANKED;
  * Call with the display off. */
 void entities_init_graphics(void) BANKED;
 
-/* Scroll with the river, patrol, spawn, animate and draw. */
+/* Scroll with the river, patrol, animate and draw. */
 void entities_update(void) BANKED;
+
+/* The Atari spawn block ($AB80-$AE96), called by the river generator after
+ * each raw row it renders (see river.c). */
+void entities_row(void) BANKED;
 
 /* Sprite tile of an aux shape (first tile) and of the player shot. */
 uint8_t entities_tile(uint8_t aux) BANKED;

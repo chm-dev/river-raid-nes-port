@@ -838,3 +838,51 @@ AltirraBridge: reuse the live server token explicitly when known, e.g.
   by at most `RIVER_MAX_OWED` rows (generator lead is 8).
 - `hud_update` refreshes one field per pass.  `player_invuln` test hook added.
   Makefile now builds the banked modules with `-Wf-bo1`.  RAM: 34 bytes free.
+
+### 2026-10-29 - Faithful object spawner and patrol (placement + moving helicopters)
+
+- **Symptom:** enemies/fuel were dropped at random every 56 scrolled rows with
+  random X; patrol ignored the Atari rules.
+- **What the Atari does ($AB80-$AE96, all verified on a live trace):**
+  - Objects are placed *by the river generator*, every 16th row
+    (`$2F & $F == 0`), from its own state: level `$60`, LFSR `$AA-$AC`, width
+    `$5F/$2C`, island flag `$2D`, bridge flag `$23`.  `$2F == 0` rows may give
+    fuel (`2*(63-min(level,$2E)) >= $AB` fails, and `$AA` bit 6 clear: ~half
+    the rest of the time, rarer as levels rise); `$2F == $10` rows are blank
+    placeholders (type 1) below level 8.  Type 12 only at level >= 3 on
+    `$2F == 0` rows, jets (7) from level 5, ships (13) otherwise.
+  - X is derived from the left bank (`$52`), `$54`, island/width state and
+    `$B5`; the object is built for `BB60[type]+4` rows during which nothing
+    else spawns and the bank clamp steers around it (`river_obj_*`, which
+    were previously stubbed off).  Blank/"nothing" objects (types 0/1) still
+    hold the spawner (27 / 9 rows), which is what gives the 16/32-row rhythm.
+  - **Patrol ($A271-$A2EA):** nothing moves while `$60 < 2`; every 16 frames a
+    random slot (0..10, upper slots twice as likely) is *woken* (`status` bit
+    6) - until then an object stands still, so some helicopters never move in
+    the early levels on the Atari as well.  Awake objects move 1 px on
+    alternate frames (slot parity vs frame counter; the big helicopter every
+    4th frame), turn when they touch a bank/island outline (one flip per
+    contact, new objects start latched), and wrap at `$2C..$D4`.  Only jets
+    (7) fly every frame.  The old port moved helicopters 2x too fast and jets
+    2x too fast, all unconditionally.
+- **Port:** `entities_row()` (entities.c, bank 1) is the `$AB80` block and is
+  called by `river_generate_raw_row()` after each row; the generator state it
+  reads is exported from river.c (`rg_*`, `river_owed`).  Entities spawn just
+  above the newest generated row.  `MAX_ENTITIES` is 11 (Atari slots), wake
+  and patrol use `game_ticks`, so they stay time-based.  `player_disable`
+  (test hook) also silences the spawner so the object-free golden river still
+  applies; `tests/nes_river.mjs` now sets it before generator row 16.
+- **Validation:** `tools/atari_object_trace.py` captures zero page + object
+  arrays at `$AB80` with objects enabled; `tools/object_model.py` is the
+  Python translation and `tools/object_validate.py` replays traces through it
+  (level 1: 1196 transitions, 54 spawns, only death resets differ).
+  `tools/object_host_check.py` feeds the same Atari states to the real C
+  spawner (host build via `tests/host/spawn_main.c`, needs zig) and compares
+  with the model (0 mismatches over levels 1/15/24: 2,539 states, 116 spawns;
+  run it after touching `entities.c` spawner code).  An end-to-end NES-vs-Atari
+  sequence compare is not possible: the trace starts mid-run at a different
+  generator offset.
+- **Not ported:** the `$AD9D-$AE92` shot/sound side effects, the 11-slot
+  shift/eviction (slots are freed when the object scrolls off), bridge object
+  `$0E` (the spawner builds it for timing but no entity yet).
+- RAM: 13 bytes free (was 34); 11 entity slots cost 15 bytes.

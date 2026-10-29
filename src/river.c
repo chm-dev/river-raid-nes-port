@@ -24,6 +24,7 @@
 #include "atari_data.h"
 #include "hud.h"
 #include "river.h"
+#include "entities.h"
 #include "river_lut.h"
 
 #define static /* PROF */
@@ -52,23 +53,25 @@ static uint8_t river_alloc;
 /* Generator state ($52-$60, $AA-$AC, $B4-$BE, $C3-$C9)                      */
 /* ------------------------------------------------------------------------- */
 
-static uint8_t rg_left;           /* $52 */
+/* The ones the object spawner (entities.c, $AB80-$AE96) reads are exported
+ * through river.h. */
+uint8_t rg_left;                  /* $52 */
 static uint8_t rg_width;          /* $53 */
-static uint8_t rg_phase;          /* $54 */
-static uint8_t rg_rowcount;       /* $2F */
-static uint8_t rg_island_flags;   /* $2D */
+uint8_t rg_phase;                 /* $54 */
+uint8_t rg_rowcount;              /* $2F */
+uint8_t rg_island_flags;          /* $2D */
 static uint8_t rg_feature;        /* $36 */
-static uint8_t rg_section_timer;  /* $5A */
-static uint8_t rg_countdown;      /* $5D */
-static uint8_t rg_island_width;   /* $5F */
-static uint8_t rg_margin;         /* $2C */
-static uint8_t rg_margin_flag;    /* $052D */
-static uint8_t rg_level;          /* $60 */
-static uint8_t rg_flags23;        /* $23 */
-static uint8_t rg_lfsr_a;         /* $AA */
-static uint8_t rg_lfsr_b;         /* $AB */
-static uint8_t rg_lfsr_c;         /* $AC */
-static uint8_t rg_b5;             /* $B5 */
+uint8_t rg_section_timer;         /* $5A */
+uint8_t rg_countdown;             /* $5D */
+uint8_t rg_island_width;          /* $5F */
+uint8_t rg_margin;                /* $2C */
+uint8_t rg_margin_flag;           /* $052D */
+uint8_t rg_level;                 /* $60 */
+uint8_t rg_flags23;               /* $23 */
+uint8_t rg_lfsr_a;                /* $AA */
+uint8_t rg_lfsr_b;                /* $AB */
+uint8_t rg_lfsr_c;                /* $AC */
+uint8_t rg_b5;                    /* $B5 */
 static uint8_t rg_c3, rg_c4, rg_c5, rg_c8, rg_c9;
 static uint8_t rg_bd, rg_bc, rg_be; /* feature type / width / length */
 static uint16_t rg_tpl_off;       /* offset into atari_river_templates */
@@ -125,11 +128,16 @@ uint16_t river_distance;
 uint8_t river_freeze;
 uint8_t river_speed = 1u;
 uint8_t river_scrolled;
-/* Half-row accumulator and rows scrolled but not yet generated (see
+/* Current scroll velocity in 1/32 row per frame; it ramps toward the target
+ * set by river_speed at RIVER_ACCEL units per frame. */
+uint8_t river_vel = RIVER_VEL_CRUISE;
+/* Sub-row accumulator (0..31) and rows scrolled but not yet generated (see
  * river_update).  The generator is 8 rows ahead of the display, so up to
  * RIVER_MAX_OWED rows may be outstanding without exposing a stale row. */
 static uint8_t river_acc;
-static uint8_t river_owed;
+static uint16_t ru_sum;
+static uint8_t ru_target;
+uint8_t river_owed;
 #define RIVER_MAX_OWED      4u
 #define RIVER_GEN_PER_PASS  2u
 
@@ -1256,6 +1264,12 @@ static void river_generate_raw_row(void) {
 
     river_step_state();
 
+    /* $AB80: the object spawner runs right after the row renderer.  It only
+     * has work while an object is being built or every 16th row. */
+    if (river_obj_count != 0x0Bu || !(rg_rowcount & 0x0Fu)) {
+        entities_row();
+    }
+
     /* The Atari playfield is stored bottom-up relative to its display:
      * raw row 7 is the top scanline of the NES tile.  Reversing the row
      * order here inverts the whole playfield (trees included). */
@@ -1395,6 +1409,7 @@ void river_init(void) {
     river_live = 0;
     river_owed = 0;
     river_acc = 0;
+    river_vel = RIVER_VEL_CRUISE;
     river_black_rows = RIVER_RING_ROWS;
     memset(river_col_kind, 3, sizeof(river_col_kind));
     hud_set_playfield_scroll(0);
@@ -1433,8 +1448,9 @@ void river_update(void) {
         river_run_job();
     }
 
-    /* Scroll in time, not in passes.  Throttle in rows per frame: slow = 0.5,
-     * cruise = 1, fast = 2 (half-rows accumulate in river_acc).  Each scrolled
+    /* Scroll in time, not in passes.  The jet accelerates and decelerates
+     * toward the throttle's target (slow = 0.5 rows/frame, cruise = 1,
+     * fast = 2) instead of jumping; fractions accumulate in river_acc.  Each scrolled
      * row is "owed" one generated row; the generator runs up to
      * RIVER_GEN_PER_PASS rows per pass and only while no tile row is waiting
      * for classification, so a slow frame delays generation, never the
@@ -1442,12 +1458,20 @@ void river_update(void) {
      * slack river_owed may use. */
     river_scrolled = 0;
     if (!river_freeze) {
-        ru_rows = (uint8_t)(game_ticks *
-                            ((river_speed == 0u) ? 1u :
-                             (river_speed == 1u) ? 2u : 4u));
-        river_acc = (uint8_t)(river_acc + ru_rows);
-        ru_rows = (uint8_t)(river_acc >> 1);
-        river_acc &= 1u;
+        ru_target = (river_speed == 0u) ? RIVER_VEL_SLOW :
+                    (river_speed == 1u) ? RIVER_VEL_CRUISE : RIVER_VEL_FAST;
+        for (ru_rows = 0; ru_rows < game_ticks; ru_rows++) {
+            if (river_vel < ru_target) {
+                river_vel = (ru_target - river_vel > RIVER_ACCEL)
+                    ? (uint8_t)(river_vel + RIVER_ACCEL) : ru_target;
+            } else if (river_vel > ru_target) {
+                river_vel = (river_vel - ru_target > RIVER_ACCEL)
+                    ? (uint8_t)(river_vel - RIVER_ACCEL) : ru_target;
+            }
+        }
+        ru_sum = (uint16_t)river_acc + (uint16_t)river_vel * game_ticks;
+        ru_rows = (uint8_t)(ru_sum >> 5);
+        river_acc = (uint8_t)(ru_sum & 31u);
         if (ru_rows > (uint8_t)(RIVER_MAX_OWED - river_owed)) {
             ru_rows = (uint8_t)(RIVER_MAX_OWED - river_owed);
         }

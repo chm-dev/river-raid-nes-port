@@ -98,6 +98,7 @@ void player_init(void) BANKED {
     player_fuel_tick = 0;
     player_prev_pad = 0;
     river_speed = 1u;
+    river_vel = RIVER_VEL_CRUISE;
 }
 
 static void player_load_shape(uint8_t first_tile, uint8_t shape) {
@@ -266,6 +267,7 @@ static void player_respawn(void) {
     hud_fuel = 255u;
     player_fuel_tick = 0;
     river_speed = 1u;
+    river_vel = RIVER_VEL_CRUISE;
     river_freeze = 1u;
     player_state = PLAYER_STATE_READY;
 }
@@ -273,6 +275,7 @@ static void player_respawn(void) {
 void player_update(void) BANKED {
     if (player_disable) {
         river_speed = 1u;       /* tests expect 1 px/frame */
+        river_vel = RIVER_VEL_CRUISE;
         if (player.alive) {
             player.alive = 0;
             hide_sprite(PLAYER_SPRITE_TOP);

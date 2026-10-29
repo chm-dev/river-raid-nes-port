@@ -70,7 +70,13 @@ async function main() {
     } catch {
         /* already running */
     }
-    await sleep(1400);
+    // The object spawner steers the generator's banks, and the golden stream
+    // is object-free, so freeze it (player_disable) before its first attempt
+    // at generator row 16 (~8 boot rows + 1 row/frame).  crt0 clears RAM, so
+    // wait a few frames first.
+    await sleep(120);
+    await writeBytes(requireSymbol(sym, 'player_disable'), [1]);
+    await sleep(1280);
     await callTool('mesen_playback', { action: 'pause' });
     await sleep(100);
 
