@@ -210,6 +210,23 @@ a.config("debugbrkrun", "true")   # break at EXE run address
 - Games may use only 256x240 of the 320x240 display; crop or inspect the
   display list if exact geometry matters.
 
+### River-row capture and display order
+
+- Break at `$AB80`, the first instruction after the row renderer.  Dump zero
+  page, the object arrays, and the row at the LMS operand `$3F04/$3F05`.
+  Clear the breakpoint before stepping off the same PC.
+- Rows are captured in **generation order (oldest first)**, but the live
+  screen shows the **newest row at the top** and scrolls down.  A
+  top-to-bottom render of `river_rows_157.bin` is therefore vertically
+  inverted relative to gameplay.
+- A tree is a template fragment: `$BC` bytes wide (4*$BC px), `$BE` rows
+  tall, copied one `$BC`-byte row per scanline.  It can start on an odd byte.
+  The captured rows 11..32 are a 32-px x 22-row feature (`$BC=8`, offset 4,
+  template `$BD12`), with template rows 21..0 matching the capture.
+- `tools/river_model.py` is the validated generator reference;
+  `tools/atari_river_trace.py` captures the per-row trace;
+  `tools/river_validate.py` compares model state and rows against it.
+
 ## Altirra GUI (manual inspection)
 
 - Launch: `F:\Emu\Atari800\Altirra\Altirra64.exe`

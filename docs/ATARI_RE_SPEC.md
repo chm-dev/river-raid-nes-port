@@ -428,6 +428,13 @@ The river is a 160-row ring of 48-byte mode-E rows. The visible window is
 pointer backwards one row at a time; the newly exposed row is generated at
 the top of the ring.
 
+The live screen shows the **newest row at the top** and scrolls **downward**
+(the player flies up).  `river_rows_157.bin` is in generation order (oldest
+first), so a top-to-bottom render of that fixture is vertically inverted
+relative to gameplay.  The NES port matches the live orientation by placing
+raw row 7 at the top of each 8x8 tile and writing new tile rows just above
+the visible window.
+
 Per row, the generator maintains:
 
 | Variable | Meaning |
@@ -531,18 +538,35 @@ if LFSR bit 5 ($AC & $20):
     $BA/$BB = $BBF0 + $BC*2      ; 48-byte template pointer (first entry $BBF6)
 ```
 
-The `$BCxx` data is a continuous stream of 48-byte row fragments; the
-pointers at `$BBF6` select starting offsets (several overlap). `$B01A`
-copies `$BC` bytes from the selected offset over the water, then the
-generator continues with the banks. `$BBB2` widths, `$BBEB` lengths and
-`$BBF6` pointers are all emitted in `assets/atari/extracted/tables.json`.
+The `$BCxx` data is a stream of **template rows**, not 48-byte display
+rows.  For a feature of width `$BC` bytes and length `$BE` rows, `$B01A`
+copies `$BC` bytes per generated scanline and advances the template pointer
+by `$BC`.  The feature therefore occupies `4*$BC` pixels horizontally and
+`$BE` scanlines vertically; its left edge is at byte offset `$BD` plus the
+preceding fill, so it can start on an **odd byte** (4-pixel alignment, not
+8-pixel).  The pointers at `$BBF6` select starting offsets (several
+overlap).  `$BBB2` widths, `$BBEB` lengths and `$BBF6` pointers are all
+emitted in `assets/atari/extracted/tables.json`.
+
+Concrete example from `river_rows_157.bin`: the feature at rows 11..32 is
+`$BC=8` bytes (32 px), `$BE=22` rows, left byte offset 4, template pointer
+`$BD12`.  Template rows 21..0 match captured rows 11..32 exactly.  The
+11x19 red connected component at (16,12) is only the right-hand part of
+that 32-px-wide feature.
+
+Because a NES 8x8 tile contains 8 consecutive scanlines, the same tree
+produces different 8x8 fragments as its vertical phase changes.  A fixed
+tile atlas cannot reproduce it; the port uploads each visible 8x8 block
+verbatim (207-slot CHR cache) and packs raw row 7 at the top of the tile.
 
 ### 6.4 Rows reference
 
 `assets/atari/extracted/river_rows_157.bin` is the captured 157×48 ring
-from the gameplay frame; `river_reference.png` renders it with the Atari
-palette. `river_state.json` records the exact DL segments and generator
-state. These are the acceptance fixtures for Phase 4.
+from the gameplay frame, in generation order; `river_reference.png` renders
+it top-to-bottom with the Atari palette, so it is vertically inverted
+relative to the live screen (newest row at the top, downward scroll).
+`river_state.json` records the exact DL segments and generator state.
+These are the acceptance fixtures for Phase 4.
 
 ## 7. Objects
 

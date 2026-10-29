@@ -311,6 +311,29 @@ Memory notes:
 - `mesen_search_memory` searches hex patterns over the CPU view and caps the
   range at 1 MB; `maxResults` defaults to 50.
 
+### This project: playfield reconstruction
+
+- Vertical mirroring means NT0 is `NesNametableRam[0x000..0x3FF]` and NT1
+  (the river) is `NesNametableRam[0x400..0x7FF]`.
+- BG CHR is at `NesPpuMemory[0x0000..0x0FFF]` on this build.  `set_bkg_data`
+  de-interleaves GBDK's row-interleaved source into NES planar CHR.
+- Reconstruct the playfield with
+  `python tools/inspect_playfield.py <playfield_scroll_y>`: it reads
+  `build/nt1.bin`, `build/chr.bin` and `build/flip_check.png`.  With the
+  current split handler the playfield's top nametable coordinate is
+  `playfield_scroll_y`; before the fix it was `playfield_scroll_y + 36`.
+- **GBDK split quirk:** the deferred LCD ISR adds the current scanline to
+  `bkg_scroll_y` when it writes the entry.  The LCD handler must subtract
+  `HUD_SPLIT_SCANLINE` (mod 240) before `move_bkg()`, or the playfield is
+  36 px ahead of the ring and the newest row appears at the bottom.
+- **Test attachment quirk:** writing `river_freeze`/`playfield_scroll_y`
+  while paused can be overwritten by an in-flight `river_update` when the
+  CPU resumes.  Resume for ~100 ms, pause, then re-assert the value before
+  taking the screenshot.
+- Suites: `node tests/nes_smoke.mjs` (HUD/CHR/RAM), `node
+  tests/nes_scroll_hud.mjs` (split, 1-px shift, HUD), `node
+  tests/nes_river.mjs` (rows/state/collision).  All three pass.
+
 ## Results and screenshots
 
 - `mesen_take_screenshot` captures the current frame. With `outputFile` it writes

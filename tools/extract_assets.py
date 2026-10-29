@@ -67,9 +67,9 @@ FX_AUDF = 0xB4E1              # 4 entries (explosion / beep)
 FLASH_COLORS = 0xB4E5         # 20 entries, COLPF0 on bridge/flash rows
 SPAWN_X = 0xBFE4              # per-slot spawn X candidates
 BANK_PATTERNS = 0xB800        # 20 x 2-byte bank edge fragments
-RIVER_WIDTH_TABLE = 0xBBB2    # 22 entries
+RIVER_WIDTH_TABLE = 0xBBB2    # 22 nominal entries; read through 0xBBCB
 RIVER_TYPE_LFSR = 0xBBCC      # 8 entries (LFSR-selected feature types)
-RIVER_TYPE_MARGIN = 0xBBD4    # 23 entries (margin-selected feature types)
+RIVER_TYPE_MARGIN = 0xBBD4    # 23 nominal entries; the generator can read into $BBEB
 RIVER_TEMPLATE_LEN = 0xBBEB   # 11 entries, indexed by template width
 RIVER_TEMPLATE_PTR = 0xBBF6   # 8 x 16-bit pointers into $BCxx
 RIVER_TEMPLATE_DATA = 0xBC00
@@ -99,9 +99,9 @@ def extract_tables() -> dict:
         "spawn_x": list(rbytes(SPAWN_X, 16)),
         "bank_patterns_main": list(rbytes(BANK_PATTERNS, 16)),
         "bank_patterns_island": list(rbytes(BANK_PATTERNS + 16, 16)),
-        "river_width": list(rbytes(RIVER_WIDTH_TABLE, 22)),
+        "river_width": list(rbytes(RIVER_WIDTH_TABLE, 26)),
         "river_type_lfsr": list(rbytes(RIVER_TYPE_LFSR, 8)),
-        "river_type_margin": list(rbytes(RIVER_TYPE_MARGIN, 23)),
+        "river_type_margin": list(rbytes(RIVER_TYPE_MARGIN, 33)),
         "river_template_len": list(rbytes(RIVER_TEMPLATE_LEN, 11)),
         "river_template_ptrs": [
             rb(RIVER_TEMPLATE_PTR + i) | (rb(RIVER_TEMPLATE_PTR + i + 1) << 8)
@@ -312,9 +312,9 @@ def write_header(tables: dict) -> None:
         ("atari_flash_colors", c_array("atari_flash_colors", tables["flash_colors"], 20, "COLPF0 row flash colours."), 0),
         ("atari_bank_patterns", c_array("atari_bank_patterns", tables["bank_patterns_main"], 16, "Main river bank 2-byte fragments at $B800."), 0),
         ("atari_bank_patterns_island", c_array("atari_bank_patterns_island", tables["bank_patterns_island"], 16, "Island/fork bank fragments at $B810."), 0),
-        ("atari_river_widths", c_array("atari_river_widths", tables["river_width"], 22, "Template width by feature index ($BBB2)."), 0),
+        ("atari_river_widths", c_array("atari_river_widths", tables["river_width"], 26, "Template width by feature index ($BBB2); the tail is read by out-of-range $BC values."), 0),
         ("atari_river_type_lfsr", c_array("atari_river_type_lfsr", tables["river_type_lfsr"], 8, "Feature type by LFSR low bits ($BBCC)."), 0),
-        ("atari_river_type_margin", c_array("atari_river_type_margin", tables["river_type_margin"], 23, "Feature type by margin ($BBD4)."), 0),
+        ("atari_river_type_margin", c_array("atari_river_type_margin", tables["river_type_margin"], 33, "Feature type by margin ($BBD4); includes the bytes the original reads past the 23-entry table."), 0),
         ("atari_river_template_len", c_array("atari_river_template_len", tables["river_template_len"], 11, "Feature end row by template width ($BBEB)."), 0),
         ("atari_river_template_off", c_array16("atari_river_template_off", [p - 0xBC00 for p in tables["river_template_ptrs"]], 8, "Offsets into atari_river_templates[] ($BBF6 pointers)."), 1),
         ("atari_river_templates", c_array("atari_river_templates", tables["river_template_bytes"], 48, "Row-fragment stream at $BC00."), 0),

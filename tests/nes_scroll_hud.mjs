@@ -8,11 +8,11 @@
  *   node tests/nes_scroll_hud.mjs
  *
  * Verifies:
- *   - the playfield scroll advances one pixel per frame and the HUD stays
- *     fixed for 120+ frames,
- *   - the sprite-0 split lands exactly on scanline 24 with no seam,
- *   - a frozen scroll + scroll+1 pair shifts the whole playfield by exactly
- *     one pixel (A[y+1] == B[y]),
+ *   - the playfield scroll moves one pixel down per frame (playfield_scroll_y
+ *     decrements) and the HUD stays fixed for 120+ frames,
+ *   - the sprite-0 split lands exactly on scanline 36/37 with no seam,
+ *   - a frozen scroll + scroll+1 pair shifts the whole playfield up by
+ *     exactly one pixel (A[y+1] == B[y]),
  *   - the dynamic HUD fields (score, fuel, lives, bridge, icons) update.
  */
 import fs from 'node:fs';
@@ -37,12 +37,11 @@ const SHOT_A = path.resolve('build/scroll_a.png');
 const SHOT_B = path.resolve('build/scroll_b.png');
 const SHOT_HUD = path.resolve('build/hud_dynamic.png');
 
-const TILE_GAUGE_BL = 218;
-const TILE_GAUGE_B = 220;
-const TILE_GAUGE_BC = 222;
-const TILE_GAUGE_BR = 224;
-const TILE_DIGIT_YELLOW = 246;
-const GLYPH_0 = 80;
+const TILE_GAUGE_BL = 19;
+const TILE_GAUGE_B = 21;
+const TILE_GAUGE_BC = 23;
+const TILE_GAUGE_BR = 25;
+const TILE_DIGIT_BASE = 1;
 const HUD_FUEL_BAR_SLOT = 54;
 const HUD_FUEL_BAR_SLOT2 = 55;
 const HUD_LIFE_SLOT = 44;
@@ -111,6 +110,7 @@ async function main() {
     const symAddr = name => requireSymbol(sym, name);
 
     await init();
+    try { await callTool('mesen_playback', { action: 'resume' }); } catch { /* already running */ }
     await callTool('mesen_load_rom', { filepath: ROM });
     await sleep(900);
     await callTool('mesen_reset', { type: 'hard' });
@@ -143,8 +143,9 @@ async function main() {
     const split1 = await readU16(splitAddr);
 
     const frameDelta = frame1 - frame0;
-    const scrollDelta = (scroll1 - scroll0 + 240) % 240;
-    check('playfield scroll advances 1 pixel per frame',
+    // The river now scrolls down, so playfield_scroll_y decrements.
+    const scrollDelta = (scroll0 - scroll1 + 240) % 240;
+    check('playfield scroll moves 1 pixel down per frame',
         Math.abs(scrollDelta - frameDelta) <= 3,
         `frames=${frameDelta} scroll=${scrollDelta}`);
     check('sprite-0 split runs once per frame',
@@ -180,19 +181,31 @@ async function main() {
     await callTool('mesen_playback', { action: 'pause' });
     await sleep(150);
     await writeBytes(freezeAddr, [1]);
+
+    // Let the in-flight river_update finish before touching the scroll; it
+    // would otherwise commit its pre-freeze value over the test's write.
+    await callTool('mesen_playback', { action: 'resume' });
+    await sleep(100);
+    await callTool('mesen_playback', { action: 'pause' });
+    await sleep(100);
+
+    // Deterministic pair: apply the scroll, let the deferred split settle,
+    // re-assert it, then step one frame for the screenshot.
     await writeBytes(scrollAddr, [100]);
     await callTool('mesen_playback', { action: 'resume' });
-    await sleep(300);
+    await sleep(100);
     await callTool('mesen_playback', { action: 'pause' });
-    await sleep(150);
+    await sleep(100);
+    await writeBytes(scrollAddr, [100]);
     await callTool('mesen_step', { cpuType: 'Nes', count: 1, stepType: 'PpuFrame' });
     const a = await screenshot(SHOT_A);
 
     await writeBytes(scrollAddr, [101]);
     await callTool('mesen_playback', { action: 'resume' });
-    await sleep(300);
+    await sleep(100);
     await callTool('mesen_playback', { action: 'pause' });
-    await sleep(150);
+    await sleep(100);
+    await writeBytes(scrollAddr, [101]);
     await callTool('mesen_step', { cpuType: 'Nes', count: 1, stepType: 'PpuFrame' });
     const b = await screenshot(SHOT_B);
 
@@ -211,6 +224,8 @@ async function main() {
     let shiftDiff = 0;
     for (let y = 39; y < 239; y++) {
         for (let x = 0; x < 256; x++) {
+            // Raising the scroll by one moves the nametable image up one
+            // pixel, so B[y] equals A[y+1].
             const pa = a.pixel(x, y + 1);
             const pb = b.pixel(x, y);
             if (pa[0] === pb[0] && pa[1] === pb[1] && pa[2] === pb[2]) shifted++;
@@ -252,13 +267,13 @@ async function main() {
     const row3 = nt0.slice(96, 128);
 
     check('score digits update to 123456',
-        eq(row1.slice(11, 17), [1, 2, 3, 4, 5, 6].map(d => TILE_DIGIT_YELLOW + d)),
+        eq(row1.slice(11, 17), [1, 2, 3, 4, 5, 6].map(d => TILE_DIGIT_BASE + d)),
         hexArray(row1.slice(11, 17)));
     check('high score stays a single black 0',
-        eq(row1.slice(25, 31), [0, 0, 0, 0, 0, GLYPH_0]),
+        eq(row1.slice(25, 31), [0, 0, 0, 0, 0, TILE_DIGIT_BASE]),
         hexArray(row1.slice(25, 31)));
     check('bridge digit updates to 3',
-        row2[29] === 0 && row2[30] === TILE_DIGIT_YELLOW + 3,
+        row2[29] === 0 && row2[30] === TILE_DIGIT_BASE + 3,
         hexArray(row2.slice(29, 31)));
     check('game row keeps the gauge floor',
         eq(row3.slice(9, 19), [

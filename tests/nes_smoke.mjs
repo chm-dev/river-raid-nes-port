@@ -34,21 +34,22 @@ const ROM = path.resolve('roms/river_raid.nes');
 const NOI = path.resolve('roms/river_raid.noi');
 const SHOT = path.resolve('build/phase3_smoke.png');
 
-const TILE_LAND = 128;
-const TILE_GAUGE_TL = 210;
-const TILE_GAUGE_T = 212;
-const TILE_GAUGE_TC = 214;
-const TILE_GAUGE_TR = 216;
-const TILE_GAUGE_BL = 218;
-const TILE_GAUGE_B = 220;
-const TILE_GAUGE_BC = 222;
-const TILE_GAUGE_BR = 224;
-const TILE_P1_WIDE = 226;
-const TILE_HI_WIDE = 228;
-const TILE_BRIDGE_WIDE = 230;
-const TILE_GAME_WIDE = 238;
-const TILE_DIGIT_YELLOW = 246;
-const GLYPH_0 = 80;
+const TILE_LAND = 47;
+const TILE_WATER = 48;
+const TILE_GAUGE_TL = 11;
+const TILE_GAUGE_T = 13;
+const TILE_GAUGE_TC = 15;
+const TILE_GAUGE_TR = 17;
+const TILE_GAUGE_BL = 19;
+const TILE_GAUGE_B = 21;
+const TILE_GAUGE_BC = 23;
+const TILE_GAUGE_BR = 25;
+const TILE_P1_WIDE = 27;
+const TILE_HI_WIDE = 29;
+const TILE_BRIDGE_WIDE = 31;
+const TILE_GAME_WIDE = 39;
+const TILE_DIGIT_BASE = 1;
+const GLYPH_0 = 80;      // charset code, not a tile ID
 
 let failures = 0;
 
@@ -80,7 +81,7 @@ function textGlyphs(text) {
 }
 
 function digitTiles(text) {
-    return [...text].map(d => TILE_DIGIT_YELLOW + Number(d));
+    return [...text].map(d => TILE_DIGIT_BASE + Number(d));
 }
 
 async function main() {
@@ -109,6 +110,7 @@ async function main() {
     const symAddr = name => requireSymbol(sym, name);
 
     await init();
+    try { await callTool('mesen_playback', { action: 'resume' }); } catch { /* already running */ }
 
     await callTool('mesen_load_rom', { filepath: ROM });
     await sleep(900);
@@ -141,15 +143,13 @@ async function main() {
     // ---------------------------------------------------------------------
     // CHR-RAM
     // ---------------------------------------------------------------------
-    const glyphA = await readBytes(1 * 16, 16, 'NesChrRam');
-    check('white glyph A at tile 1',
-        eq(glyphA, [0x00, 0x18, 0x3c, 0x66, 0x66, 0x7e, 0x66, 0x00,
-                    0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00]),
-        hexArray(glyphA));
-
-    const landChr = await readBytes(TILE_LAND * 16, 16, 'NesChrRam');
+    const blankChr = await readBytes(0, 16, 'NesChrRam');
     const zeros = Array(8).fill(0x00);
     const ff = Array(8).fill(0xff);
+    check('blank/space tile 0 is empty', eq(blankChr, [...zeros, ...zeros]),
+        hexArray(blankChr));
+
+    const landChr = await readBytes(TILE_LAND * 16, 16, 'NesChrRam');
     check('river land tile is solid colour 1', eq(landChr, [...ff, ...zeros]),
         hexArray(landChr));
 
@@ -159,9 +159,10 @@ async function main() {
     check('gauge frame top rule is one pixel',
         eq(fillChr, gaugeTop), hexArray(fillChr));
 
-    const digit0Chr = await readBytes(TILE_DIGIT_YELLOW * 16, 16, 'NesChrRam');
-    check('yellow digit 0 is glyph 0 on plane 1, raised one pixel',
-        eq(digit0Chr, [...zeros, 0x3c, 0x66, 0x66, 0x66, 0x66, 0x3c, 0x00, 0x00]),
+    const digit0Chr = await readBytes(TILE_DIGIT_BASE * 16, 16, 'NesChrRam');
+    check('shared digit 0 is glyph 0 on plane 0',
+        eq(digit0Chr, [0x00, 0x3c, 0x66, 0x66, 0x66, 0x66, 0x3c, 0x00,
+                       ...zeros]),
         hexArray(digit0Chr));
 
     const playerChr = await readBytes(0x1000, 16, 'NesChrRam');
@@ -188,13 +189,13 @@ async function main() {
         eq(row1.slice(1, 3), [TILE_P1_WIDE, TILE_P1_WIDE + 1]),
         hexArray(row1.slice(1, 3)));
     check('row 1 score is a single yellow 0 (leading zeros blank)',
-        eq(row1.slice(11, 17), [SPACE, SPACE, SPACE, SPACE, SPACE, TILE_DIGIT_YELLOW]),
+        eq(row1.slice(11, 17), [SPACE, SPACE, SPACE, SPACE, SPACE, TILE_DIGIT_BASE]),
         hexArray(row1.slice(11, 17)));
     check('row 1 HI label (wide, aligned with BRIDGE)',
         eq(row1.slice(20, 22), [TILE_HI_WIDE, TILE_HI_WIDE + 1]),
         hexArray(row1.slice(20, 22)));
     check('row 1 high score is a single black 0',
-        eq(row1.slice(25, 31), [SPACE, SPACE, SPACE, SPACE, SPACE, GLYPH_0]),
+        eq(row1.slice(25, 31), [SPACE, SPACE, SPACE, SPACE, SPACE, TILE_DIGIT_BASE]),
         hexArray(row1.slice(25, 31)));
 
     check('row 2 GAME uses eight wide tiles',
@@ -212,10 +213,16 @@ async function main() {
         eq(row2.slice(20, 28), [...Array(8)].map((_, i) => TILE_BRIDGE_WIDE + i)),
         hexArray(row2.slice(20, 28)));
     check('row 2 bridge number 1',
-        row2[29] === SPACE && row2[30] === TILE_DIGIT_YELLOW + 1,
+        row2[29] === SPACE && row2[30] === TILE_DIGIT_BASE + 1,
         hexArray(row2.slice(29, 31)));
 
-    check('row 3 game number 1', row3[5] === GLYPH_0 + 1, `tile=${row3[5]}`);
+    check('row 3 game number 1', row3[5] === TILE_DIGIT_BASE + 1, `tile=${row3[5]}`);
+
+    const attr0 = await readBytes(0x23C0, 8, 'NesPpuMemory');
+    check('yellow digit quadrants use palette 1',
+        attr0[2] === 0x04 && attr0[3] === 0x05 && attr0[4] === 0x01 &&
+        attr0[7] === 0x50,
+        hexArray(attr0));
     check('row 3 gauge frame floor (4B 4C 4D 4C 4E)',
         eq(row3.slice(9, 19), [
             TILE_GAUGE_BL, TILE_GAUGE_BL + 1,
@@ -243,7 +250,7 @@ async function main() {
         riverRow.slice(26).every(v => v === TILE_LAND),
         hexArray(riverRow));
     check('playfield row 3 contains river tiles',
-        riverRow.slice(6, 26).every(v => v >= TILE_LAND && v <= 209) &&
+        riverRow.slice(6, 26).every(v => v >= TILE_LAND) &&
         riverRow.slice(6, 26).some(v => v !== TILE_LAND),
         hexArray(riverRow.slice(6, 26)));
 

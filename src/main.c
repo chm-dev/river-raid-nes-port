@@ -45,11 +45,17 @@ static void vbl_handler(void) {
 }
 
 static void lcd_handler(void) {
-    /* Playfield pass: nametable 1 and the absolute fine scroll.  The
-     * deferred entry is built from HUD_SPLIT_LYC, so add the difference to
-     * keep the requested scroll (GBDK's PPUADDR sets v). */
-    move_bkg(0, (uint8_t)(playfield_scroll_y +
-                          (HUD_SPLIT_SCANLINE - HUD_SPLIT_LYC)));
+    /* Playfield pass: nametable 1 and the fine scroll.  GBDK's deferred ISR
+     * adds the current scanline to bkg_scroll_y when it writes the entry
+     * (see write_shadow_registers_to_buffer), so subtract the split line
+     * here.  Without this the playfield is 36 px ahead of the ring: the
+     * newest row lands at the bottom instead of entering at the top. */
+    uint8_t sy = playfield_scroll_y;
+
+    sy = (sy >= HUD_SPLIT_SCANLINE)
+        ? (uint8_t)(sy - HUD_SPLIT_SCANLINE)
+        : (uint8_t)(sy + (240u - HUD_SPLIT_SCANLINE));
+    move_bkg(0, sy);
     shadow_PPUCTRL = (uint8_t)((shadow_PPUCTRL & 0xFCu) | PLAYFIELD_NT_BITS);
     LYC_REG = 0;
     split_events++;

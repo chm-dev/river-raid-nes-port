@@ -54,17 +54,25 @@
 /* Background tile allocation                                                */
 /* ------------------------------------------------------------------------- */
 /*
- * Tiles 0..127 are the extracted Atari 8x8 character set (glyph index ==
- * tile index).  128..209 hold the Phase 3 river demo tile set.  The HUD
- * uses 210..255 for its source-style artwork:
+ * Background tile allocation (256 BG slots, all of CHR-RAM):
  *
- *   210..225  gauge frame built from charset glyphs $47-$4E
+ *   0         blank / space glyph
+ *   1..10     digits 0..9 (plane 0 art, shared by black and yellow text;
+ *             the palette is selected per HUD attribute quadrant)
+ *   11..26    gauge frame built from charset glyphs $47-$4E
  *             (5 cells: top 47/48/49/48/4A, bottom 4B/4C/4D/4C/4E)
- *   226..227  wide "P1" label (two tiles)
- *   228..229  wide "HI" label (two tiles)
- *   230..237  wide "BRIDGE" label (four glyphs, two tiles each)
- *   238..245  wide "GAME" letters (16x8 px, two tiles per letter)
- *   246..255  yellow digits 0..9
+ *   27..28    wide "P1" label (two tiles)
+ *   29..30    wide "HI" label (two tiles)
+ *   31..38    wide "BRIDGE" label (four glyphs, two tiles each)
+ *   39..46    wide "GAME" letters (16x8 px, two tiles per letter)
+ *   47        solid land
+ *   48        solid water
+ *   49..255   exact river cache (207 slots)
+ *
+ * The river cache is filled at runtime: each visible 8x8 block is uploaded
+ * from the generated scanline data, so bank edges and trees are exact.  The
+ * 26 visible ring rows need at most 203 per-row slots (measured over 40k
+ * model rows), leaving four slots of headroom.
  *
  * The small labels are the supplied Atari 4-pixel-font glyphs (charset codes
  * $43-$46 "BRIDGE", $5A "P1", $5B "HI"), doubled horizontally exactly like
@@ -72,13 +80,9 @@
  * sprite overlays taken from the same charset ($47/$49/$4A/$4B/$4D/$4E/$5C).
  */
 
-#define TILE_FIRST_GLYPH        0u
-#define TILE_LAST_GLYPH         127u
-
-#define TILE_RIVER_BASE         128u
-#define TILE_RIVER_COUNT        82u     /* keep in sync with river_demo_data.h */
-
-#define TILE_GAUGE_BASE         210u    /* 16 tiles: 8 glyphs x 2 halves */
+#define TILE_BLANK              0u
+#define TILE_DIGIT_BASE         1u      /* 10 tiles: 1..10 */
+#define TILE_GAUGE_BASE         11u     /* 16 tiles: 8 glyphs x 2 halves */
 #define TILE_GAUGE_TL           (TILE_GAUGE_BASE + 0u)
 #define TILE_GAUGE_T            (TILE_GAUGE_BASE + 2u)
 #define TILE_GAUGE_TC           (TILE_GAUGE_BASE + 4u)
@@ -87,11 +91,15 @@
 #define TILE_GAUGE_B            (TILE_GAUGE_BASE + 10u)
 #define TILE_GAUGE_BC           (TILE_GAUGE_BASE + 12u)
 #define TILE_GAUGE_BR           (TILE_GAUGE_BASE + 14u)
-#define TILE_P1_WIDE            226u    /* 2 tiles */
-#define TILE_HI_WIDE            228u    /* 2 tiles */
-#define TILE_BRIDGE_WIDE        230u    /* 8 tiles: BR ID G E */
-#define TILE_GAME_WIDE          238u    /* 8 tiles: G A M E halves */
-#define TILE_DIGIT_YELLOW       246u    /* 10 tiles: 246..255 */
+#define TILE_P1_WIDE            27u     /* 2 tiles */
+#define TILE_HI_WIDE            29u     /* 2 tiles */
+#define TILE_BRIDGE_WIDE        31u     /* 8 tiles: BR ID G E */
+#define TILE_GAME_WIDE          39u     /* 8 tiles: G A M E halves */
+
+#define TILE_LAND               47u
+#define TILE_WATER              48u
+#define TILE_RIVER_BASE         49u
+#define TILE_RIVER_COUNT        207u    /* exact per-row river cache */
 
 /* Sprite tiles for the gauge overlay.
  *   8 = E, 9 = F, 10..13 = 16x14 "1/2", 14 + 16 = yellow level bar,

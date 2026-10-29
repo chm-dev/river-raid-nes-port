@@ -1,10 +1,11 @@
 # Project Progress & Session Handoff
 
-**Last updated:** 2026-10-28
-**Current phase:** Phase 3 — Top HUD, Scanline Split, & CHR Graphics
+**Last updated:** 2026-10-29
+**Current phase:** Phase 4 COMPLETE — Phase 5 (player, entities, collision) is next
 **Phase 1:** COMPLETE (reverse engineering + asset extraction)
 **Phase 2:** COMPLETE (scaffolding, build pipeline, boot ROM, Mesen smoke test)
 **Phase 3:** COMPLETE (HUD, deferred LCD split, playfield ring, 1-px scroll test)
+**Phase 4:** COMPLETE (validated generator, collision ring, exact per-tile cache, Atari orientation; all tests pass)
 
 > **New session:** read this file first, then `PORTING_PLAN.md` and
 > `docs/ATARI_RE_SPEC.md`. Keep **Current status** and **Next step** current;
@@ -19,6 +20,29 @@
   documented, and all sprites/tables/charset are extracted into C arrays.
 - Phase 2 is complete. `build.ps1` and `Makefile` produce a 32 KiB mapper-30
   ROM with CHR-RAM, the module stubs are wired into a `vsync()` loop.
+- Phase 4 is complete:
+  - `tools/river_model.py` is a validated Python translation of `$A6DE-$AB7E`.
+    It matches a 2,596-transition live Altirra trace (levels 1-3) for every
+    generator field and every 48-byte row (only unused `$B1/$B7` temps differ).
+  - `src/river.c` ports the full state machine: LFSR `$B183`, level/section
+    timers `$5A/$5D`, bank targets `$34/$35`, island flags/width `$2D/$5F`,
+    feature selection `$A96C-$A9D5`, and the `$AA7A-$AB7E` row renderer.
+  - The 30-row collision ring stores left/right bank X and island bounds in
+    source pixels, plus bridge/island/feature/flash flags.
+  - The NES renderer uploads each visible 8x8 block **verbatim** into a
+    207-slot CHR cache (tiles 49..255); solids use fixed land/water tiles.
+    There is no edge/tree atlas, so 1-px staircases and 32-px tree template
+    fragments are exact.
+  - Orientation matches the Atari: newest row at the top, playfield scrolls
+    down (`playfield_scroll_y` decrements), raw row 7 is the top scanline of
+    each NES tile, and new tile rows are written just above the visible
+    window.  The split handler subtracts `HUD_SPLIT_SCANLINE` because GBDK's
+    deferred ISR adds the current scanline to `bkg_scroll_y`.
+  - `tests/nes_river.mjs` compares the live C rows, state and collision ring
+    against 400 golden tile rows from `tools/river_model.py`: 397/397 sampled
+    rows match (the first 3 complete before the test attaches).
+  - `tests/nes_smoke.mjs` (50 checks) and `tests/nes_scroll_hud.mjs`
+    (14 checks) pass with the shared-digit CHR layout and downward scroll.
 - Phase 3 is complete:
   - The HUD is a 4-row content band (32 px) plus 4 px bottom padding; the
     playfield split is at scanline 36/37 (`LYC=35`).  Row 0 is blank top
@@ -50,18 +74,26 @@
     path, so river row streaming cannot delay or miss it.  The visible split
     lands on scanline 36/37; that one-line boundary jitter is inherent to
     GBDK's faked LCD delay (the odd/even PPU frame skip).
-  - `river_update()` advances the scroll one pixel per frame and streams one
-    32-tile row every 8 pixels into the hidden ring slot.
-  - The Phase 3 row source is the captured Atari river, converted to 19
-    tile rows / 82 distinct 8x8 tiles by `tools/gen_river_demo.py`. It loops
-    to fill the 30-row ring; Phase 4 replaces only the row source.
+  - `river_update()` moves the scroll one pixel **down** per frame and
+    writes one 32-tile row every 8 pixels just above the visible window.
+  - Each streamed tile row is built from 8 procedural Atari rows. Raw row 7
+    is the **top** scanline of the NES tile (Atari's stream is bottom-up
+    relative to the display). `river_debug_row` exposes the last raw row and
+    `river_debug_state` the generator state for the Mesen test.
+  - `river_init()` prefills the ring with a straight channel (not 30 full
+    procedural rows) so boot stays under one frame budget; the first
+    procedural tile row replaces it as soon as the scroll crosses 8 px.
+  - The old demo/atlas tile sources (`river_demo_data.*`, `river_atlas_data.*`,
+    `river_tileset_data.*`) and their generators are gone; the river uses the
+    exact 207-slot cache.
 - Build: `roms/river_raid.nes` is 32,784 bytes, mapper 30, 2 x 16 KiB PRG,
   CHR-RAM, vertical mirroring. RAM: `DATA $0300-$030F`,
-  `BSS $0310-$0528`, heap at `$0529`, 727 bytes free.
+  `BSS $0310-$079C`, heap at `$079D`, 99 bytes free.
 - Tests: `tests/nes_smoke.mjs` passes 50 checks; `tests/nes_scroll_hud.mjs`
-  passes 14 checks (120-frame scroll, stable split, exact 1-px shift, live
-  HUD fields, fuel marker and lives sprites).
-- No known blocker. Phase 4 (procedural river generator) is next.
+  passes 14 checks; `tests/nes_river.mjs` passes 3 checks (397/397 sampled
+  rows from the first observed state: exact rows, generator state and
+  collision ring).
+- No blocker. Phase 4 is complete; Phase 5 starts next.
 
 ## Completed — Phase 1 checklist
 
@@ -98,9 +130,10 @@
 
 ## Completed — Phase 3 checklist
 
-- [x] BG tile allocation: 0..127 charset, 128..209 river demo tiles,
-      210..225 gauge frame, 226..227 P1, 228..229 HI, 230..237 BRIDGE,
-      238..245 GAME, 246..255 yellow digits.
+- [x] BG tile allocation (Phase 3; superseded by the Phase 4 layout):
+      0..127 charset, 128..209 river demo tiles, 210..225 gauge frame,
+      226..227 P1, 228..229 HI, 230..237 BRIDGE, 238..245 GAME,
+      246..255 yellow digits.
 - [x] Palettes: HUD `00 0F 28 30` (gray/black/yellow/white); playfield
       `00 1A 06 12`; player sprite `00 28 30 16`.
 - [x] Source-faithful HUD: padding row, P1/score/HI/hi-score,
@@ -113,16 +146,59 @@
 - [x] Playfield ring in NT1 (`$2400`), attributes `0xAA` (palette 2).
 - [x] Deferred LCD split: VBL asks for LYC=35; the `add_LCD()` handler sets
       NT1 + the playfield scroll at scanline 36/37.
-- [x] `river_update()`: 1-pixel/frame scroll, 30-row ring, stream one row
-      every 8 pixels, `river_freeze` test hook.
-- [x] `tools/gen_river_demo.py` packs the captured 157-row river into
-      19 tile rows / 82 distinct tiles; `src/river_demo_data.{h,c}` are
-      generated.
+- [x] `river_update()`: 1-pixel/frame scroll (downward after the Phase 4
+      orientation fix), 30-row ring, stream one row every 8 pixels,
+      `river_freeze` test hook.
+- [x] `tools/gen_river_demo.py` packed the captured 157-row river into
+      19 tile rows / 82 distinct tiles (removed; superseded by the exact
+      cache).
 - [x] `tools/patch_nes_header.py` fixes GBDK's iNES byte 6 (vertical
       mirroring, not four-screen); wired into `build.ps1` and the Makefile.
 - [x] `tests/nes_smoke.mjs` updated to 50 Phase 3 checks.
 - [x] `tests/nes_scroll_hud.mjs` updated to 14 checks (split 36/37, sprite
       fuel marker and lives).
+
+## Completed / in progress — Phase 4 checklist
+
+- [x] Port the exact Atari LFSR (`$B183`), section/level timers, bank-target
+      movement, island/fork logic and feature template selection.
+- [x] Port the `$AA7A-$AB7E` row renderer and expose the 48-byte raw row.
+- [x] Build the 30-row collision ring (`river_left_x`, `river_right_x`,
+      `river_island_left_x`, `river_island_right_x`, `river_flags`).
+- [x] Extend `atari_river_widths`/`atari_river_type_margin` to cover the
+      original's out-of-range table reads at high levels.
+- [x] Validate the Python model against a 2,596-transition live Altirra trace
+      (all generator fields and rows; levels 1-3).
+- [x] Validate the C port against `tools/river_model.py` with
+      `tests/nes_river.mjs` (397/400 sampled tile rows, exact rows/state/
+      collision).
+- [x] Fix the SDCC local-alias bug in `river_render_row` by using a
+      file-scope saved offset (`rg_ysave`).
+- [x] Replace the demo tile source with a 51-tile procedural edge atlas
+      (solid land/water/AA, left/right edges x 8 phases x 3 slopes;
+      superseded by the exact cache below).
+- [x] Exact per-tile CHR cache for 1-px bank edges and trees.  Atari has no
+      river tile map: each scanline is a 48-byte bitmap and a tree is a
+      template fragment copied into consecutive rows.  The NES now uploads
+      each visible 8x8 block verbatim (see the 2026-10-29 cache log entry).
+- [x] Update the HUD/river test constants for the new CHR layout
+      (digits 1..10, HUD 11..46, land 47, water 48, cache 49..255).
+      `nes_smoke` and `nes_scroll_hud` pass; `nes_river` covers 397/397 rows
+      from the first observed state.
+- [x] Invert the playfield to the Atari orientation: raw row 7 at the top,
+      ring written above the visible window, `playfield_scroll_y`
+      decrements.  Subtracting `HUD_SPLIT_SCANLINE` in the split handler
+      removes the 36-px GBDK deferred-ISR offset that put the newest row at
+      the bottom.  `build/flip_fixed.png`.
+- [ ] Bridge/feature visual comparison against the Atari reference frames.
+- [x] Edge comparison (pre-cache baseline): `tools/compare_river_edges.py`
+      rendered the captured Atari rows exactly and again through the old
+      51-tile atlas classifier.  Result: 9.4% pixel mismatch over 152x160,
+      worst 40x40 crop 31%.  Atari has a continuous 2-px outline and 1-px
+      staircase; the atlas broke the outline and quantized slopes.  Images:
+      `build/river_edge_compare.png`, `build/river_edge_zoom.png`,
+      `build/river_atari_vs_nes_d155.png`.  Superseded by the exact cache;
+      keep the script for regression comparisons.
 
 ## Key artifacts
 
@@ -136,10 +212,18 @@
 | `assets/atari/extracted/README.md` | Asset file map + full HUD glyph inventory (`$43-$46`, `$47-$4E`, `$5A-$5C`, `$50-$59`, `$01-$1A`) and their uses |
 | `assets/atari/runtime/` | Attract, scroll, play-left and play-fire captures |
 | `src/atari_data.h` / `.c` | Generated Atari asset arrays |
-| `src/river_demo_data.h` / `.c` | Generated Phase 3 river tile set + 19 tile rows |
+| `src/river.c` | Exact generator, 30-row collision ring, exact 207-slot tile cache |
+| `src/river.h` | Collision-ring bounds/flags and generator object-input hooks |
+| `tools/river_model.py` | Validated Python reference model of `$A6DE-$AB7E` |
+| `tools/atari_river_trace.py` | Live Altirra per-row state/row capture |
+| `tools/river_validate.py` | Python-model vs. Altirra trace comparison |
+| `tools/gen_river_golden.py` | Generates `tests/data/river_golden.json` |
+| `tools/compare_river_edges.py` | Exact Atari vs. old-atlas edge comparison (baseline) |
+| `tools/show_tree_layout.py` | Captured 32-px tree feature with 8x8 grid |
+| `tools/show_proc_tree.py` | Procedural tree: exact vs. old-atlas comparison |
+| `tools/inspect_playfield.py` | NT1+CHR playfield reconstruction / screenshot check |
 | `src/main.c` | Boot sequence, VBL/LCD split at LYC=35 (visible 36/37), frame loop |
 | `src/hud.c` | Source HUD: charset-glyph labels, 5-cell gauge, sprite fuel bar, lives planes |
-| `src/river.c` | 30-row NT1 ring, 1-px scroll, row streamer |
 | `src/player.c` | Sprite CHR for the three flight shapes |
 | `src/config.h` | Geometry, tile IDs, palettes, nametable bases, HUD layout |
 | `build.ps1` / `Makefile` | Reproducible GBDK-NES build + header patch |
@@ -147,10 +231,12 @@
 | `tests/png.mjs` | Minimal PNG reader for screenshot assertions |
 | `tests/nes_smoke.mjs` | Phase 3 boot/HUD/playfield regression (50 checks) |
 | `tests/nes_scroll_hud.mjs` | Scroll/split/HUD regression (14 checks) |
-| `tools/gen_river_demo.py` | Regenerates `src/river_demo_data.*` |
+| `tests/nes_river.mjs` | Phase 4 row/state/collision validation (3 checks, 397/400 sampled) |
+| `tests/data/river_golden.json` | 400 golden tile rows from `river_model.py` |
 | `tools/patch_nes_header.py` | Patches the iNES mirroring byte |
 | `roms/river_raid.nes` / `.noi` / `.map` | ROM + symbols + linker map |
-| `build/phase3_smoke.png` | Latest HUD/playfield screenshot |
+| `build/flip_fixed.png` | Correct orientation: newest row at top, exact edges/trees |
+| `build/cache_fixed.png` | First exact-cache screenshot (pre-orientation fix) |
 | `build/scroll_a.png` / `scroll_b.png` | Frozen-scroll 100/101 shift proof |
 | `build/hud_dynamic.png` | Screenshot captured during the HUD field test |
 
@@ -195,21 +281,26 @@ These are documented in full in `docs/ATARI_RE_SPEC.md`; don't re-derive them.
 
 ## Known issues / deferred items
 
-1. **River fork/island parity (Phase 4):** exact branch conditions in
-   `$AA7A-$AB7F` still need row-by-row comparison against
-   `assets/atari/extracted/river_rows_157.bin`.
-2. **Fuel/bridge scores (Phase 4):** confirm the 80/500 candidates and how
+1. **Exact river cache (Phase 4, done):** the renderer uploads every visible
+   8x8 block verbatim.  The 26 visible ring rows need at most 203 non-solid
+   per-row slots (measured over 40,000 model rows); the cache has 207
+   (tiles 49..255).  `build/flip_fixed.png` shows the correct orientation:
+   green land, blue water, 1-px red bank staircases and right-side-up trees.
+   Remaining risk: the allocator has four slots of headroom, and
+   `set_bkg_data` stalls when a row adds more than ~6 patterns because GBDK's
+   transfer buffer is only 136 bytes.  Performance is deferred.
+2. **Fuel/bridge scores (Phase 5):** confirm the 80/500 candidates and how
    `$BB0B` is indexed for those objects.
-3. **Demo river loop (Phase 4):** the captured fixture has only 19 full
-   tile rows, so the 30-row ring repeats it; this is a demo artifact. Phase 4
-   generates continuous rows.
-4. **Phase 4 CHR strategy:** the demo uses 82 BG tiles for 19 rows. The
-   procedural generator will need either a runtime 8x8 tile cache, more
-   precomputed bank/transition tiles, or a different row-to-tile mapping.
-   All BG tiles 210..255 are now allocated to the HUD, so Phase 4 must
-   either reuse river-demo slots or add a CHR-RAM cache.
-5. **Fuel rate / 16-bit gauge (Phase 4).**
-6. **PAL gauge offset (`$BF`) (Phase 4).**
+3. **Collision ring is per tile row:** bounds are sampled at raw row 3 of
+   each 8-row block.  Phase 5 should interpolate or sample the jet's exact
+   scanline within the block.
+4. **CHR layout:** 0 blank, 1..10 shared digits, 11..26 gauge, 27..28 P1,
+   29..30 HI, 31..38 BRIDGE, 39..46 GAME, 47 land, 48 water, 49..255 exact
+   river cache.  Only 10 charset glyphs remain in CHR; all HUD labels are
+   built from `atari_charset` in PRG.  Score/bridge digits use plane-0 art
+   plus BG palette 1 (yellow); HI/game digits stay palette 0 (black).
+5. **Fuel rate / 16-bit gauge (Phase 5).**
+6. **PAL gauge offset (`$BF`) (Phase 5).**
 7. **`$24`/`$50` semantics:** `$24` is a 3-frame debounce, `$50` is the shot
    animation counter — not game-state flags.
 8. **Stale PMG sample:** the aux 13 ship's PMG bytes do not match its ROM
@@ -230,19 +321,23 @@ These are documented in full in `docs/ATARI_RE_SPEC.md`; don't re-derive them.
     `$5C` lives plane).  The full table is in
     `assets/atari/extracted/README.md`.
 
-## Next step — Phase 4
+## Next step — Phase 5
 
-Follow `PORTING_PLAN.md` section 4 (Phase 4). Concrete order:
-
-1. Port the Atari LFSR/table generator from `$B183` and the template stream
-   (`$BBF6/$BC00`) into `river_generate_row()`; replace the demo source in
-   `river_stream_next()`.
-2. Decide the NES tile mapping for procedural rows (tile cache vs. extra
-   precomputed patterns) within the remaining BG CHR budget.
-3. Build the in-RAM collision ring (`left/right/island` bounds + row flags)
-   alongside the streamed tiles.
-4. Extend `tests/nes_scroll_hud.mjs` or add `tests/nes_river.mjs` to compare
-   generated rows against `river_rows_157.bin` and AltirraBridge RAM dumps.
+1. Start Phase 5 (player jet, entities, collisions).  Feed the entity slots
+   into `river_obj_count/river_obj_aux/river_obj_x/river_obj_flags` so the
+   bank-avoidance clamp matches the original.
+2. Map the jet's screen scanline to the collision ring.  Remember the ring
+   advances **backwards** now (`river_slot` decrements); the bounds are
+   sampled at raw row 3, which sits 4 scanlines below the top of the tile
+   after the vertical flip.
+3. Long-run cache validation (optional hardening): run the model/ROM for
+   thousands of tile rows and confirm the 207-slot ring never reuses a
+   visible slot.  The measured peak is 203.
+4. Visual A/B the exact cache against `river_rows_157.bin` and live Altirra
+   frames, especially the bridge flash and island forks.
+5. Performance pass (deferred): the generator + exact cache currently run
+   below 60 fps; `set_bkg_data` can stall when a row adds more than ~6
+   patterns.  Profile before optimizing.
 
 ## Handy commands
 
@@ -250,6 +345,11 @@ Follow `PORTING_PLAN.md` section 4 (Phase 4). Concrete order:
 ./build.ps1                             # compile + link + header patch + RAM asserts
 node tests/nes_smoke.mjs                # Phase 3 boot/HUD regression (50 checks)
 node tests/nes_scroll_hud.mjs           # scroll/split/HUD regression (14 checks)
+node tests/nes_river.mjs                # Phase 4 row/state/collision validation (397/397 sampled)
+
+python tools/gen_river_golden.py 400    # regenerate tests/data/river_golden.json
+python tools/river_validate.py build/river_trace.jsonl  # model vs. Altirra trace
+python tools/inspect_playfield.py 235   # NT1+CHR reconstruction vs. screenshot
 
 # MesenCE-MCP (leave running while testing)
 ./MesenCE-MCP/MesenCE-MCP-Windows.exe --mcp --mcp-port=9100 --enableStdout `
@@ -257,7 +357,8 @@ node tests/nes_scroll_hud.mjs           # scroll/split/HUD regression (14 checks
   --preferences.pauseWhenInMenusAndConfig=false --preferences.disableOsd=true `
   --video.videoFilter=None --nes.region=Ntsc
 
-python tools/gen_river_demo.py          # regenerate src/river_demo_data.*
+python tools/show_tree_layout.py        # captured tree template + 8x8 grid
+python tools/show_proc_tree.py          # procedural tree: exact vs. atlas
 python tools/patch_nes_header.py roms/river_raid.nes   # vertical mirroring
 python tools/extract_assets.py          # regenerate Atari assets + C header
 python tools/render_sprite_sheets.py    # only the clean sprite sheets
@@ -345,3 +446,142 @@ AltirraBridge: reuse the live server token explicitly when known, e.g.
 - Updated both test suites (50 smoke / 14 scroll checks); both pass.
 - Documented the full HUD glyph inventory in
   `assets/atari/extracted/README.md` and `docs/ATARI_RE_SPEC.md` §8.1.
+
+### 2026-10-29 - Phase 4 generator and collision ring
+
+- Captured a per-row Altirra trace at `$AB80` (2,600 rows) and built
+  `tools/river_model.py`, a validated Python translation of `$A6DE-$AB7E`.
+  The model matches every generator field and 48-byte row across levels 1-3;
+  only the unused `$B1/$B7` temporaries differ.
+- Learned/recorded AltirraBridge breakpoint rules in `AGENTS.md`: condition
+  syntax is `=`/`&`/`db($addr)`, frame gates coalesce hits, `CYCLES` chunks
+  are needed for per-row capture, and the breakpoint must be cleared before
+  stepping off the same PC.
+- Ported the generator to `src/river.c`: LFSR, level/section timers, bank
+  targets, island/fork logic, feature template selection and the full
+  renderer.  Added the 30-row collision ring with left/right/island pixel
+  bounds and bridge/island/feature/flash flags.
+- Extended `atari_river_widths` to 26 bytes and `atari_river_type_margin` to
+  33 bytes to reproduce the original's out-of-range table reads at high
+  levels.
+- Added `tools/gen_river_atlas.py` / `src/river_atlas_data.*` (51-tile edge
+  atlas) and removed the Phase 3 demo tile source.
+- Added `tests/nes_river.mjs` and `tests/data/river_golden.json` (400 tile
+  rows).  398 sampled rows match the C rows, state and collision ring exactly.
+- Found and fixed an SDCC local-alias bug: `ysave` in `river_render_row` was
+  reused by a callee, shifting island overlays by 11 bytes.  The saved value
+  is now file-scope (`rg_ysave`); added the lesson to `AGENTS.md`.
+- Boot no longer generates 30 full procedural rows; the ring is prefilled with
+  a straight channel and replaced as the scroll advances.
+- All three suites pass: 50 smoke, 14 scroll/HUD, 3 river checks.
+
+### 2026-10-29 - Atari river/tree layout + exact tile cache
+
+**What Atari actually stores (this was the missing insight):**
+
+- The river is **not tile-based**.  Each display-list entry has its own LMS;
+  one generated row is one 48-byte mode-E **scanline** (4 pixels/byte), not
+  an 8-scanline character row.  There is no tile grid to copy.
+- A row is assembled as: land fill, 2-byte bank pattern, water fill, 2-byte
+  bank pattern, land fill; the island/fork path adds a second
+  land/water/edge sequence.  Bank edges are therefore continuous 1-px
+  staircases with a 2-px dark outline.
+- A tree/forest is a **template fragment streamed into the row buffers**, not
+  a sprite or a tile.  `_feature_select()` (`$A96C-$A9D5`) picks a width
+  `bc` (bytes), a left offset `bd`, and a lifetime `be` (rows).  For each of
+  the next `be` rows, `copy_template()` copies `bc` bytes from `$BC00+` into
+  the row at byte offset `p`, then advances the template pointer by `bc`.
+  `bc` is in **bytes**, so trees are 4*bc pixels wide and can start on an
+  **odd byte** (4-px, not 8-px, alignment).
+- Concrete example from `river_rows_157.bin`: the feature at rows 11..32 is
+  `bc=8` bytes (32 px) x `be=22` rows, copied at byte offset 4.  Its
+  template rows 21..0 match the captured rows 11..32 exactly.  The 11x19
+  red connected component found earlier is only the right-hand part of that
+  32-px-wide feature.
+- Consequence: the NES 8x8 block at a given screen cell contains 8
+  consecutive scanlines of that stream.  The same tree produces different
+  8x8 fragments depending on its vertical phase, so **no fixed atlas can
+  reproduce it**.  Nearest-of-82 measured 2.69% overall pixel error but 33%
+  of tree blocks had >10 wrong pixels (mean 9.4, max 32); edges were almost
+  perfect.  That is exactly the "random squares/pixels instead of trees".
+
+**Implemented exact cache:**
+
+- `src/river.c` no longer includes `river_tileset_data.h` and no longer
+  nearest-matches.  Each completed tile row builds the 20 interleaved
+  16-byte patterns in `river_tile_pat[20*16]` as before.
+- `river_cache_tile()` returns `TILE_LAND`/`TILE_WATER` for exact solids,
+  reuses the slot of an identical pattern earlier in the same row, and
+  otherwise calls `set_bkg_data(TILE_RIVER_BASE + river_alloc, 1, pat)` and
+  advances the 207-slot ring.
+- New CHR layout (config.h): 0 blank, 1..10 digits, 11..26 gauge, 27..28 P1,
+  29..30 HI, 31..38 BRIDGE, 39..46 GAME, 47 land, 48 water, 49..255 cache.
+  The full 128-glyph charset load is gone; only glyph 0 (blank) and
+  `$50-$59` (digits) stay in CHR.  The HUD labels/gauge are still built from
+  `atari_charset` in PRG.
+- Score and bridge digits now share the plane-0 digit tiles with the HI and
+  game digits.  BG palette 1 (`gray, yellow, black, white`) is selected by
+  attribute bytes 2 (`0x04`), 3 (`0x05`), 4 (`0x01`) and 7 (`0x50`) so the
+  shared digits render yellow in the score/bridge quadrants and black
+  elsewhere.  This costs one 1-px vertical shift on the yellow digits (the
+  old separate yellow set was raised one pixel).
+- Cache budget: with the ring mapping `river_slot=(2+river_step)%30`, the 26
+  visible nametable rows are `{b-2,b-1,b} U {b-29..b-7}`.  Over 40,000 model
+  rows the peak per-row slot sum for that visible set is **203** (union 195),
+  so 207 slots leave four slots of headroom.  A full 30-row ring would need
+  229; do not shrink the cache without re-measuring.
+- Verified in Mesen at distance 30: `build/cache_fixed.png` (green land, blue
+  water, continuous red 1-px staircase, correctly assembled dark-red trees).
+- Removed `src/river_tileset_data.*`, `tools/gen_river_tileset.py` and the
+  stale object files.
+- Build after the fix: 32,784-byte mapper-30 ROM, BSS ends `0x079D`,
+  **98 bytes free**.
+
+**Known state at this pause:**
+
+- HUD visually correct in the screenshot; the attribute-shared digits and
+  gauge render correctly.
+- `tests/nes_smoke.mjs` and `tests/nes_scroll_hud.mjs` are **expected to
+  fail** until their hardcoded tile IDs are updated (they assume
+  `TILE_DIGIT_YELLOW=246`, `GLYPH_0=80`, full charset at 0..127).
+  `tests/nes_river.mjs` validates rows/state/collision and should still pass,
+  but its cadence issue (239/400 samples) remains.
+- Performance is deferred.  GBDK's VRAM transfer buffer is `$100-$187`
+  (136 bytes, 4-byte stripe header + 32 data); `set_bkg_data` blocks when it
+  is full, so a row with more than ~6 new patterns can stall the main loop.
+  Average is ~4.8 new patterns/row, peak 13.
+- Do not confuse the two "solid" encodings: NES pixel value is
+  `(plane1<<1)|plane0`, so mode-E land (1) is `0xFF,0x00` interleaved and
+  water (3) is `0xFF,0xFF`.  Writing land as `0x00,0xFF` makes it value 2
+  (red) and was the first-build border bug.
+
+### 2026-10-29 - Playfield orientation + test suite
+
+- Player-visible bug: the whole playfield was vertically inverted (trees
+  upside down) and the river scrolled upward; the newest tile row appeared
+  at the bottom.
+- Atari layout check: the live screen puts the **newest row at the top** and
+  scrolls down.  The captured fixture is generation order (oldest first), so
+  the reference render is upside down relative to gameplay.
+- Fixes in `src/river.c`:
+  - pack raw row 7 at the top of each 8x8 tile (`7 - river_block_index`);
+  - advance the ring backwards (`river_slot` decrements; init 29 so block 0
+    writes 28);
+  - decrement `playfield_scroll_y` (mod 240) so content moves down.
+- Fix in `src/main.c`: GBDK's deferred LCD ISR adds the current scanline to
+  `bkg_scroll_y`; the handler now subtracts `HUD_SPLIT_SCANLINE` (mod 240)
+  before `move_bkg()`.  Without it the playfield was 36 px ahead of the ring,
+  which is exactly why the top row showed up at the bottom.
+- Tests updated:
+  - `nes_river.mjs`: coverage measured from the first state observed
+    (397/397; the first 3 rows complete before the test attaches); rows,
+    state and collision all match.
+  - `nes_smoke.mjs`: new CHR IDs (blank 0, digits 1..10, HUD 11..46, land
+    47, water 48, cache 49..255), shared-digit plane-0 CHR check, HUD
+    palette-1 attribute check, no full-charset glyph check.
+  - `nes_scroll_hud.mjs`: shared digit IDs, new gauge IDs, resume-at-start
+    robustness, deterministic scroll pair with an in-flight-update settle;
+    all 14 checks pass.
+- Verified in Mesen: `build/flip_fixed.png` (newest row at the top,
+  continuous edges, right-side-up trees) and `build/scroll_diff.png`.
+- All three suites pass: 50 smoke, 14 scroll/HUD, 3 river checks.
