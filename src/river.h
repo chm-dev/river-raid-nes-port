@@ -67,7 +67,7 @@ extern uint8_t river_speed;
  * throttle's target at RIVER_ACCEL per frame; reset it to cruise on restart. */
 #define RIVER_VEL_SLOW      16u
 #define RIVER_VEL_CRUISE    32u
-#define RIVER_VEL_FAST      64u
+#define RIVER_VEL_FAST      48u
 #define RIVER_ACCEL         1u
 extern uint8_t river_vel;
 

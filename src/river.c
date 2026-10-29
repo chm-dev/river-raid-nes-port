@@ -138,8 +138,8 @@ static uint8_t river_acc;
 static uint16_t ru_sum;
 static uint8_t ru_target;
 uint8_t river_owed;
-#define RIVER_MAX_OWED      4u
-#define RIVER_GEN_PER_PASS  2u
+#define RIVER_MAX_OWED      6u
+#define RIVER_GEN_PER_PASS  4u
 
 /* Test hooks: last generated 48-byte row and the state after it.  These are
  * exported through the .noi file so Mesen tests can compare the C port with
