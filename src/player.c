@@ -230,7 +230,8 @@ static void player_update_shot(void) {
         player_kill_shot();
         return;
     }
-    move_sprite(PLAYER_SHOT_SLOT, player.shot_x, player.shot_y);
+    /* The bar sits at columns 3..4 of its tile; shot_x is the box's left edge. */
+    move_sprite(PLAYER_SHOT_SLOT, (uint8_t)(player.shot_x - 3u), player.shot_y);
     set_sprite_tile(PLAYER_SHOT_SLOT, entities_shot_tile());
     set_sprite_prop(PLAYER_SHOT_SLOT, S_PAL(0));
 }

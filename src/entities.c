@@ -625,7 +625,9 @@ uint8_t entities_hit_shot(uint8_t sx, uint8_t sy) BANKED {
                     hud_bridge++;           /* $A3E9: a bridge hit advances the counter */
                 }
                 e_c = ent_bridge_hit();
-                bridge_flash = BRIDGE_FLASH_FRAMES;
+                if (e_c == TANK_BONUS_TENS) {
+                    bridge_flash = BRIDGE_FLASH_FRAMES; /* only with the tank on the bridge */
+                }
             }
             entities_add_score(e_c);
             ent_explode();
