@@ -10,3 +10,5 @@ roms/
 *.rom
 *.map
 *.o
+tools/__pycache__
+__pycache__/*.pyc
