@@ -28,10 +28,17 @@ uint8_t ent_aux[MAX_ENTITIES];
 uint8_t entity_count;
 
 #define ENT_TILE_BASE           (SPRITE_TILE_BASE + 24u)
-#define ENT_OAM_FIRST           2u
+/* OAM 0/1 are the jet.  The tank and the shell have fixed slots (2-3 and 4-5)
+ * so that they sort in front of the bridge bar, as the Atari's P1/P0 do over
+ * its P3; everything else is allocated from ENT_OAM_FIRST. */
+#define ENT_OAM_TANK            2u
+#define ENT_OAM_SHELL           4u
+#define ENT_OAM_FIRST           6u
 #define ENT_OAM_LAST            43u
 /* Atari SIZEP3: ships are double width, the $0E bridge object quad width. */
 #define ent_width(type)         ((uint8_t)(ent_gfx_cols[type] << 3))
+#define BRIDGE_FLASH_FRAMES     23u     /* $A4EE: CHKSUM = $17 */
+#define BRIDGE_FLASH_COLOR      0x07u   /* Atari COLPF2 $42, a dark red */
 #define ENT_EXPLODE_TICKS       8u      /* Atari: type 2..6 advance every 8th frame */
 
 static uint8_t ent_rng = 0x5Au;
@@ -39,8 +46,8 @@ static uint8_t ent_frame;       /* $18: free-running frame counter */
 static uint8_t ent_wake_acc;    /* frames since the last wake-up draw */
 static uint8_t sp_hold;         /* $32: rows left until the new object is built */
 static uint8_t sp_slot;         /* entity slot of the object being built */
-static uint8_t bridge_wait;     /* a bridge road is scheduled; its bar is not created yet */
-static uint8_t bridge_x;        /* X of that bar */
+static uint8_t bridge_x;        /* X of the bar of a scheduled road (0 = none): the bar is created later */
+static uint8_t bridge_flash;    /* Atari $31: frames of water flash left after a bridge hit */
 static uint8_t ent_anim;
 static uint8_t ent_oam_used;
 
@@ -73,6 +80,21 @@ static uint8_t ent_random(void) {
     return ent_rng;
 }
 
+/* The land palettes' water entry (all three: dark land, bright land, road). */
+static void ent_water_color(palette_color_t c) {
+    set_bkg_palette_entry(PLAYFIELD_PALETTE, 3u, c);
+    set_bkg_palette_entry(PLAYFIELD_ALT_PALETTE, 3u, c);
+    set_bkg_palette_entry(ROAD_PALETTE, 3u, c);
+}
+
+/* For 23 frames after a bridge is shot the Atari VBI (at $B41C) swaps the
+ * water colour ($84 -> $42) on every frame whose remaining count is odd. */
+static void ent_flash_tick(void) {
+    e_c = bridge_flash;
+    bridge_flash = (e_c > game_ticks) ? (uint8_t)(e_c - game_ticks) : 0u;
+    ent_water_color((bridge_flash != 0u && (e_c & 1u)) ? BRIDGE_FLASH_COLOR : BG_COLOR_BLUE);
+}
+
 void entities_clear(void) BANKED {
     for (e_i = 0; e_i < MAX_ENTITIES; e_i++) {
         ent_type[e_i] = ENTITY_NONE;
@@ -83,7 +105,11 @@ void entities_clear(void) BANKED {
     }
     entity_count = 0;
     sp_hold = 0;
-    bridge_wait = 0;
+    bridge_x = 0;
+    if (bridge_flash) {
+        bridge_flash = 0;
+        ent_water_color(BG_COLOR_BLUE);
+    }
     river_obj_count = 0x0Bu;
 }
 
@@ -546,7 +572,6 @@ void entities_row(void) BANKED {
              * (the generator runs ahead of what the display can address). */
             river_road_begin();
             bridge_x = e_x;
-            bridge_wait = 1u;
             ent_tank_spawn();
         }                                   /* else the game-start state: no bridge */
         return;
@@ -600,6 +625,7 @@ uint8_t entities_hit_shot(uint8_t sx, uint8_t sy) BANKED {
                     hud_bridge++;           /* $A3E9: a bridge hit advances the counter */
                 }
                 e_c = ent_bridge_hit();
+                bridge_flash = BRIDGE_FLASH_FRAMES;
             }
             entities_add_score(e_c);
             ent_explode();
@@ -821,6 +847,29 @@ static void ent_emit_row(void) {
     __endasm;
 #endif
 }
+/* Bridge debris: frame (e_type - 2) of ent_exp14_map, 3 tile rows x 4 columns;
+ * blank tiles are not drawn. */
+static void ent_draw_bridge_debris(void) {
+    e_c = (uint8_t)((e_type - ENT_AUX_EXPLODE_FIRST) * 12u);
+    e_y = ent_y[e_i];
+    for (e_t = 0; e_t < 3u; e_t++, e_y = (uint8_t)(e_y + 8u)) {
+        if (e_y < HUD_SPLIT_SCANLINE || e_y >= 232u) {
+            continue;
+        }
+        for (e_cols = 0; e_cols < 4u; e_cols++) {
+            e_tile = ent_exp14_map[(uint8_t)(e_c + (e_t << 2) + e_cols)];
+            if (e_tile == 0xFFu || e_oam > ENT_OAM_LAST) {
+                continue;
+            }
+            shadow_OAM[e_oam].y = e_y;
+            shadow_OAM[e_oam].tile = (uint8_t)(ENT_TILE_BASE + e_tile);
+            shadow_OAM[e_oam].prop = ent_gfx_pal[ENT_AUX_BRIDGE];
+            shadow_OAM[e_oam].x = (uint8_t)(ent_x[e_i] + (e_cols << 3));
+            e_oam++;
+        }
+    }
+}
+
 static void ent_draw(void) {
     e_type = ent_type[e_i];
     if (e_type <= ENT_AUX_EXPLODE_LAST) {
@@ -831,6 +880,10 @@ static void ent_draw(void) {
             e_tile = (uint8_t)(e_tile + ent_gfx_count[e_src]);
         }
         e_flip = 0u;
+        if (e_src == ENT_AUX_BRIDGE) {
+            ent_draw_bridge_debris();
+            return;
+        }
     } else {
         e_src = e_type;
         e_tile = (uint8_t)(ENT_TILE_BASE + ent_gfx_first[e_type]);
@@ -855,7 +908,11 @@ static void ent_draw(void) {
     } else {
         e_dx = 8u;
     }
-    e_off = (uint8_t)(e_oam << 2);
+    if (e_type >= ENT_AUX_TANK) {
+        e_off = (uint8_t)(((e_type == ENT_AUX_TANK) ? ENT_OAM_TANK : ENT_OAM_SHELL) << 2);
+    } else {
+        e_off = (uint8_t)(e_oam << 2);
+    }
     for (e_t = 0; e_t < e_rows; e_t += 8u, e_y = (uint8_t)(e_y + 8u)) {
         if (e_y < HUD_SPLIT_SCANLINE || e_y >= 232u || e_off >= 176u) {
             e_tile = (uint8_t)(e_tile + e_cols);
@@ -864,14 +921,18 @@ static void ent_draw(void) {
         e_px = e_ex;
         ent_emit_row();
     }
-    e_oam = (uint8_t)(e_off >> 2);
-}void entities_update(void) BANKED {
+    if (e_type < ENT_AUX_TANK) {
+        e_oam = (uint8_t)(e_off >> 2);
+    }
+}
+
+void entities_update(void) BANKED {
     if (player_disable) {
         /* Test hook: no entities while the jet is frozen. */
         if (entity_count != 0u) {
             entities_clear();
         }
-        while (ent_oam_used > ENT_OAM_FIRST) {
+        while (ent_oam_used > ENT_OAM_TANK) {
             ent_oam_used--;
             shadow_OAM[ent_oam_used].y = 240u;
         }
@@ -879,6 +940,12 @@ static void ent_draw(void) {
     }
 
     e_oam = ENT_OAM_FIRST;
+    for (e_t = ENT_OAM_TANK; e_t < ENT_OAM_FIRST; e_t++) {
+        shadow_OAM[e_t].y = 240u;           /* tank / shell sprites; redrawn below */
+    }
+    if (bridge_flash) {
+        ent_flash_tick();
+    }
     ent_anim = (uint8_t)(ent_anim + game_ticks);
 
     if (!river_freeze) {
@@ -889,7 +956,7 @@ static void ent_draw(void) {
         }
     }
 
-    if (bridge_wait) {
+    if (bridge_x) {
         /* Put the bar on the road once the road's top is on the ring: bar
          * rows 2..16 of the shape sit on the 16 road rows. */
         e_y = river_road_top();
@@ -905,7 +972,7 @@ static void ent_draw(void) {
                 entity_count++;
             }
             ent_tank_place();
-            bridge_wait = 0;
+            bridge_x = 0;
         }
     }
 

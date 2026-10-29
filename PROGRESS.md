@@ -994,3 +994,33 @@ NES port (`entities.c`, no extra RAM: the tank/shell are entity slots, type
 - Not ported: the sound effects (`$7C` = `$37` tank bonus, `$17` hit; the shell's
   fire sound), the shell destroying enemy objects (`$A4C1`), and the same shell
   mechanism for helicopters/ships (`$AE22-$AE92`, from level 7).
+### 2026-10-29 - Tank priority, bridge debris, bridge-hit flash
+
+Captured a real bridge hit on the Atari (`tools/atari_bridge_hit.py`: stops at
+the collision handler `$A3E9` and sets `$1C` to the bridge slot so the game's
+own hit path runs; `--tank-over` pokes the tank under the bridge; frames in
+`build/atari_hit_*`).  Confirmed: tank bonus score `$75` (750), bridge counter
++1, `$38` = `$86` -> 3 -> 2 -> 1 -> 0 (16 frames per step), bridge type 2..6
+(8 frames each), flash timer `$31` = 22..0.
+
+- **Tank was drawn behind the bar.**  The entity loop allocated OAM in slot
+  order, so the bar (lower slot) won.  The Atari draws P1/P0 over P3, so the
+  tank and shell now have fixed OAM slots 2-3 / 4-5 (`ENT_OAM_TANK/SHELL`);
+  other entities start at `ENT_OAM_FIRST` = 6.
+- **Garbled bridge debris.**  The bridge's explosion reused the tiles built
+  for another class (1 column wide) but was drawn 4 columns wide.  The
+  Atari's debris is the same debris shapes (`$B900 + $BB40[frame]`) over the
+  bridge's 20 rows, 4x wide, in the bar's stripe colours: thin horizontal
+  speckle dashes (this is what the original shows).  `gen_entity_gfx.py` now
+  builds those as 32 shared tiles plus `ent_exp14_map[]` (tile per frame, row,
+  column; 0xFF = blank, not drawn) and `ent_draw_bridge_debris()` draws them.
+  Entity tiles: 141.
+- **Water flash.**  `$A4EE` sets `$31 = $17` on every bridge hit; the VBI
+  (`$B41C`) switches `COLPF2` from `$84` to `$42` (a dark red) on every frame
+  whose remaining count is odd, for 23 frames.  It is `COLPF2`, so the blue
+  highlights on hills flash too.  `ent_flash_tick()` swaps entry 3 of the
+  three land palettes (`BRIDGE_FLASH_COLOR` = NES `$07`).  The tank case runs
+  the same code (the flash is not specific to it).
+- `bridge_wait` was merged into `bridge_x` (0 = none) to pay for the flash
+  counter; RAM is still 1 byte free.  Host stubs (`tests/host`) gained
+  `set_bkg_palette_entry` and a `prop` alias for the OAM attribute.

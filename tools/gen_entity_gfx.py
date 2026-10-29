@@ -111,17 +111,37 @@ for a in range(7, 16):
 # SIZEP3 width) and swaps its shape to the debris frames 2..6 (shape pointer
 # $B900+$BB40[type]); the object's full height of bytes is read from there,
 # so a fuel depot bursts into a tall cloud and a ship into a wide one.
-EXP_SRC = {7: 7, 8: 8, 9: 8, 10: 8, 11: 8, 12: 12, 13: 13, 14: 12, 15: 15}
+EXP_SRC = {7: 7, 8: 8, 9: 8, 10: 8, 11: 8, 12: 12, 13: 13, 14: 14, 15: 15}
 done = {}
+# The bridge (20 rows, 4 tiles wide, 12 tiles per frame) is mostly speckles
+# and blank: its five frames share tiles.  ent_exp14_map[frame * 12 + row * 4
+# + column] is the tile index, or 0xFF for a blank tile that is not drawn.
+exp14_map = []
 for a, src in EXP_SRC.items():
     if src not in done:
-        done[src] = len(tiles)
         rows, m = rows_of[src], cols_of[src]
-        for frame in range(2, 7):
-            base = 0xB900 + BB40[frame] - 0xA000
-            data = [(ROM[base + r], value_for(src, r)) for r in range(rows)]
-            data.reverse()
-            tiles += build(data, rows, m)
+        if src == 14:
+            done[src] = 0
+            shared = {}
+            for frame in range(2, 7):
+                base = 0xB900 + BB40[frame] - 0xA000
+                data = [(ROM[base + r], value_for(src, r)) for r in range(rows)]
+                data.reverse()
+                for tile in build(data, rows, m):
+                    if not any(tile):
+                        exp14_map.append(0xFF)
+                        continue
+                    if tuple(tile) not in shared:
+                        shared[tuple(tile)] = len(tiles)
+                        tiles.append(tile)
+                    exp14_map.append(shared[tuple(tile)])
+        else:
+            done[src] = len(tiles)
+            for frame in range(2, 7):
+                base = 0xB900 + BB40[frame] - 0xA000
+                data = [(ROM[base + r], value_for(src, r)) for r in range(rows)]
+                data.reverse()
+                tiles += build(data, rows, m)
     exp_first[a] = done[src]
 
 # The bridge tank (aux 16) and its shell (aux 17).  These are not P3 objects:
@@ -172,6 +192,8 @@ extern const uint8_t ent_gfx_count[18];
 extern const uint8_t ent_gfx_rows[18];
 extern const uint8_t ent_gfx_cols[18];  /* width in 8-px tiles (SIZEP3) */
 extern const uint8_t ent_gfx_pal[18];
+/* Bridge explosion: tile index (0xFF = blank, not drawn) per frame 2..6, row, column. */
+extern const uint8_t ent_exp14_map[60];
 /* Sprite palettes 1 (bridge), 2 (helicopters) and 3 (ships); palette 0 is the jet's. */
 extern const uint8_t ent_gfx_palette[3][3];
 extern const uint8_t ent_gfx_chr[{len(flat)}];
@@ -195,6 +217,7 @@ out_c += carr("const uint8_t ent_gfx_count[18]", count)
 out_c += carr("const uint8_t ent_gfx_rows[18]", rows_of)
 out_c += carr("const uint8_t ent_gfx_cols[18]", cols_of)
 out_c += carr("const uint8_t ent_gfx_pal[18]", pal)
+out_c += carr("const uint8_t ent_exp14_map[60]", exp14_map, 12)
 out_c += "const uint8_t ent_gfx_palette[3][3] = {\n" + "".join(
     "    { " + ", ".join(f"0x{c:02X}" for c in PALETTES[g]) + " },\n" for g in (1, 2, 3)) + "};\n"
 out_c += carr(f"const uint8_t ent_gfx_chr[{len(flat)}]", flat)

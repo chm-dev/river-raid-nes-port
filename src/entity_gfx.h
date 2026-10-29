@@ -4,8 +4,8 @@
 
 #include <stdint.h>
 
-#define ENT_GFX_TILES   109u
-#define ENT_GFX_SHOT    108u
+#define ENT_GFX_TILES   141u
+#define ENT_GFX_SHOT    140u
 
 /* Per aux 0..15: first tile, tile count, shape rows, width in tiles and
  * hardware sprite palette.  Tiles are row-major, left to right. */
@@ -15,8 +15,10 @@ extern const uint8_t ent_gfx_count[18];
 extern const uint8_t ent_gfx_rows[18];
 extern const uint8_t ent_gfx_cols[18];  /* width in 8-px tiles (SIZEP3) */
 extern const uint8_t ent_gfx_pal[18];
+/* Bridge explosion: tile index (0xFF = blank, not drawn) per frame 2..6, row, column. */
+extern const uint8_t ent_exp14_map[60];
 /* Sprite palettes 1 (bridge), 2 (helicopters) and 3 (ships); palette 0 is the jet's. */
 extern const uint8_t ent_gfx_palette[3][3];
-extern const uint8_t ent_gfx_chr[1744];
+extern const uint8_t ent_gfx_chr[2256];
 
 #endif

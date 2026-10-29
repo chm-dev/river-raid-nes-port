@@ -18,6 +18,7 @@ void set_bkg_data(uint8_t f, uint8_t n, const uint8_t *d) { (void)f; (void)n; (v
 void set_vram_byte(uint8_t *a, uint8_t v) { (void)a; (void)v; }
 void set_sprite_palette(uint8_t f, uint8_t n, const palette_color_t *p) { (void)f; (void)n; (void)p; }
 void set_sprite_data(uint8_t f, uint8_t n, const uint8_t *d) { (void)f; (void)n; (void)d; }
+void set_bkg_palette_entry(uint8_t p, uint8_t e, palette_color_t c) { (void)p; (void)e; (void)c; }
 
 int main(void) {
     unsigned v[19];
