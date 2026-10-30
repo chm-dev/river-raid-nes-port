@@ -2,7 +2,7 @@
 
 ## Project Status
 - **Read `PROGRESS.md` first.** It is the live session handoff: current phase, completed work, open issues, next step, and command reminders.
-- **Phase 1 (reverse engineering + asset extraction), Phase 2 (scaffolding/build), Phase 3 (HUD/split/ring) and Phase 4 (generator, collision ring, exact tile cache, orientation) are complete. Phase 5 (player, shot, entities, scoring, fuel, bridge/road/tank, respawn at the last bridge, 30 Hz logic + 60 Hz river) is complete and tested. Phase 6 (APU sound, title/attract, game states) is next.**
+- **Phase 1 (reverse engineering + asset extraction), Phase 2 (scaffolding/build), Phase 3 (HUD/split/ring) and Phase 4 (generator, collision ring, exact tile cache, orientation) are complete. Phase 5 (player, shot, entities, scoring, fuel, bridge/road/tank, respawn at the last bridge, 30 Hz logic + 60 Hz river) is complete and tested. Phase 6 is in progress: RAM was freed (152 bytes free) and an APU sound driver (`src/sound.c`) exists, but the user reports it sounds wrong and it needs a fix pass (details in `PROGRESS.md` -> "Next step"); title/attract and game selection are not started.**
 - `PORTING_PLAN.md` is the roadmap; `PROGRESS.md` is the status log. Update `PROGRESS.md`, not this file, as work progresses.
 
 ## Project Overview

@@ -392,12 +392,35 @@ These are documented in full in `docs/ATARI_RE_SPEC.md`; don't re-derive them.
 
 ## Next step — Phase 6 (Phase 5 is complete)
 
-1. **Sound: DONE (2026-10-30).**  `src/sound.c` drives the APU from `sound_update()` (30 Hz player
-   group, timers advance by `game_ticks`): pulse 1 = shot chirp, pulse 2 = refuel tone / low-fuel
-   beep (`hud_fuel < 64`), triangle = engine hum (3 pitches by throttle, off unless playing), noise
-   = explosions.  Hooks are called from `player.c`.  `tests/nes_sound.mjs` (13 checks) records APU
-   writes with a Lua callback.  Not ported: the Atari's engine noise layer and exact POKEY pitches
-   (`$B4C0`/`$B4E1` tables); effects are tuned by ear-level approximations, not by capture.
+1. **Sound: implemented, REPORTED WRONG BY THE USER (2026-10-30) - needs a fix pass.**  The user
+   listened to it and says it sounds "way off" (specifics to come from the user's prompt).  What
+   exists (`src/sound.c`, commit `7d4a1ac`):
+   - `sound_update()` runs in the 30 Hz player group (`main.c`, after `player_update`/`collision_update`);
+     countdown timers advance by `game_ticks` (1-5 frames).  APU registers are written only on change.
+   - pulse 1 = shot chirp (12 frames, period `0x28 + (12-t)*10`, duty 25%, volume = frames left);
+     pulse 2 = refuel tone (`$4004=0x76`, period `0x80`, held 4 frames after the last
+     `sound_play_refuel()` call) and low-fuel beep (`hud_fuel < 64`, `$4004=0xB8`, period `0x50`,
+     on when `!(snd_clock & 8)`); triangle = engine hum (`$4008=0x81`, periods `0x300/0x240/0x1C0` for
+     slow/cruise/fast, off unless state is PLAY); noise = explosion (36 frames, volume `(t+2)/3`,
+     period index `5 + (36-t)/6`, mode 0).  `sound_init()` writes `$4017=0x40`, `$4015=0x0F`.
+   - Hook calls live in `player.c`: `sound_play_shot()` at shot launch, `sound_play_explosion()` when
+     `entities_hit_shot()` returns true and in `player_crash()`, `sound_play_refuel()` on
+     `ENT_HIT_FUEL`, `sound_set_engine(river_speed)` after the throttle line, `SOUND_ENGINE_OFF` in
+     `player_crash()` and when `player_disable` is set.  Nothing else (bridge hit, enemy fire, level
+     change, game over, start) triggers sound.
+   - Values were chosen by estimate, **not** derived from the Atari: no POKEY frequency/AUDC mapping
+     was done, the Atari's pitch tables (`$B4C0` shot pitch, `$B4E1` FX frequencies, `$B4AC` engine
+     AUDC) are not used, the engine noise layer is not ported, and the Atari's trigger values/timing
+     (`$C6` shot timer, `$7C` explosion, `$7D` shot sweep, `$7E` beep, `$7F` refuel/enemy tone) are
+     not reproduced.  Spec: `docs/ATARI_RE_SPEC.md` section 9; code: deferred VBI `$B2A5` in
+     `docs/atari_disasm_b2a5_b6ff.txt`.  The Atari runs this at 60 Hz in the VBI; the NES port ticks
+     at 30 Hz.
+   - Test: `tests/nes_sound.mjs` (13 checks, pass) records the APU register writes via a Lua write
+     callback on `$4000-$4017` (mailbox CHR-RAM `$1F00`) and checks *that* the expected registers are
+     written for each event.  It does **not** check pitch, timbre or whether it sounds right; it will
+     pass whatever the tuning is.  Nothing has been verified against Atari audio (AltirraBridge
+     can capture POKEY register writes; see `info/ALTIRRA_BRIDGE_NOTES.md`).
+   - Budget: RAM has 152 bytes free, fixed bank ~2.9 KB (`sound.c` is in the fixed bank, not banked).
 2. **Game states (open):** title/attract, SELECT game variations.  START / game-over / respawn
    already work in `player_update()` (WAIT -> READY -> PLAY -> DEAD/OVER; START after game over
    restarts), but there is no title screen, no attract mode and no game selection.
@@ -1419,3 +1442,14 @@ Open item "fuel rate / 16-bit gauge" traced from `$A3E9-$A453` (no Altirra run).
 - **Phase 5 is closed.**  Remaining items are Phase 6: APU sound, title/attract, game
   variations, game over flow.
 
+
+### 2026-10-30 - Phase 6: RAM freed, first APU sound pass
+
+- Freed 160 bytes of internal RAM: the HUD (`wide_tile_buf`, `gauge_sprite_buf`) and player
+  (`player_tile_buf`) boot-time tile buffers now alias `river_tile_pat` (made non-static, declared in
+  `river.h`); the unused `hud_row_buf` was removed.  RAM is 152 bytes free after the sound state.
+  Commit `339724b`.  Smoke, scroll/HUD, gameplay, entity-hits, respawn, `host_river` pass.
+- Added `src/sound.c` (see "Next step" item 1 for the exact design) and `tests/nes_sound.mjs`.
+  Commit `7d4a1ac`.  Cadence unchanged (cruise 0.8% late passes, fast 23%).
+- The user then listened to it and reported that it sounds "way off"; a different agent is to
+  take over the fix.  The register-write test cannot detect that class of problem.
