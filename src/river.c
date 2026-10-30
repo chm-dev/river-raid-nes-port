@@ -1103,32 +1103,44 @@ static uint8_t vp_v, vp_pos, vp_cyc, vp_dst, vp_k;
  * river_tile_pat holds GBDK-style interleaved 2bpp (p0,p1 per scanline) and
  * set_bkg_data() de-interleaves it for the NES, so the pattern loops write the
  * eight plane-0 bytes first, then the eight plane-1 bytes. */
+/* Unrolled: 9 cycles a byte instead of 24.  Pattern loops write the eight
+ * plane-0 bytes first, then the eight plane-1 bytes. */
 static void vp_copy_pat_lo(void) {
     __asm
         ldx     _vp_dst
         ldy     _vp_src
-        lda     #8
-        sta     _vp_k
-    1$:
-        lda     _river_tile_pat,y
-        sta     0x0100,x
-        inx
-        iny
-        iny
-        dec     _vp_k
-        bne     1$
-        ldy     _vp_src
-        iny
-        lda     #8
-        sta     _vp_k
-    2$:
-        lda     _river_tile_pat,y
-        sta     0x0100,x
-        inx
-        iny
-        iny
-        dec     _vp_k
-        bne     2$
+        lda     _river_tile_pat+0,y
+        sta     0x100,x
+        lda     _river_tile_pat+2,y
+        sta     0x101,x
+        lda     _river_tile_pat+4,y
+        sta     0x102,x
+        lda     _river_tile_pat+6,y
+        sta     0x103,x
+        lda     _river_tile_pat+8,y
+        sta     0x104,x
+        lda     _river_tile_pat+10,y
+        sta     0x105,x
+        lda     _river_tile_pat+12,y
+        sta     0x106,x
+        lda     _river_tile_pat+14,y
+        sta     0x107,x
+        lda     _river_tile_pat+1,y
+        sta     0x108,x
+        lda     _river_tile_pat+3,y
+        sta     0x109,x
+        lda     _river_tile_pat+5,y
+        sta     0x10A,x
+        lda     _river_tile_pat+7,y
+        sta     0x10B,x
+        lda     _river_tile_pat+9,y
+        sta     0x10C,x
+        lda     _river_tile_pat+11,y
+        sta     0x10D,x
+        lda     _river_tile_pat+13,y
+        sta     0x10E,x
+        lda     _river_tile_pat+15,y
+        sta     0x10F,x
     __endasm;
 }
 
@@ -1136,28 +1148,38 @@ static void vp_copy_pat_hi(void) {
     __asm
         ldx     _vp_dst
         ldy     _vp_src
-        lda     #8
-        sta     _vp_k
-    1$:
         lda     _river_tile_pat+256,y
-        sta     0x0100,x
-        inx
-        iny
-        iny
-        dec     _vp_k
-        bne     1$
-        ldy     _vp_src
-        iny
-        lda     #8
-        sta     _vp_k
-    2$:
-        lda     _river_tile_pat+256,y
-        sta     0x0100,x
-        inx
-        iny
-        iny
-        dec     _vp_k
-        bne     2$
+        sta     0x100,x
+        lda     _river_tile_pat+258,y
+        sta     0x101,x
+        lda     _river_tile_pat+260,y
+        sta     0x102,x
+        lda     _river_tile_pat+262,y
+        sta     0x103,x
+        lda     _river_tile_pat+264,y
+        sta     0x104,x
+        lda     _river_tile_pat+266,y
+        sta     0x105,x
+        lda     _river_tile_pat+268,y
+        sta     0x106,x
+        lda     _river_tile_pat+270,y
+        sta     0x107,x
+        lda     _river_tile_pat+257,y
+        sta     0x108,x
+        lda     _river_tile_pat+259,y
+        sta     0x109,x
+        lda     _river_tile_pat+261,y
+        sta     0x10A,x
+        lda     _river_tile_pat+263,y
+        sta     0x10B,x
+        lda     _river_tile_pat+265,y
+        sta     0x10C,x
+        lda     _river_tile_pat+267,y
+        sta     0x10D,x
+        lda     _river_tile_pat+269,y
+        sta     0x10E,x
+        lda     _river_tile_pat+271,y
+        sta     0x10F,x
     __endasm;
 }
 
@@ -1190,22 +1212,81 @@ static void vp_copy_misc(void) {
     __endasm;
 }
 
+static uint8_t vp_ok;
+
+/* Entry header + bookkeeping; the copy loops above fill in the data. */
+static void river_put_begin(void) {
+    __asm
+        lda     __vram_transfer_buffer_valid
+        sta     _vp_v
+        and     #0x7F
+        sta     __vram_transfer_buffer_valid
+        lda     #0
+        sta     _vp_ok
+        lda     #131
+        sec
+        sbc     _vp_n
+        cmp     __vram_transfer_buffer_pos_w
+        bcc     8$
+        lda     _vp_n
+        clc
+        adc     #5
+        sta     _vp_k
+        lda     __vram_transfer_buffer_num_cycles_x8
+        cmp     _vp_k
+        bcc     8$
+        sbc     _vp_k
+        sta     _vp_cyc
+        ldx     __vram_transfer_buffer_pos_w
+        lda     _vp_n
+        asl     a
+        asl     a
+        eor     #0xFF
+        sec
+        adc     #0x81
+        sta     0x100,x
+        lda     #0
+        sta     0x101,x
+        lda     _vp_hi
+        sta     0x102,x
+        lda     _vp_lo
+        sta     0x103,x
+        txa
+        clc
+        adc     #4
+        sta     _vp_dst
+        adc     _vp_n
+        sta     _vp_pos
+        inc     _vp_ok
+        rts
+    8$:
+        lda     _vp_v
+        sta     __vram_transfer_buffer_valid
+    __endasm;
+}
+
+static void river_put_end(void) {
+    __asm
+        ldx     _vp_pos
+        lda     #0
+        sta     0x100,x
+        lda     __vram_transfer_buffer_pos_w
+        sta     __vram_transfer_buffer_pos_old
+        stx     __vram_transfer_buffer_pos_w
+        lda     _vp_cyc
+        sta     __vram_transfer_buffer_num_cycles_x8
+        lda     __vram_transfer_buffer_valid
+        lsr     a
+        ora     #0x80
+        sta     __vram_transfer_buffer_valid
+    __endasm;
+}
+
 static uint8_t river_put(void) {
-    vp_v = _vram_transfer_buffer_valid;
-    _vram_transfer_buffer_valid = (uint8_t)(vp_v & 0x7Fu);
-    vp_pos = _vram_transfer_buffer_pos_w;
-    vp_cyc = _vram_transfer_buffer_num_cycles_x8;
-    if (vp_pos > (uint8_t)(131u - vp_n) || vp_cyc < (uint8_t)(vp_n + 5u)) {
-        _vram_transfer_buffer_valid = vp_v;
+    river_put_begin();
+    if (!vp_ok) {
         return 0u;
     }
-    vp_dst = (uint8_t)(vp_pos + 4u);
-    VTB_BUF[vp_pos] = (uint8_t)(0x81u - (uint8_t)(vp_n << 2));
-    VTB_BUF[(uint8_t)(vp_pos + 1u)] = 0u;
-    VTB_BUF[(uint8_t)(vp_pos + 2u)] = vp_hi;
-    VTB_BUF[(uint8_t)(vp_pos + 3u)] = vp_lo;
-    vp_cyc = (uint8_t)(vp_cyc - (uint8_t)(vp_n + 5u));
-    vp_pos = (uint8_t)(vp_dst + vp_n);          /* new pos_w */
     if (vp_kind == 0u) {
         vp_copy_pat_lo();
     } else if (vp_kind == 1u) {
@@ -1215,12 +1296,7 @@ static uint8_t river_put(void) {
     } else {
         vp_copy_ids();
     }
-    VTB_BUF[vp_pos] = 0u;
-    _vram_transfer_buffer_pos_old = _vram_transfer_buffer_pos_w;
-    _vram_transfer_buffer_pos_w = vp_pos;
-    _vram_transfer_buffer_num_cycles_x8 = vp_cyc;
-    _vram_transfer_buffer_valid = (uint8_t)(0x80u |
-        (uint8_t)(_vram_transfer_buffer_valid >> 1));
+    river_put_end();
     return 1u;
 }
 #else
@@ -1429,21 +1505,17 @@ static void river_find_dup(void) {
     __asm
         lda     #0xFF
         sta     _rj_id
-        lda     #0
-        sta     _rj_k
+        ldx     _rj_c
     1$:
-        lda     _rj_k
-        cmp     _rj_c
-        bcc     2$
+        dex
+        bpl     2$
         jmp     9$                  ; no candidate left
     2$:
-        tax
         lda     _river_col_kind,x
-        and     #3
-        beq     3$
-        jmp     8$                  ; solid column: nothing to share
+        bne     1$                  ; solid column: nothing to share
+        stx     _rj_k
     3$:
-        lda     _rj_k               ; X = candidate offset in its page
+        txa                         ; X = candidate offset in its page
         asl     a
         asl     a
         asl     a
@@ -1500,7 +1572,7 @@ static void river_find_dup(void) {
         sta     _rj_id
         jmp     9$
     8$:
-        inc     _rj_k
+        ldx     _rj_k
         jmp     1$
     9$:
     __endasm;
@@ -1522,32 +1594,54 @@ static void river_reset_kinds(void) {
 #endif
 }
 
+/* Advance river_job_col over solid columns: kind 1 = TILE_LAND (0), kind 2 =
+ * TILE_WATER (1), i.e. the tile is kind - 1. */
+typedef char river_solid_tiles_assert[(TILE_LAND == 0u && TILE_WATER == 1u) ? 1 : -1];
+static void river_job_solids(void) {
+#ifdef __SDCC
+    __asm
+        ldx     _river_job_col
+    1$:
+        cpx     #24
+        bcs     9$
+        ldy     _river_col_kind,x
+        beq     9$
+        dey
+        tya
+        sta     _river_row_ids,x
+        inx
+        bne     1$
+    9$:
+        stx     _river_job_col
+    __endasm;
+#else
+    while (river_job_col < RIVER_TILE_COLS && river_col_kind[river_job_col]) {
+        river_row_ids[river_job_col] = (uint8_t)(river_col_kind[river_job_col] - 1u);
+        river_job_col++;
+    }
+#endif
+}
+
 static void river_run_job(void) {
-    rj_n = RIVER_JOB_COLS;
-    while (river_job_col < RIVER_TILE_COLS) {
+    for (;;) {
+        river_job_solids();
+        if (river_job_col >= RIVER_TILE_COLS) {
+            break;
+        }
         rj_c = river_job_col;
-        if (river_col_kind[rj_c] & 1u) {
-            rj_id = TILE_LAND;
-        } else if (river_col_kind[rj_c] & 2u) {
-            rj_id = TILE_WATER;
-        } else {
-            river_find_dup();
-            if (rj_id == 0xFFu) {
-                rj_id = (uint8_t)(TILE_RIVER_BASE + river_alloc);
-                if (!river_emit_pattern()) {
-                    return;             /* buffer full: resume next pass */
-                }
-                river_alloc++;
-                if (river_alloc >= TILE_RIVER_COUNT) {
-                    river_alloc = 0u;
-                }
+        river_find_dup();
+        if (rj_id == 0xFFu) {
+            rj_id = (uint8_t)(TILE_RIVER_BASE + river_alloc);
+            if (!river_emit_pattern()) {
+                return;             /* buffer full: resume next pass */
+            }
+            river_alloc++;
+            if (river_alloc >= TILE_RIVER_COUNT) {
+                river_alloc = 0u;
             }
         }
         river_row_ids[rj_c] = rj_id;
         river_job_col++;
-        if (--rj_n == 0u) {
-            return;
-        }
     }
     if (!river_emit_stripe()) {
         return;
