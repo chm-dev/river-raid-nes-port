@@ -11,7 +11,7 @@
  * frame and changed now.
  *
  * Run:  node tests/nes_ring_integrity.mjs [rom] [noi] [split] [Up|Down|none] [frames]
- *       (defaults: roms/river_raid.nes, its .noi, 25, Up, 700)
+ *       (defaults: roms/river_raid.nes, its .noi, 30, Up, 700)
  * Use split 36 for ROMs built before the compact HUD.
  */
 import path from 'node:path';
@@ -28,7 +28,7 @@ import {
 
 const rom = path.resolve(process.argv[2] || 'roms/river_raid.nes');
 const noi = path.resolve(process.argv[3] || 'roms/river_raid.noi');
-const split = Number(process.argv[4] || 25);
+const split = Number(process.argv[4] || 30);
 const buttons = (process.argv[5] || 'Up') === 'none' ? '' : (process.argv[5] || 'Up');
 const FRAMES = Number(process.argv[6] || 700);
 const RING = 30;

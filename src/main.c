@@ -14,7 +14,7 @@
  *   nametable 1 ($2400).  GBDK's deferred LCD handler runs from the NMI path
  *   and switches the playfield scroll/nametable every frame, so the split
  *   cannot be delayed by main-loop work (river row streaming).  The visible
- *   split lands on scanline 25/26.
+ *   split lands on scanline 30/31.
  */
 #include <nes/nes.h>
 #include <stdint.h>
@@ -62,7 +62,7 @@ static void lcd_handler(void) {
     /* Playfield pass: nametable 1 and the fine scroll.  GBDK's deferred ISR
      * adds the current scanline to bkg_scroll_y when it writes the entry
      * (see write_shadow_registers_to_buffer), so subtract the split line
-     * here.  Without this the playfield is 25 px ahead of the ring: the
+     * here.  Without this the playfield is 30 px ahead of the ring: the
      * newest row lands at the bottom instead of entering at the top. */
     uint8_t sy = playfield_scroll_y;
 

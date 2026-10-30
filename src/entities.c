@@ -969,7 +969,7 @@ static void ent_draw_bridge_debris(void) {
 /* Constants hard-coded in ent_draw_reg(); keep them in step with the C side. */
 typedef char ent_asm_tile_base[(ENT_TILE_BASE == 88u) ? 1 : -1];
 typedef char ent_asm_flipx[(S_FLIPX == 0x40u) ? 1 : -1];
-typedef char ent_asm_split[(HUD_SPLIT_SCANLINE == 25u) ? 1 : -1];
+typedef char ent_asm_split[(HUD_SPLIT_SCANLINE == 30u) ? 1 : -1];
 typedef char ent_asm_fuel[(ENT_AUX_FUEL == 15u) ? 1 : -1];
 typedef char ent_asm_left[(ENT_F_LEFT == 1u) ? 1 : -1];
 
@@ -1028,7 +1028,7 @@ static void ent_draw_reg(void) {
         sta     _e_t
     2$:                             ; one 8-pixel tile row per pass
         lda     _e_y
-        cmp     #25                 ; HUD_SPLIT_SCANLINE
+        cmp     #30                 ; HUD_SPLIT_SCANLINE
         bcc     5$
         cmp     #232
         bcs     5$

@@ -13,8 +13,8 @@
  *   - the HUD and playfield palettes and the CHR-RAM tile set,
  *   - the four-row HUD text, source gauge art, moving fuel marker and lives planes,
  *   - the 30-row playfield ring in nametable 1 and its attributes,
- *   - the VBL/sprite-0 split cadence and the fixed 24-line HUD,
- *   - the rendered screenshot geometry (HUD, split at y=25, river colors).
+ *   - the VBL/sprite-0 split cadence and the fixed 30-line HUD,
+ *   - the rendered screenshot geometry (HUD, split at y=30, river colors).
  */
 import fs from 'node:fs';
 import path from 'node:path';
@@ -343,9 +343,10 @@ async function main() {
         `${shot.width}x${shot.height}`);
 
     let hudClean = true;
-    // The HUD is three tile rows (scanlines 0..23) plus one gray padding line;
-    // the playfield starts on scanline 25 or 26 (the split jitters by a line).
-    for (let y = 0; y < 25; y++) {
+    // The HUD is three tile rows (scanlines 3..26) with 3 gray padding lines
+    // above and below; the playfield starts on scanline 30 or 31 (the split
+    // jitters by a line).
+    for (let y = 0; y < 30; y++) {
         for (let x = 0; x < 256; x++) {
             const [r, g, b] = shot.pixel(x, y);
             if (isPlayfield(r, g, b)) {
@@ -355,27 +356,27 @@ async function main() {
         }
         if (!hudClean) break;
     }
-    check('top 25 scanlines contain no playfield bleed', hudClean);
+    check('top 30 scanlines contain no playfield bleed', hudClean);
 
     check('HUD row 1 is a gray band with black/yellow text',
-        grayAt(4) > 100 && blackAt(4) > 10 && yellowAt(4) > 10,
-        `gray=${grayAt(4)} black=${blackAt(4)} yellow=${yellowAt(4)}`);
+        grayAt(7) > 100 && blackAt(7) > 10 && yellowAt(7) > 10,
+        `gray=${grayAt(7)} black=${blackAt(7)} yellow=${yellowAt(7)}`);
     check('HUD row 2 renders GAME, gauge and BRIDGE',
-        grayAt(10) > 80 && blackAt(10) > 20 && yellowAt(10) > 20,
-        `gray=${grayAt(10)} black=${blackAt(10)} yellow=${yellowAt(10)}`);
+        grayAt(13) > 80 && blackAt(13) > 20 && yellowAt(13) > 20,
+        `gray=${grayAt(13)} black=${blackAt(13)} yellow=${yellowAt(13)}`);
     check('HUD row 3 renders the gauge floor and lives icons',
-        grayAt(18) > 60 && blackAt(18) > 5 && yellowAt(18) > 5,
-        `gray=${grayAt(18)} black=${blackAt(18)} yellow=${yellowAt(18)}`);
+        grayAt(21) > 60 && blackAt(21) > 5 && yellowAt(21) > 5,
+        `gray=${grayAt(21)} black=${blackAt(21)} yellow=${yellowAt(21)}`);
 
     let firstPlayfield = -1;
-    for (let y = 18; y < 40; y++) {
+    for (let y = 23; y < 45; y++) {
         if (countRow(shot, y, isPlayfield) > 32) {
             firstPlayfield = y;
             break;
         }
     }
-    check('playfield starts on scanline 25 or 26',
-        firstPlayfield === 25 || firstPlayfield === 26,
+    check('playfield starts on scanline 30 or 31',
+        firstPlayfield === 30 || firstPlayfield === 31,
         `first=${firstPlayfield}`);
 
     let greenPixels = 0;

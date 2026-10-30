@@ -17,8 +17,8 @@
 ## Current status
 
 - **Compact HUD (2026-10-30, branch `feature/hud-compact`):** the HUD is 24
-  scanlines + 1 padding line (was 32 + 4, plus an 8 px blank row at the top); the
-  playfield is **215 scanlines** (was 204) and the split is at **25/26**.  The
+  scanlines of content with 3 px padding above and below (was 32 + 4, plus an 8 px
+  blank row at the top); the playfield is **210 scanlines** (was 204), split at **30/31**.  The
   shorter wait for the split recovered ~1.2k cycles per frame (`.delay_to_lcd_scanline`
   5.4k -> 4.1k), fast late passes fell from ~23% to 16-20%, cruise is unchanged
   (0.7-0.8%).  Side effects handled: tall objects (the 24-row fuel depot) have only
@@ -81,10 +81,10 @@
   - `tests/nes_smoke.mjs` (50 checks) and `tests/nes_scroll_hud.mjs`
     (14 checks) pass with the shared-digit CHR layout and downward scroll.
 - Phase 3 is complete:
-  - The HUD is a 3-row content band (24 px) plus 1 px bottom padding (compact
+  - The HUD is a 3-row content band (24 px) plus 3 px padding above and below (compact
     since 2026-10-30; it was 4 rows + 4 px); the playfield split is at scanline
-    25/26 (`LYC=24`).  Nametable row 0 is blank padding that the HUD pass scrolls
-    out of view (`HUD_SCROLL_Y` = 8); rows 1-3 carry the text.
+    30/31 (`LYC=29`).  Nametable row 0 is blank padding that the HUD pass scrolls
+    up (`HUD_SCROLL_Y` = 5); rows 1-3 carry the text.
   - Layout mirrors the Atari HUD: P1/score/HI/hi-score, then
     GAME/fuel box/BRIDGE/bridge number, then game number/gauge/lives.
   - HUD palette 0 is gray/black/yellow/white (`00 0F 28 30`); labels are
@@ -260,7 +260,7 @@
 | `tools/show_tree_layout.py` | Captured 32-px tree feature with 8x8 grid |
 | `tools/show_proc_tree.py` | Procedural tree: exact vs. old-atlas comparison |
 | `tools/inspect_playfield.py` | NT1+CHR playfield reconstruction / screenshot check |
-| `src/main.c` | Boot sequence, VBL/LCD split at LYC=24 (visible 25/26), frame loop |
+| `src/main.c` | Boot sequence, VBL/LCD split at LYC=29 (visible 30/31), frame loop |
 | `tests/nes_ring_integrity.mjs` | Model-free ring test: no visible river row may change between two frames (guards the ring margin and the CHR cache) |
 | `src/hud.c` | Source HUD: charset-glyph labels, 5-cell gauge, sprite fuel bar, lives planes |
 | `src/player.c` | Sprite CHR for the three flight shapes |
@@ -312,11 +312,11 @@ These are documented in full in `docs/ATARI_RE_SPEC.md`; don't re-derive them.
   mirroring.  GBDK's deferred `add_LCD()` handler writes the playfield
   scroll/nametable from the NMI path every frame; its PPUADDR + PPUSCROLL
   sequence sets both `t` and `v` (a PPUSCROLL-only write cannot change the
-  vertical scroll mid-frame).  The visible split is 25/26 (`HUD_SPLIT_SCANLINE`
-  25, `LYC` 24) due to the faked delay's one-line jitter.
-- **NES HUD:** 3 content rows (24 px) + 1 px bottom padding; nametable row 0 is
-  blank padding scrolled out of view by `HUD_SCROLL_Y` (the HUD sprites'
-  `HUD_*_Y` are screen positions, 8 less than the tile-row based ones), rows 1-3
+  vertical scroll mid-frame).  The visible split is 30/31 (`HUD_SPLIT_SCANLINE`
+  30, `LYC` 29) due to the faked delay's one-line jitter.
+- **NES HUD:** 3 content rows (24 px) with 3 px padding above and below; nametable row 0 is
+  blank padding scrolled up by `HUD_SCROLL_Y` = 5 (the HUD sprites'
+  `HUD_*_Y` are screen positions, 5 less than the tile-row based ones), rows 1-3
   are content.  Gray band (`$00`), black and yellow text.
   Labels are the original glyphs doubled horizontally; the gauge is the
   original 5-cell frame; E/1-2/F are fixed.  The yellow level bar is a
@@ -381,8 +381,8 @@ These are documented in full in `docs/ATARI_RE_SPEC.md`; don't re-derive them.
 9. **Deprecated tools:** `render_mode14.py`, `antic_mode14_probe.py`; use
    `render_mode_e.py` / `pmg_line_probe.py`.
 10. **Split boundary jitter:** GBDK's faked LCD delay lands the playfield on
-    scanline 25 or 26 (a one-line alternation; it was 36/37 before the compact
-    HUD); the top 25 rows stay HUD/gray and there are no black playfield frames. A future option is a fixed
+    scanline 30 or 31 (a one-line alternation; it was 36/37 before the compact
+    HUD); the top 30 rows stay HUD/gray and there are no black playfield frames. A future option is a fixed
     border row at the boundary or a mapper with a scanline IRQ.
 11. **HUD digit width:** score, hi-score and bridge digits use the 8-px
     charset digits, while the source displays 16-px mode-6 digits.  Fitting
@@ -1281,3 +1281,24 @@ now 24 scanlines of content + 1 padding line, and the playfield grew from 204 to
   new geometry (split 25/26, HUD rows at y 4/10/18, lives sprites at y 15).
 - **For the user:** `BUGS.md` lists "tank shots scroll with the river"; the shell
   (OAM slots 4-5) is deliberately excluded from `entities_follow()`.
+
+### 2026-10-30 - HUD padding (branch eature/hud-compact)
+
+The compact HUD had too little air around the text.  It now has 3 px of padding
+above and 3 px below the 24 content scanlines (30 total); the playfield is 210
+scanlines.
+
+- **How:** HUD_SCROLL_Y 8 -> 5 (the blank nametable row 0 now shows 3 lines),
+  HUD_SPLIT_SCANLINE 25 -> 30, HUD_SPLIT_LYC 24 -> 29, PLAYFIELD_SCANLINES 210,
+  and every HUD_*_Y sprite position +3.  nt_draw_reg() has cmp #30 behind its
+  compile-time assert.
+- **Side effects:** 5 px less playfield eases the CHR-cache pressure of Known issues
+  1d (about 1 tile row less in the worst window) and gives the entity spawn code
+  30 rows of headroom instead of 25.  The split spin is ~0.6k cycles longer
+  per frame than at 25 (not re-profiled).
+- **Tests:** 
+es_smoke, 
+es_scroll_hud (split 30/31, HUD rows sampled at y 7/13/21,
+  lives sprites at y 18) and 
+es_ring_integrity.mjs (default split now 30; 0 of
+  18,828 visible-row checks changed) pass.  ROM is 65,552 bytes.
