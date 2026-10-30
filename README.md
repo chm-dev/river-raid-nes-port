@@ -27,6 +27,7 @@ node tests/nes_smoke.mjs         # Mesen checks (start MesenCE-MCP first, see AG
 `AGENTS.md` has the toolchain rules and the lessons learned, `PROGRESS.md` the
 status log and next steps, `PORTING_PLAN.md` the roadmap.
 
-<img width="250" height="224" alt="river" src="https://github.com/user-attachments/assets/84e302d0-292d-4ea8-b1e7-e53591eaed1d" />
+<img width="508" height="476" alt="river" src="https://github.com/user-attachments/assets/382baff0-3d52-4f3e-8823-18b9decd1e3b" />
+
 
 
