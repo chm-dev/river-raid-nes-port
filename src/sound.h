@@ -14,6 +14,8 @@ void sound_init(void);
 /* Phase 6: advance envelopes and the engine-hum oscillator. */
 void sound_update(void);
 
+/* Engine hum: 0 slow, 1 cruise, 2 fast, SOUND_ENGINE_OFF = silent. */
+#define SOUND_ENGINE_OFF        3u
 void sound_set_engine(uint8_t speed);
 void sound_play_shot(void);
 void sound_play_explosion(void);

@@ -17,6 +17,7 @@
 #include "entities.h"
 #include "entity_gfx.h"
 #include "player.h"
+#include "sound.h"
 
 player_state_t player;
 
@@ -204,6 +205,7 @@ static void player_update_shot(void) {
         player.shot_x = (uint8_t)(player.x + 3u);
         player.shot_y = (uint8_t)(player.y - 6u);
         player.shot_active = 1;
+        sound_play_shot();
     } else {
         pl_row = (uint8_t)(PLAYER_SHOT_SPEED * pl_ticks);
         if (player.shot_y < (uint8_t)(HUD_SPLIT_SCANLINE + pl_row + 6u)) {
@@ -226,6 +228,7 @@ static void player_update_shot(void) {
         return;
     }
     if (entities_hit_shot(player.shot_x, player.shot_y)) {
+        sound_play_explosion();
         player_kill_shot();
         return;
     }
@@ -241,6 +244,8 @@ static void player_crash(void) {
     hide_sprite(PLAYER_SPRITE_BOTTOM);
     river_freeze = 1u;
     player.alive = 0;
+    sound_play_explosion();
+    sound_set_engine(SOUND_ENGINE_OFF);
     if (hud_lives != 0u) {
         hud_lives--;
     }
@@ -288,6 +293,7 @@ static void player_respawn(uint8_t new_game) {
 
 void player_update(void) BANKED {
     if (player_disable) {
+        sound_set_engine(SOUND_ENGINE_OFF);
         river_speed = 1u;       /* tests expect 1 px/frame */
         river_vel = RIVER_VEL_CRUISE;
         if (player.alive) {
@@ -358,6 +364,7 @@ void player_update(void) BANKED {
 
     /* Throttle: down = slow, up = fast, otherwise cruise. */
     river_speed = (pl_pad & J_DOWN) ? 0u : (pl_pad & J_UP) ? 2u : 1u;
+    sound_set_engine(river_speed);
 
     /* Fuel. */
     player_fuel_tick = (uint8_t)(player_fuel_tick + pl_ticks);
@@ -380,6 +387,7 @@ void player_update(void) BANKED {
 
     pl_hit = entities_check_player(player.x, player.y);
     if (pl_hit == ENT_HIT_FUEL) {
+        sound_play_refuel();
         /* The pass covers pl_ticks frames; the Atari adds per frame. */
         hud_fuel = (hud_fuel > (uint8_t)(255u - PLAYER_REFUEL_RATE * pl_ticks))
             ? 255u : (uint8_t)(hud_fuel + PLAYER_REFUEL_RATE * pl_ticks);

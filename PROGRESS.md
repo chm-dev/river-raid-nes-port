@@ -1,7 +1,7 @@
 # Project Progress & Session Handoff
 
 **Last updated:** 2026-10-30
-**Current phase:** Phase 5 COMPLETE (2026-10-30) — jet, shot, entities, scoring, fuel, bridge/road/tank, respawn-at-bridge (checkpoint rule verified against the real game) and the 30 Hz/60 Hz frame work are done and covered by `nes_gameplay`, `nes_respawn`, `nes_river_cache`, `host_restart.ps1`; next: Phase 6 (sound, game modes)
+**Current phase:** Phase 5 COMPLETE (2026-10-30) — jet, shot, entities, scoring, fuel, bridge/road/tank, respawn-at-bridge (checkpoint rule verified against the real game) and the 30 Hz/60 Hz frame work are done and covered by `nes_gameplay`, `nes_respawn`, `nes_river_cache`, `host_restart.ps1`; Phase 6 in progress: RAM freed (152 B) and APU sound done (2026-10-30); title/attract and game selection remain
 **Branch note:** all work is on `main`; `experiment/30fps`, `experiment/river60-logic30` and `feature/hud-compact` are fully merged (safe to delete).
 **Phase 1:** COMPLETE (reverse engineering + asset extraction)
 **Phase 2:** COMPLETE (scaffolding, build pipeline, boot ROM, Mesen smoke test)
@@ -392,17 +392,18 @@ These are documented in full in `docs/ATARI_RE_SPEC.md`; don't re-derive them.
 
 ## Next step — Phase 6 (Phase 5 is complete)
 
-1. **Sound (`src/sound.c`, currently empty stubs).**  Original audio is POKEY, documented in
-   `docs/ATARI_RE_SPEC.md` §9 (deferred VBI `$B2A5`: shot `$C6`, explosion `$7C`, refuel/enemy
-   `$7F`, beep `$7E`, shot sweep `$7D`, engine from the joystick bits + `$B4AC` table).  Map to
-   the 2A03: pulse 1 shot/low-fuel, pulse 2 cues, triangle engine hum by speed, noise for
-   explosions.  `sound_update()` already runs in the 30 Hz player group; the APU writes are
-   cheap but a 30 Hz cadence may need `sound_update` split or a 60 Hz hook.  Hooks to call:
-   `sound_play_shot/explosion/refuel`, `sound_set_engine`.
-2. **Game states:** title/attract, START / game-over flow, SELECT game variations.
-3. **Budget warning:** internal RAM has **0 bytes free** and the fixed bank ~2.9 KB, bank 1
-   ~3 KB.  Sound state needs RAM: reclaim first (e.g. gate `river_debug_*` behind a macro the
-   tests read, shrink buffers) - `build.ps1` fails the build when `_BSS` passes `$07FF`.
+1. **Sound: DONE (2026-10-30).**  `src/sound.c` drives the APU from `sound_update()` (30 Hz player
+   group, timers advance by `game_ticks`): pulse 1 = shot chirp, pulse 2 = refuel tone / low-fuel
+   beep (`hud_fuel < 64`), triangle = engine hum (3 pitches by throttle, off unless playing), noise
+   = explosions.  Hooks are called from `player.c`.  `tests/nes_sound.mjs` (13 checks) records APU
+   writes with a Lua callback.  Not ported: the Atari's engine noise layer and exact POKEY pitches
+   (`$B4C0`/`$B4E1` tables); effects are tuned by ear-level approximations, not by capture.
+2. **Game states (open):** title/attract, SELECT game variations.  START / game-over / respawn
+   already work in `player_update()` (WAIT -> READY -> PLAY -> DEAD/OVER; START after game over
+   restarts), but there is no title screen, no attract mode and no game selection.
+3. **Budget:** internal RAM has **152 bytes free** (2026-10-30: the HUD/player boot-time tile buffers
+   now alias `river_tile_pat`, see `river.h`; do not call `hud_init_graphics`/`player_init_graphics`
+   after `river_init()` without that in mind), the fixed bank ~2.9 KB, bank 1 ~3 KB.
 4. Open fidelity items (small): road is 16 scanlines (Atari 20); balloon basket colour
    (`BUGS.md`); PAL `$BF` has no NES counterpart; the spawner uses its own RNG, so objects after
    a restart differ from the Atari's.
@@ -422,6 +423,7 @@ node tests/nes_river.mjs                # Phase 4 row/state/collision validation
 python tools/object_host_check.py build/object_trace.jsonl build/object_trace_L15.jsonl build/object_trace_L24.jsonl   # spawner vs model
 python tools/river_repeat_rows.py       # repeat-row skip rule: 0 false positives
 node tests/nes_entity_hits.mjs          # 20 hit-box boundary cases
+node tests/nes_sound.mjs                # APU writes per event (13 checks)
 node tests/nes_gameplay.mjs            # steering, throttle, fuel, refuel, shot score
 ./tests/host_restart.ps1                 # river_restart() vs the Atari $B1C0 truth table (build/checkpoint_trace.jsonl)
 node tests/nes_sprite_lock.mjs          # entity sprites locked to the scroll
