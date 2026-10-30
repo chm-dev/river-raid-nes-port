@@ -641,39 +641,115 @@ uint8_t entities_hit_shot(uint8_t sx, uint8_t sy) BANKED {
     return 0;
 }
 
-uint8_t entities_check_player(uint8_t px, uint8_t py) BANKED {
-    for (e_i = 0; e_i < MAX_ENTITIES; e_i++) {
+/* Find the first slot at or after e_i that the jet box (8x14 at e_px, e_y)
+ * touches, or a swelling fireball that needs the finer test; e_i = 0xFF when
+ * there is none.  Box overlap in 8-bit wrap-around arithmetic (all
+ * coordinates stay below 256): with d = entity - jet the boxes meet when
+ * -size < d < jet size, i.e. d < jet size or -d < entity size.  Y goes first:
+ * most entities are far above or below the jet.  Hand-written: SDCC compiles
+ * every ent_y[e_i] access into a ~30-cycle pointer setup, which made the C
+ * version ~4k cycles per call (2.0k/frame in the profile).  Its own function,
+ * as inline asm must be. */
+static void ent_scan_player(void) {
+#ifndef __SDCC
+    for (; e_i < MAX_ENTITIES; e_i++) {
         e_type = ent_type[e_i];
         if (e_type == ENT_AUX_SHELL) {
-            /* The fireball only kills once it is swelling ($A428: $50 >= $11). */
-            e_px = px;
-            e_y = py;
-            if (ent_aux[e_i] >= SHELL_FLY_FRAMES && ent_shell_hits()) {
-                return ENT_HIT_DEADLY;
+            if (ent_aux[e_i] >= SHELL_FLY_FRAMES) {
+                return;
             }
             continue;
         }
         if (e_type < ENT_AUX_JET || e_type > ENT_AUX_FUEL) {
             continue;
         }
-        /* Box overlap in 8-bit wrap-around arithmetic (all coordinates stay
-         * below 256): with d = entity - jet, the boxes meet when
-         * -size < d < jet size, i.e. d < jet size or -d < entity size.  The
-         * Y test comes first: most entities are far above or below the jet. */
-        e_l = (uint8_t)(ent_y[e_i] - py);
-        if (e_l >= 14u && (uint8_t)(py - ent_y[e_i]) >= ent_gfx_rows[e_type]) {
+        if ((uint8_t)(ent_y[e_i] - e_y) >= 14u &&
+            (uint8_t)(e_y - ent_y[e_i]) >= ent_gfx_rows[e_type]) {
             continue;
         }
-        e_l = (uint8_t)(ent_x[e_i] - px);
-        if (e_l >= 8u && (uint8_t)(px - ent_x[e_i]) >= ent_width(e_type)) {
+        if ((uint8_t)(ent_x[e_i] - e_px) >= 8u &&
+            (uint8_t)(e_px - ent_x[e_i]) >= ent_width(e_type)) {
             continue;
         }
-        if (e_type == ENT_AUX_FUEL) {
-            return ENT_HIT_FUEL;
-        }
-        return ENT_HIT_DEADLY;
+        return;
     }
-    return ENT_HIT_NONE;
+    e_i = 0xFFu;
+#else
+    __asm
+        ldx     _e_i
+    1$:
+        cpx     #11                 ; MAX_ENTITIES
+        bcs     9$
+        lda     _ent_type,x
+        tay
+        cmp     #17                 ; ENT_AUX_SHELL
+        bne     2$
+        lda     _ent_aux,x
+        cmp     #0x11               ; SHELL_FLY_FRAMES: swelling, test it in C
+        bcs     8$
+        bcc     7$
+    2$:
+        cmp     #7                  ; ENT_AUX_JET
+        bcc     7$
+        cmp     #16                 ; above ENT_AUX_FUEL (tank)
+        bcs     7$
+        lda     _ent_y,x            ; Y: d = ent - jet
+        sec
+        sbc     _e_y
+        cmp     #14
+        bcc     4$
+        lda     _e_y                ; or jet - ent < entity rows
+        sec
+        sbc     _ent_y,x
+        cmp     _ent_gfx_rows,y
+        bcs     7$
+    4$:
+        lda     _ent_x,x            ; X: d = ent - jet
+        sec
+        sbc     _e_px
+        cmp     #8
+        bcc     8$
+        lda     _ent_gfx_cols,y     ; width = tiles * 8
+        asl     a
+        asl     a
+        asl     a
+        sta     _e_w
+        lda     _e_px
+        sec
+        sbc     _ent_x,x
+        cmp     _e_w
+        bcc     8$
+    7$:
+        inx
+        bne     1$
+    9$:
+        ldx     #0xFF               ; none
+    8$:
+        stx     _e_i
+    __endasm;
+#endif
+}
+
+uint8_t entities_check_player(uint8_t px, uint8_t py) BANKED {
+    e_px = px;
+    e_y = py;
+    e_i = 0;
+    for (;;) {
+        ent_scan_player();
+        if (e_i == 0xFFu) {
+            return ENT_HIT_NONE;
+        }
+        e_type = ent_type[e_i];
+        if (e_type == ENT_AUX_SHELL) {
+            /* The fireball only kills once it is swelling ($A428: $50 >= $11). */
+            if (ent_shell_hits()) {
+                return ENT_HIT_DEADLY;
+            }
+            e_i++;
+            continue;
+        }
+        return (e_type == ENT_AUX_FUEL) ? ENT_HIT_FUEL : ENT_HIT_DEADLY;
+    }
 }
 
 /* Atari status bit 0 (set by the DLI from the P3/playfield collision): the
