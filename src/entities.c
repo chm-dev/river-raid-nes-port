@@ -957,8 +957,138 @@ static void ent_draw_bridge_debris(void) {
     }
 }
 
+#ifdef __SDCC
+/* Constants hard-coded in ent_draw_reg(); keep them in step with the C side. */
+typedef char ent_asm_tile_base[(ENT_TILE_BASE == 88u) ? 1 : -1];
+typedef char ent_asm_flipx[(S_FLIPX == 0x40u) ? 1 : -1];
+typedef char ent_asm_split[(HUD_SPLIT_SCANLINE == 36u) ? 1 : -1];
+typedef char ent_asm_fuel[(ENT_AUX_FUEL == 15u) ? 1 : -1];
+typedef char ent_asm_left[(ENT_F_LEFT == 1u) ? 1 : -1];
+
+/* ent_draw() for the common case, an ordinary object (types 7..15: jets,
+ * helicopters, ships, bridge, fuel): the setup reads six small tables and the
+ * flip rules, then one or more rows go to the OAM, exactly as the C code below
+ * does for these types.  Hand-written because the C version was ~400 cycles
+ * per entity, of which the sprite writes were a small part.  Reads e_i and
+ * e_oam, leaves e_oam advanced; uses the e_* statics as scratch. */
+static void ent_draw_reg(void) {
+    __asm
+        ldx     _e_i
+        ldy     _ent_type,x         ; Y = type
+        sty     _e_type
+        lda     _ent_gfx_first,y
+        clc
+        adc     #88                 ; ENT_TILE_BASE
+        sta     _e_tile
+        lda     _ent_gfx_cols,y
+        sta     _e_cols
+        lda     _ent_gfx_pal,y
+        sta     _e_prop
+        lda     _ent_gfx_rows,y
+        sta     _e_rows
+        lda     _ent_y,x
+        sta     _e_y
+        lda     _ent_x,x
+        sta     _e_ex
+        lda     #8
+        sta     _e_dx
+        lda     _ent_flags,x
+        and     #1                  ; ENT_F_LEFT
+        beq     1$
+        cpy     #15                 ; fuel depots never flip
+        beq     1$
+        lda     _e_prop             ; mirror shape: flip every tile and walk
+        ora     #0x40               ; the columns from the right
+        sta     _e_prop
+        lda     _e_cols
+        sec
+        sbc     #1
+        asl     a
+        asl     a
+        asl     a
+        clc
+        adc     _e_ex
+        sta     _e_ex
+        lda     #0xF8
+        sta     _e_dx
+    1$:
+        lda     _e_oam
+        asl     a
+        asl     a
+        sta     _e_off
+        lda     #0
+        sta     _e_t
+    2$:                             ; one 8-pixel tile row per pass
+        lda     _e_y
+        cmp     #36                 ; HUD_SPLIT_SCANLINE
+        bcc     5$
+        cmp     #232
+        bcs     5$
+        lda     _e_off
+        cmp     #176
+        bcs     5$
+        lda     _e_ex
+        sta     _e_px
+        ldx     _e_off
+        ldy     _e_cols
+    3$:
+        cpx     #176
+        bcs     4$
+        lda     _e_y
+        sta     _shadow_OAM,x
+        lda     _e_tile
+        sta     _shadow_OAM+1,x
+        inc     _e_tile
+        lda     _e_prop
+        sta     _shadow_OAM+2,x
+        lda     _e_px
+        sta     _shadow_OAM+3,x
+        clc
+        adc     _e_dx
+        sta     _e_px
+        inx
+        inx
+        inx
+        inx
+        dey
+        bne     3$
+    4$:
+        stx     _e_off
+        jmp     6$
+    5$:                             ; clipped row: skip its tiles
+        lda     _e_tile
+        clc
+        adc     _e_cols
+        sta     _e_tile
+    6$:
+        lda     _e_y
+        clc
+        adc     #8
+        sta     _e_y
+        lda     _e_t
+        clc
+        adc     #8
+        sta     _e_t
+        cmp     _e_rows
+        bcs     7$
+        jmp     2$
+    7$:
+        lda     _e_off
+        lsr     a
+        lsr     a
+        sta     _e_oam
+    __endasm;
+}
+#endif
+
 static void ent_draw(void) {
     e_type = ent_type[e_i];
+#ifdef __SDCC
+    if (e_type > ENT_AUX_EXPLODE_LAST && e_type < ENT_AUX_TANK) {
+        ent_draw_reg();
+        return;
+    }
+#endif
     if (e_type <= ENT_AUX_EXPLODE_LAST) {
         /* Debris frame (e_type - 2) of the original object's class. */
         e_src = (uint8_t)(ent_flags[e_i] >> 4);
