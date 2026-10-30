@@ -979,6 +979,7 @@ static void river_convert_row(uint8_t line) {
 #endif
 }
 
+#ifndef __SDCC
 static uint8_t river_pat_equal(const uint8_t *a, const uint8_t *b) {
     uint8_t i;
 
@@ -989,6 +990,7 @@ static uint8_t river_pat_equal(const uint8_t *a, const uint8_t *b) {
     }
     return 1u;
 }
+#endif
 
 /* ------------------------------------------------------------------------- */
 /* VRAM transfer buffer                                                      */
@@ -1192,7 +1194,9 @@ static uint8_t river_job_margin;      /* margins already written for this row */
 static uint8_t river_live;            /* display on: use the fast buffer path */
 static uint8_t rj_c, rj_k, rj_id, rj_n;
 static uint16_t rj_addr;
+#ifndef __SDCC
 static const uint8_t *rj_pc, *rj_pk;
+#endif
 
 /* Upload column rj_c's pattern to cache slot rj_id; 0 when the buffer is full. */
 static uint8_t river_emit_pattern(void) {
@@ -1326,6 +1330,111 @@ static uint8_t river_emit_stripe(void) {
     return river_put();
 }
 
+/* Set rj_id to the cache id of the first earlier, non-solid column whose 16
+ * pattern bytes equal column rj_c's, or 0xFF.  This was a C loop that cost
+ * 10-13k cycles in one slice (~100 cycles per candidate pair, 12 columns per
+ * slice): the frames with a tile-row job were the ones that overran.  The
+ * first byte rejects almost every candidate.  Absolute indexing, with X the
+ * candidate and Y the current offset inside the 256-byte pages of
+ * river_tile_pat (column * 16: columns 0-15 in page 0, 16-23 in page 1).
+ * Its own function, as inline asm must be; vp_k is river_put's scratch and is
+ * free here. */
+static void river_find_dup(void) {
+#ifndef __SDCC
+    rj_id = 0xFFu;
+    rj_pc = &river_tile_pat[(uint16_t)rj_c * 16u];
+    for (rj_k = 0; rj_k < rj_c; rj_k++) {
+        if (river_col_kind[rj_k] & 3u) {
+            continue;
+        }
+        rj_pk = &river_tile_pat[(uint16_t)rj_k * 16u];
+        if (river_pat_equal(rj_pc, rj_pk)) {
+            rj_id = river_row_ids[rj_k];
+            break;
+        }
+    }
+#else
+    __asm
+        lda     #0xFF
+        sta     _rj_id
+        lda     #0
+        sta     _rj_k
+    1$:
+        lda     _rj_k
+        cmp     _rj_c
+        bcc     2$
+        jmp     9$                  ; no candidate left
+    2$:
+        tax
+        lda     _river_col_kind,x
+        and     #3
+        beq     3$
+        jmp     8$                  ; solid column: nothing to share
+    3$:
+        lda     _rj_k               ; X = candidate offset in its page
+        asl     a
+        asl     a
+        asl     a
+        asl     a
+        tax
+        lda     _rj_c               ; Y = current offset in its page
+        asl     a
+        asl     a
+        asl     a
+        asl     a
+        tay
+        lda     #16
+        sta     _vp_k
+        lda     _rj_c
+        cmp     #16
+        bcs     4$
+        ; current and candidate both in page 0
+    10$:
+        lda     _river_tile_pat,y
+        cmp     _river_tile_pat,x
+        bne     8$
+        inx
+        iny
+        dec     _vp_k
+        bne     10$
+        beq     7$
+    4$:
+        lda     _rj_k
+        cmp     #16
+        bcs     5$
+        ; current in page 1, candidate in page 0
+    11$:
+        lda     _river_tile_pat+256,y
+        cmp     _river_tile_pat,x
+        bne     8$
+        inx
+        iny
+        dec     _vp_k
+        bne     11$
+        beq     7$
+    5$:
+        ; both in page 1
+    12$:
+        lda     _river_tile_pat+256,y
+        cmp     _river_tile_pat+256,x
+        bne     8$
+        inx
+        iny
+        dec     _vp_k
+        bne     12$
+    7$:
+        ldx     _rj_k               ; identical: reuse its slot
+        lda     _river_row_ids,x
+        sta     _rj_id
+        jmp     9$
+    8$:
+        inc     _rj_k
+        jmp     1$
+    9$:
+    __endasm;
+#endif
+}
+
 static void river_run_job(void) {
     rj_n = RIVER_JOB_COLS;
     while (river_job_col < RIVER_TILE_COLS) {
@@ -1335,22 +1444,7 @@ static void river_run_job(void) {
         } else if (river_col_kind[rj_c] & 2u) {
             rj_id = TILE_WATER;
         } else {
-            rj_id = 0xFFu;
-            rj_pc = &river_tile_pat[(uint16_t)rj_c * 16u];
-            for (rj_k = 0; rj_k < rj_c; rj_k++) {
-                if (river_col_kind[rj_k] & 3u) {
-                    continue;
-                }
-                rj_pk = &river_tile_pat[(uint16_t)rj_k * 16u];
-                /* Cheap reject on two bytes before the full compare. */
-                if (rj_pc[0] != rj_pk[0] || rj_pc[15] != rj_pk[15]) {
-                    continue;
-                }
-                if (river_pat_equal(rj_pc, rj_pk)) {
-                    rj_id = river_row_ids[rj_k];
-                    break;
-                }
-            }
+            river_find_dup();
             if (rj_id == 0xFFu) {
                 rj_id = (uint8_t)(TILE_RIVER_BASE + river_alloc);
                 if (!river_emit_pattern()) {
