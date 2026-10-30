@@ -103,8 +103,6 @@ void main(void) {
     for (;;) {
         /* Wait for a new frame, but only if none passed during the last
          * pass: an overrun pass starts the next one at once (catch-up). */
-        /* Wait for a new frame, but only if none passed during the last
-         * pass: an overrun pass starts the next one at once (catch-up). */
         vsync();
         game_ticks = (uint8_t)((uint8_t)sys_time - main_last);
         main_last = (uint8_t)sys_time;
@@ -113,16 +111,17 @@ void main(void) {
         }
         frame_counter++;
 
-        /* The river (scroll, row generation, tile uploads) runs every frame;
-         * everything else runs once per LOGIC_FRAMES frames.  river_scrolled
-         * accumulates in between so the entities still follow the river. */
+        /* The river (scroll, row generation, tile uploads) and the entities
+         * run every frame: sprites that are only redrawn every other frame
+         * lag the scrolling river and snap back, which shows as jitter.
+         * entities_update() measures its own elapsed time and consumes
+         * river_scrolled. */
         river_update();
+        entities_update();
 
-        /* Two logic groups, each once per LOGIC_FRAMES frames but on
-         * alternate frames, so their costs never land on the same frame:
-         * player (jet, shot, terrain and entity hit tests) here, HUD and
-         * entities on the frame in between (entities_update measures its own
-         * elapsed time). */
+        /* Player (jet, shot, terrain and entity hit tests) and the HUD run
+         * once per LOGIC_FRAMES frames, on alternate frames so their costs
+         * never land together. */
         logic_acc = (uint8_t)(logic_acc + game_ticks);
         if (logic_acc >= LOGIC_FRAMES) {
             game_ticks = logic_acc;         /* at most 1 + 4 */
@@ -132,7 +131,6 @@ void main(void) {
             sound_update();
         } else {
             hud_update();
-            entities_update();
         }
     }
 }
