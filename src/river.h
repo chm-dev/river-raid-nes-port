@@ -70,6 +70,7 @@ extern uint8_t river_speed;
 
 /* Actual scroll velocity in 1/32 row per frame.  It eases toward the
  * throttle's target at RIVER_ACCEL per frame; reset it to cruise on restart. */
+extern uint8_t river_gen_budget;
 #define RIVER_VEL_SLOW      16u
 #define RIVER_VEL_CRUISE    32u
 #define RIVER_VEL_FAST      48u

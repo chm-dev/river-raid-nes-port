@@ -2020,6 +2020,7 @@ uint8_t river_slot_at_scanline(uint8_t scanline) {
 static uint8_t ru_next;
 static uint8_t ru_rows;
 static uint8_t ru_gen;
+uint8_t river_gen_budget = RIVER_GEN_PER_PASS;  /* rows this pass may generate (main.c) */
 
 void river_update(void) {
     river_live = 1u;
@@ -2071,7 +2072,7 @@ void river_update(void) {
         }
     }
 
-    ru_gen = RIVER_GEN_PER_PASS;
+    ru_gen = river_gen_budget;
     while (river_owed && ru_gen && !river_job) {
         river_generate_raw_row();
         if (river_block_index == 8u) {
