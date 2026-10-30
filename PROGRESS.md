@@ -1,7 +1,7 @@
 # Project Progress & Session Handoff
 
 **Last updated:** 2026-10-30
-**Current phase:** Phase 5 IN PROGRESS — jet, shot, entities, throttle ramp, bridge/tank/flash done; **frame-time work done (30 Hz game logic + 60 Hz river, see the 2026-10-29/30 performance entry)**; respawn-at-bridge, sound, fuel parity, entity fidelity next
+**Current phase:** Phase 5 IN PROGRESS — jet, shot, entities, throttle ramp, bridge/tank/flash done; **frame-time work done (30 Hz game logic + 60 Hz river, see the 2026-10-29/30 performance entry)**; respawn-at-bridge done (2026-10-30, checkpoint rule untraced); sound, fuel parity, entity fidelity next
 **Branch note:** the performance work lives on `experiment/river60-logic30` (cut from `experiment/30fps`); play-tested on a MiSTer and accepted, to be merged to `main`.
 **Phase 1:** COMPLETE (reverse engineering + asset extraction)
 **Phase 2:** COMPLETE (scaffolding, build pipeline, boot ROM, Mesen smoke test)
@@ -1342,3 +1342,40 @@ drifted against the river while the tank moved with it.
   every bridge (bridge counter / range / on-bridge kill gates disabled); that
   debug code is removed again.  No automated test covers the shell yet.  ROM
   65,552 bytes, 4 bytes RAM free.
+
+### 2026-10-30 - Respawn at the last cleared bridge (branch main)
+
+A lost life used to respawn the jet mid-river.  The original restarts the whole
+river from a checkpoint; the port now does the same.
+
+- **What the Atari does** (`$A3BC`, `$B0F0`, `$A3C8`, `$B1C0`, `$B194`): on a death with
+  lives left, `$B0F0` runs with X=`$12` (reloads only the generator defaults
+  `$4D-$5F`; clears the ring, `$2B-$4C` and the objects; keeps level, score and
+  lives), then `$A3C8` loads the LFSR (`$AA-$AC`) and `rg_left` from `$66-$69`.
+  `$66-$69` are saved by `$B194` every time the generator enters a new section;
+  `$B194` also keeps the previous set in `$AD-$B0`.  `$B1C0` decides which set
+  the restart uses: if the level parity (`$23` bit 2, against `$4C`, its value
+  at life start, `$B178`) flipped during the life, then with a bridge destroyed
+  (`$2E != 0`) and the generator still in the bridge approach (`$23` bit 7) it
+  advances the checkpoint (`$B194`); with no bridge destroyed and the approach
+  already passed it goes back one section (`$AD-$B0`, level - 1).
+- **Port:** `river_start(restart, bridges)` (`river.c`) is the old `river_init`
+  with a seeded variant; `river_restart(bridges)` applies the `$B1C0` rule using
+  `rg_prev[4]` (new), `rg_life` (new: parity in bit 7, bridge counter at life
+  start in bits 0-6; `$2E != 0` is "`hud_bridge` changed") and `river_level_advance()`
+  now keeps the previous seeds like `$B194`.  `player_respawn(new_game)` calls it,
+  clears the entities and re-enters the game-start sequence (`PLAYER_STATE_WAIT`: the
+  river scrolls in, then the jet waits for input).  START on game over calls
+  `river_init()` (level 1) and resets `hud_bridge`.
+- **RAM:** paid for by dropping the write-only `rg_b1` and by shrinking
+  `river_debug_state` to 12 bytes on the NES (the host check still gets 16).
+  **1 byte free.**  ROM is 65,552 bytes, `_XINIT` ends at `$F524`.
+- **Verified:** `nes_respawn.mjs` (new; crash at level 1 -> life lost, level 1 checkpoint,
+  ring refilled, jet waits, input resumes) plus `nes_smoke`, `nes_scroll_hud`,
+  `nes_river` (390/390), `nes_entity_hits` (20/20), `nes_sprite_lock` and
+  `host_river.ps1` (19,999 rows).
+- **Not verified:** the `$B1C0` branch itself (advance / rewind) was derived from the
+  disassembly, not traced in Altirra: it needs a death before the first bridge
+  (no flip), after shooting one and while crashing into one (`$A3F4` also counts a
+  crash into a bridge as cleared).  The port's spawner uses its own RNG, not the
+  generator LFSR, so objects after a restart differ from the Atari's.

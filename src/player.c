@@ -3,10 +3,9 @@
  * player.c - jet steering, banking, throttle, terrain crash and fuel.
  *
  * The jet is two stacked 8x8 sprites on OAM slots 0/1.  Left/right steer,
- * up/down set the throttle, and any terrain overlap costs a life; the jet
- * then respawns in mid-river after a short delay (the original restarts at
- * the last cleared bridge, which waits for the entity phase).  The shot,
- * fuel pick-ups and scoring arrive with the entity manager.
+ * up/down set the throttle, and any terrain overlap costs a life; after a
+ * short delay the river restarts at the last cleared bridge (river_restart)
+ * and the jet waits on it for input.
  */
 #include <nes/nes.h>
 #include <stdint.h>
@@ -262,9 +261,16 @@ static void player_center(void) {
     }
 }
 
-/* Re-enter the river at its centre under the jet, stopped until input. */
-static void player_respawn(void) {
-    player_center();
+/* Restart the river (at the last cleared bridge, or from level 1 for a new
+ * game) and go through the game-start sequence: the river scrolls in, then
+ * the jet waits on it for input. */
+static void player_respawn(uint8_t new_game) {
+    if (new_game) {
+        hud_bridge = 1u;
+        river_init();
+    } else {
+        river_restart(hud_bridge);
+    }
     entities_clear();
     player.alive = 1;
     player.speed = 1;
@@ -272,8 +278,7 @@ static void player_respawn(void) {
     player_fuel_tick = 0;
     river_speed = 1u;
     river_vel = RIVER_VEL_CRUISE;
-    river_freeze = 1u;
-    player_state = PLAYER_STATE_READY;
+    player_state = PLAYER_STATE_WAIT;
 }
 
 void player_update(void) BANKED {
@@ -318,13 +323,13 @@ void player_update(void) BANKED {
             player_death_anim();
             player_timer = (player_timer > pl_ticks) ? (uint8_t)(player_timer - pl_ticks) : 0u;
         } else if (player_state == PLAYER_STATE_DEAD) {
-            player_respawn();
+            player_respawn(0);
         } else if ((pl_pad & J_START) && !(player_prev_pad & J_START)) {
             hud_lives = 3u;
             hud_score_bcd[0] = 0;
             hud_score_bcd[1] = 0;
             hud_score_bcd[2] = 0;
-            player_respawn();
+            player_respawn(1);
         }
         player_prev_pad = pl_pad;
         return;

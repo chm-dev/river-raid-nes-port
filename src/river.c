@@ -77,8 +77,10 @@ static uint8_t rg_bd, rg_bc, rg_be; /* feature type / width / length */
 static uint16_t rg_tpl_off;       /* offset into atari_river_templates */
 static uint8_t rg_target;         /* $34 */
 static int8_t rg_v35;             /* $35 */
-static uint8_t rg_seeds[4];       /* $66-$69 */
-static uint8_t rg_b1, rg_b7;
+static uint8_t rg_seeds[4];       /* $66-$69: LFSR + rg_left at the start of the current section */
+static uint8_t rg_prev[4];        /* $AD-$B0: the same one section back */
+static uint8_t rg_life;           /* $4C bit 2 -> bit 7, bridge counter at life start -> bits 0..6 */
+static uint8_t rg_b7;
 static uint8_t rg_hit_flash;
 
 /* Object-avoidance inputs.  Phase 4 has no objects; Phase 5 fills these. */
@@ -145,7 +147,12 @@ uint8_t river_owed;
 /* Test hooks: last generated 48-byte row and the state after it.  These are
  * exported through the .noi file so Mesen tests can compare the C port with
  * tools/river_model.py. */
-volatile uint8_t river_debug_state[16];
+#ifdef __SDCC
+#define RIVER_DEBUG_FIELDS  12u         /* what tests/nes_river.mjs reads; RAM is tight */
+#else
+#define RIVER_DEBUG_FIELDS  16u         /* the host check also compares the feature fields */
+#endif
+volatile uint8_t river_debug_state[RIVER_DEBUG_FIELDS];
 
 static uint16_t river_step;
 static uint8_t river_slot;
@@ -179,6 +186,11 @@ static void river_level_advance(void) {
     if (x >= 0x50u) {
         x = 0x4Eu;
     }
+    /* $B194: the section just left becomes the "previous" checkpoint. */
+    rg_prev[0] = rg_seeds[0];
+    rg_prev[1] = rg_seeds[1];
+    rg_prev[2] = rg_seeds[2];
+    rg_prev[3] = rg_seeds[3];
     rg_seeds[0] = rg_lfsr_a;
     rg_seeds[1] = rg_lfsr_b;
     rg_seeds[2] = rg_lfsr_c;
@@ -268,7 +280,6 @@ static void river_width_select(void) {
     if (rg_b5) {
         y = 8u;
     }
-    rg_b1 = y;
     if (a >= y) {
         a = y;
     }
@@ -1645,10 +1656,12 @@ static void river_generate_raw_row(void) {
         river_debug_state[9] = rg_lfsr_c;
         river_debug_state[10] = rg_countdown;
         river_debug_state[11] = rg_flags23;
+#ifndef __SDCC
         river_debug_state[12] = rg_bd;
         river_debug_state[13] = rg_bc;
         river_debug_state[14] = rg_be;
         river_debug_state[15] = (uint8_t)(rg_tpl_off & 0xFF);
+#endif
     }
     river_block_index++;
 }
@@ -1674,7 +1687,12 @@ void river_init_tiles(void) {
     river_cache_init();
 }
 
-void river_init(void) {
+/* Start the river.  restart = 0: a new game from the level-1 seeds.  restart =
+ * 1: the generator resumes from the checkpoint in rg_seeds/rg_level, as the
+ * Atari does after a lost life ($B0F0 with X=$12 reloads only the generator
+ * defaults, then $A3C8 loads the LFSR and rg_left from $66-$69; the level,
+ * score and lives are kept).  bridges is the HUD bridge counter. */
+static void river_start(uint8_t restart, uint8_t bridges) {
     uint8_t i;
 
     rs_isl = 0xFFu;                     /* no rendered row to repeat yet */
@@ -1702,14 +1720,24 @@ void river_init(void) {
     rg_margin = 0;
     rg_margin_flag = 0;
     rg_flags23 = 0x84u;
-    rg_lfsr_a = atari_level_descriptors[0];
-    rg_lfsr_b = atari_level_descriptors[1];
-    rg_lfsr_c = atari_level_descriptors[2];
-    rg_level = atari_level_descriptors[4];
-    rg_seeds[0] = rg_lfsr_a;
-    rg_seeds[1] = rg_lfsr_b;
-    rg_seeds[2] = rg_lfsr_c;
-    rg_seeds[3] = rg_left;
+    if (restart) {
+        rg_lfsr_a = rg_seeds[0];
+        rg_lfsr_b = rg_seeds[1];
+        rg_lfsr_c = rg_seeds[2];
+        rg_left = rg_seeds[3];
+    } else {
+        rg_lfsr_a = atari_level_descriptors[0];
+        rg_lfsr_b = atari_level_descriptors[1];
+        rg_lfsr_c = atari_level_descriptors[2];
+        rg_level = atari_level_descriptors[4];
+        rg_seeds[0] = rg_lfsr_a;
+        rg_seeds[1] = rg_lfsr_b;
+        rg_seeds[2] = rg_lfsr_c;
+        rg_seeds[3] = rg_left;
+    }
+    /* $B178: the parity of the level this life starts in. */
+    rg_life = (uint8_t)((rg_level << 7) | (bridges & 0x7Fu));
+    rg_flags23 = (rg_level & 1u) ? 0x84u : 0x80u;
     rg_b5 = 6u;
     rg_c3 = 0;
     rg_c4 = 0x1Cu;
@@ -1722,7 +1750,6 @@ void river_init(void) {
     rg_tpl_off = 0;
     rg_target = 0;
     rg_v35 = 0;
-    rg_b1 = 0;
     rg_b7 = 0;
     rg_hit_flash = 0;
     river_obj_count = 0x0Bu;
@@ -1788,6 +1815,39 @@ void river_init(void) {
 #ifndef RIVER_NO_START_ROAD         /* the host check compares a road-free model */
     river_road_begin();
 #endif
+}
+
+void river_init(void) {
+    river_start(0, 1u);
+}
+
+/* The jet was lost: pick the checkpoint like $B1C0 and restart the river
+ * there.  The generator runs ahead of the jet, so rg_seeds may already belong
+ * to the next section:
+ *  - the level parity ($23 bit 2) flips when the generator enters the bridge
+ *    approach, i.e. when it is a section ahead of this life's start;
+ *  - if the jet has destroyed a bridge since, the checkpoint moves up to the
+ *    generator's present position (only while it is still in the approach);
+ *  - if not, and the generator has passed the bridge already, the checkpoint
+ *    goes back one section (rg_prev, level - 1). */
+void river_restart(uint8_t bridges) {
+    uint8_t x;
+
+    if (((rg_life >> 5) ^ rg_flags23) & 0x04u) {
+        if (bridges != (uint8_t)(rg_life & 0x7Fu)) {
+            if (rg_flags23 & 0x80u) {
+                river_level_advance();
+            }
+        } else if (!(rg_flags23 & 0x80u)) {
+            x = (uint8_t)(rg_level - 1u);
+            rg_level = (x == 0x4Eu) ? 0x50u : x;
+            rg_seeds[0] = rg_prev[0];
+            rg_seeds[1] = rg_prev[1];
+            rg_seeds[2] = rg_prev[2];
+            rg_seeds[3] = rg_prev[3];
+        }
+    }
+    river_start(1, bridges);
 }
 
 /* Scanline of the top edge of a ring slot (the slot may be in the hidden rows

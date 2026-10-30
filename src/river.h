@@ -87,6 +87,10 @@ uint8_t river_slot_at_scanline(uint8_t scanline);
 
 void river_init(void);
 
+/* The jet was lost: restart the river at the last cleared bridge (the
+ * generator checkpoint, see river.c).  bridges is the HUD bridge counter. */
+void river_restart(uint8_t bridges);
+
 /* Schedule a 16-scanline road (grey with a yellow centre line) over the land
  * on the next whole pair of tile rows. */
 void river_road_begin(void);
