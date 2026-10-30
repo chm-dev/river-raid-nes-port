@@ -854,9 +854,8 @@ Still to verify dynamically (Phase 4 acceptance):
 1. Exact bank/fork branch decisions in `$AA7A-$AB7F` (especially island
    split/merge conditions) by comparing generated rows to
    `river_rows_157.bin` for each scrolled frame.
-2. Score awards for fuel (candidate 80) and bridge (candidate 500) and
-   whether `$BB0B` is indexed by aux or type.
-3. Fuel consumption/refuel rates and the 16-bit gauge.
+2. (resolved) Scores: `$BB0B` is indexed by the object type (ship 30, helicopters 60, jets 100/150, fuel 80, bridge 500, tank bonus 750).
+3. (resolved) Fuel is the 16-bit `$5B:$5C`, start `$FFFF`; `$A43F` subtracts `$20` per frame (1 high-byte unit / 8 frames), a depot hit (`$A40A`) adds 2 to `$5B` per frame, empty crashes via `$B1C0`.
 4. Object slot 10 sentinel semantics and spawn timing.
 5. The `$BF` PAL/NTSC detection path (fuel gauge Y offset).
 6. Marquee glyph mapping (`$B84B-$B8D6`) on the real screen.
@@ -889,3 +888,4 @@ spelling; it wants the explicit port/platform pair:
 
 `src/atari_data.h` was compile-checked with this form. The link step should
 use `-mmos6502:nes -Wl-j` to emit the `.noi` symbol file.
+

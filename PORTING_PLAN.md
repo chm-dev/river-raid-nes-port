@@ -202,7 +202,7 @@ exact tile cache are implemented and covered by the test suites.
    - `hud.c`, `entities.c`, `entity_gfx.c`, `player.c` live in switchable bank 1; see `PROGRESS.md` for the measured results and the remaining limits (fast flight is at the CPU limit).
 5. **Verification:**
    - Done: `tests/nes_entity_hits.mjs` (20 hit-box boundary cases), `tests/nes_sprite_lock.mjs`, ROM-diff scripts (`tests/compare_*.mjs`), profilers (`tests/perf_*.mjs`).
-   - Still to write (`tests/nes_gameplay.mjs`): automated Mesen MCP test scripts verifying steering, speed changes, shooting enemies/bridges, refueling, crash/respawn, and score increments via `.noi` symbols.
+   - Done: `tests/nes_gameplay.mjs` (steering, throttle, refuel, fuel burn, scoring kill), `tests/nes_respawn.mjs`, `tests/host_restart.ps1` (checkpoint rule vs the real game, 16/16), `tests/nes_river_cache.mjs`.
 
 ---
 
@@ -217,3 +217,4 @@ exact tile cache are implemented and covered by the test suites.
    - Title / attract mode, `SELECT` game variation (1/2 players, guided vs. unguided shots), `START` game reset, and Game Over handling.
 3. **Final Verification Suite:**
    - End-to-end automated regression run in `MesenCE-MCP` (including Lua APU channel verification) + side-by-side visual/timing comparison with `AltirraBridge`.
+

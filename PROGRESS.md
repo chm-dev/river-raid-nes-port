@@ -2,7 +2,7 @@
 
 **Last updated:** 2026-10-30
 **Current phase:** Phase 5 COMPLETE (2026-10-30) — jet, shot, entities, scoring, fuel, bridge/road/tank, respawn-at-bridge (checkpoint rule verified against the real game) and the 30 Hz/60 Hz frame work are done and covered by `nes_gameplay`, `nes_respawn`, `nes_river_cache`, `host_restart.ps1`; next: Phase 6 (sound, game modes)
-**Branch note:** the performance work lives on `experiment/river60-logic30` (cut from `experiment/30fps`); play-tested on a MiSTer and accepted, to be merged to `main`.
+**Branch note:** all work is on `main`; `experiment/30fps`, `experiment/river60-logic30` and `feature/hud-compact` are fully merged (safe to delete).
 **Phase 1:** COMPLETE (reverse engineering + asset extraction)
 **Phase 2:** COMPLETE (scaffolding, build pipeline, boot ROM, Mesen smoke test)
 **Phase 3:** COMPLETE (HUD, deferred LCD split, playfield ring, 1-px scroll test)
@@ -43,7 +43,7 @@
 - **Memory layout (fixed bank / bank 1 / RAM):** ROM is 4 x 16 KiB (mapper 30).
   The **fixed bank has ~2.9 KB free** and **bank 1 ~3 KB free** (`hud.c`,
   `entities.c`, `entity_gfx.c`, `player.c` are built with `-Wf-bo1`; their public
-  functions are `BANKED`).  **Internal RAM: 4 bytes free.**  The linker does *not*
+  functions are `BANKED`).  **Internal RAM: 0 bytes free** (2026-10-30; `build.ps1` throws if `_BSS` passes `$07FF`).  The linker does *not*
   fail when the fixed bank overflows into the vectors at `$FFFA`: the ROM silently
   grows to 128 KiB - always check the `ROM` line of `build.ps1` (must be 65,552).
 - Test state on this branch: `nes_smoke` (50), `nes_scroll_hud` (14), `nes_river`
@@ -390,32 +390,26 @@ These are documented in full in `docs/ATARI_RE_SPEC.md`; don't re-derive them.
     `$5C` lives plane).  The full table is in
     `assets/atari/extracted/README.md`.
 
-## Next step — Phase 5
+## Next step — Phase 6 (Phase 5 is complete)
 
-0. **Bridge and road visuals: DONE** (2026-10-29 entries; natural level-1 bridge re-checked by eye 2026-10-30, `build/nes_natural_bridge.png` vs `build/atari_bridge/bridge_20.png`; only the 16-vs-20-scanline road remains).
-1. Start Phase 5 (player jet, entities, collisions).  Feed the entity slots
-   into `river_obj_count/river_obj_aux/river_obj_x/river_obj_flags` so the
-   bank-avoidance clamp matches the original.
-2. Map the jet's screen scanline to the collision ring.  Remember the ring
-   advances **backwards** now (`river_slot` decrements); the bounds are
-   sampled at raw row 3, which sits 4 scanlines below the top of the tile
-   after the vertical flip.
-3. `tests/nes_river_cache.mjs` is the long-run cache/streaming check (needs
-   `python tools/gen_river_tiles_golden.py 520`); run it after touching
-   `river.c`.  It passed 311 tile rows / 72k row checks with zero visible
-   glitches.  The collision ring is now filled **one tile row ahead** of
-   the display: the jet must index it with that lead in mind.
-4. Visual A/B the exact cache against `river_rows_157.bin` and live Altirra
-   frames, especially the bridge flash and island forks.
-5. RAM is tight: **4 bytes free** (tile buffer 384 B, ring arrays 150 B, debug
-   hooks `river_debug_state` 16 B, entity arrays...).  Anything new needs
-   something reclaimed first (e.g. gate `river_debug_*` behind a macro, which the
-   tests read).  The fixed bank has ~2.9 KB and bank 1 ~3 KB of room.
-6. Perf: finished for now (see the 2026-10-29/30 performance entries).  If more is
-   needed: commit the scroll at the end of the pass, cheaper `river_render_row`/
-   `river_convert_row`, or the entity update loop (~0.9k cycles/frame).
-7. (done) `tests/nes_river_cache.mjs` is current; regenerate its golden data with `python tools/gen_river_tiles_golden.py 520` first.
-
+1. **Sound (`src/sound.c`, currently empty stubs).**  Original audio is POKEY, documented in
+   `docs/ATARI_RE_SPEC.md` §9 (deferred VBI `$B2A5`: shot `$C6`, explosion `$7C`, refuel/enemy
+   `$7F`, beep `$7E`, shot sweep `$7D`, engine from the joystick bits + `$B4AC` table).  Map to
+   the 2A03: pulse 1 shot/low-fuel, pulse 2 cues, triangle engine hum by speed, noise for
+   explosions.  `sound_update()` already runs in the 30 Hz player group; the APU writes are
+   cheap but a 30 Hz cadence may need `sound_update` split or a 60 Hz hook.  Hooks to call:
+   `sound_play_shot/explosion/refuel`, `sound_set_engine`.
+2. **Game states:** title/attract, START / game-over flow, SELECT game variations.
+3. **Budget warning:** internal RAM has **0 bytes free** and the fixed bank ~2.9 KB, bank 1
+   ~3 KB.  Sound state needs RAM: reclaim first (e.g. gate `river_debug_*` behind a macro the
+   tests read, shrink buffers) - `build.ps1` fails the build when `_BSS` passes `$07FF`.
+4. Open fidelity items (small): road is 16 scanlines (Atari 20); balloon basket colour
+   (`BUGS.md`); PAL `$BF` has no NES counterpart; the spawner uses its own RNG, so objects after
+   a restart differ from the Atari's.
+5. Perf: finished for now (see the 2026-10-29/30 performance entries).  If more is needed:
+   commit the scroll at the end of the pass, cheaper `river_render_row`/`river_convert_row`.
+6. Regenerate `tests/data/river_tiles_golden.json` with `python tools/gen_river_tiles_golden.py 520`
+   before `tests/nes_river_cache.mjs`.
 ## Handy commands
 
 ```powershell
@@ -1422,3 +1416,4 @@ Open item "fuel rate / 16-bit gauge" traced from `$A3E9-$A453` (no Altirra run).
   attribute grid.
 - **Phase 5 is closed.**  Remaining items are Phase 6: APU sound, title/attract, game
   variations, game over flow.
+
