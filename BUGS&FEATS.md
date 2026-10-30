@@ -3,4 +3,4 @@
 - [ ] baloon basket color - should be brown
 
 # FEATURES
-- [ ] Atari 2600 mode, which would disable river edge tiles and 
+- [ ] Atari 2600 mode, which would disable river edge tiles and (Would it grant significant performance?)

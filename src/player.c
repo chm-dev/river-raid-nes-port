@@ -244,7 +244,7 @@ static void player_crash(void) {
     hide_sprite(PLAYER_SPRITE_BOTTOM);
     river_freeze = 1u;
     player.alive = 0;
-    sound_play_explosion();
+    sound_play_crash();
     sound_set_engine(SOUND_ENGINE_OFF);
     if (hud_lives != 0u) {
         hud_lives--;
@@ -340,6 +340,7 @@ void player_update(void) BANKED {
             hud_score_bcd[0] = 0;
             hud_score_bcd[1] = 0;
             hud_score_bcd[2] = 0;
+            sound_play_blip();
             player_respawn(1);
         }
         player_prev_pad = pl_pad;
@@ -387,7 +388,10 @@ void player_update(void) BANKED {
 
     pl_hit = entities_check_player(player.x, player.y);
     if (pl_hit == ENT_HIT_FUEL) {
-        sound_play_refuel();
+        /* The original re-arms the 8-frame tank note every frame of the
+         * overlap ($A40A sets $7A = 4 each time the previous sweep ended), so
+         * it repeats for as long as the jet stays on the tank. */
+        sound_play_pickup();
         /* The pass covers pl_ticks frames; the Atari adds per frame. */
         hud_fuel = (hud_fuel > (uint8_t)(255u - PLAYER_REFUEL_RATE * pl_ticks))
             ? 255u : (uint8_t)(hud_fuel + PLAYER_REFUEL_RATE * pl_ticks);

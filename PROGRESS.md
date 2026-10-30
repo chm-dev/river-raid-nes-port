@@ -1,7 +1,7 @@
 # Project Progress & Session Handoff
 
 **Last updated:** 2026-10-30
-**Current phase:** Phase 5 COMPLETE (2026-10-30) — jet, shot, entities, scoring, fuel, bridge/road/tank, respawn-at-bridge (checkpoint rule verified against the real game) and the 30 Hz/60 Hz frame work are done and covered by `nes_gameplay`, `nes_respawn`, `nes_river_cache`, `host_restart.ps1`; Phase 6 in progress: RAM freed (152 B) and APU sound done (2026-10-30); title/attract and game selection remain
+**Current phase:** Phase 5 COMPLETE (2026-10-30) — jet, shot, entities, scoring, fuel, bridge/road/tank, respawn-at-bridge (checkpoint rule verified against the real game) and the 30 Hz/60 Hz frame work are done and covered by `nes_gameplay`, `nes_respawn`, `nes_river_cache`, `host_restart.ps1`; Phase 6 in progress: RAM freed (145 B), APU sound re-derived from the Atari and verified (2026-10-30); title/attract and game selection remain
 **Branch note:** all work is on `main`; `experiment/30fps`, `experiment/river60-logic30` and `feature/hud-compact` are fully merged (safe to delete).
 **Phase 1:** COMPLETE (reverse engineering + asset extraction)
 **Phase 2:** COMPLETE (scaffolding, build pipeline, boot ROM, Mesen smoke test)
@@ -26,15 +26,33 @@
   the tests' geometry constants were updated.  Cost: the CHR cache window grows by
   one tile row (see Known issues).  `nes_ring_integrity.mjs` shows the ring margin
   is fine (no visible row rewritten up to at least a 223-line window).
-- **Frame loop (2026-10-30, final shape):** `river_update()` runs **every frame**
-  (60 Hz scroll, row generation, tile uploads).  Everything else runs at **30 Hz,
-  in two groups on alternate frames** so their costs never land together: the
-  player group (`player_update`, `collision_update`, `sound_update`, preceded by
-  `entities_follow()`) and the HUD + entity group (`hud_update`,
-  `entities_update`).  `entities_follow()` nudges the drawn entity sprites by the
-  rows the river scrolled on the in-between frames, so 30 Hz entities do not lag
-  the 60 Hz river.  `game_ticks` is the elapsed time of the group being run;
-  `entities_update()` measures its own from `sys_time`.
+- **Frame loop (2026-10-30, final shape):** `river_update()` and `sound_update()`
+  run **every frame** (60 Hz scroll, row generation, tile uploads, APU).  The
+  sound engine moved out of the 30 Hz group on 2026-10-30 because the Atari's
+  sound VBI is 60 Hz and the shot is a 15-step pitch sweep, one step per frame.
+  Everything else runs at **30 Hz, in two groups on alternate frames** so their
+  costs never land together: the player group (`player_update`,
+  `collision_update`, preceded by `entities_follow()`) and the HUD + entity group
+  (`hud_update`, `entities_update`).  `entities_follow()` nudges the drawn entity
+  sprites by the rows the river scrolled on the in-between frames, so 30 Hz
+  entities do not lag the 60 Hz river.  `game_ticks` is the elapsed time of the
+  group being run; `entities_update()` measures its own from `sys_time`.
+- **Sound (2026-10-30, re-derived from the Atari):** `src/sound.c` now uses the
+  register values the original actually writes (captured with
+  `tools/atari_sound_trace.py` / `atari_sound_events.py`), converting POKEY's
+  `f = 63920/(2*(AUDF+1))` to 2A03 pulse/noise periods.  Shot = pulse 1,
+  50% duty, volume 8, **405 -> 196 Hz in 15 one-frame steps** (the old build was
+  2728 -> 740 Hz, the "octave or two too high" the user heard).  Engine = **noise**
+  (17-bit poly, volume 6/4/3 for fast/cruise/slow, like `$B4AC[$19&3]`) instead of
+  the triangle hum, with the **pitch gliding** one noise index per 8 frames
+  instead of jumping, because the Atari follows the jet's altitude.  Explosion
+  (23 frames) / crash (55), fuel tank (a 499 Hz note, or 999 Hz when the gauge is
+  full, repeated while the jet is over it), the low-fuel warning ($B2FD: a
+  rising 251 -> 561 Hz tone at volume 15, 35 frames on / 28 off, which **outranks
+  every other sound** and cannot be interrupted), the enemy shell ($B4C0 chirp +
+  fireball noise) and the extra-life arpeggio (64) and start blip (2) all follow
+  the original.  `tests/nes_sound.mjs` (34 checks) samples the live 2A03 state,
+  so it verifies pitch and audibility instead of register writes.
 - **Measured (per-frame trace, ~5 entities, invulnerable jet, shooting):** slow
   0.50 px/frame with no overruns; cruise 1.00 px/frame, **0.5-0.7% late frames**
   (was 5%); fast 1.50 px/frame (the target), **19-23% late passes** (was 68%),
@@ -43,7 +61,8 @@
 - **Memory layout (fixed bank / bank 1 / RAM):** ROM is 4 x 16 KiB (mapper 30).
   The **fixed bank has ~2.9 KB free** and **bank 1 ~3 KB free** (`hud.c`,
   `entities.c`, `entity_gfx.c`, `player.c` are built with `-Wf-bo1`; their public
-  functions are `BANKED`).  **Internal RAM: 0 bytes free** (2026-10-30; `build.ps1` throws if `_BSS` passes `$07FF`).  The linker does *not*
+  functions are `BANKED`).  **Internal RAM: 140 bytes free** (2026-10-30 after the
+  sound rewrite; `build.ps1` throws if `_BSS` passes `$07FF`).  The linker does *not*
   fail when the fixed bank overflows into the vectors at `$FFFA`: the ROM silently
   grows to 128 KiB - always check the `ROM` line of `build.ps1` (must be 65,552).
 - Test state on this branch: `nes_smoke` (50), `nes_scroll_hud` (14), `nes_river`
@@ -277,6 +296,9 @@
 | `tests/perf_function_cycles.mjs` | Estimated cycles per frame by function (Lua exec sampler) |
 | `tests/perf_frame_trace.mjs` | Per-frame cost trace; what the heavy / late frames contain |
 | `tools/river_repeat_rows.py` | Validates the repeat-row rule used by `river_step_state` against the model |
+| `tools/atari_sound_trace.py` | Per-frame POKEY register + decoded `audio_state()` dump (`--fast` for long runs) |
+| `tools/atari_sound_events.py` | Plays each sound trigger in isolation and dumps what the VBI writes |
+| `tools/sound_trace_show.py`, `tools/sound_events_show.py` | Render those dumps as one line per frame |
 | `tools/patch_nes_header.py` | Patches the iNES mirroring byte |
 | `roms/river_raid.nes` / `.noi` / `.map` | ROM + symbols + linker map |
 | `build/flip_fixed.png` | Correct orientation: newest row at top, exact edges/trees |
@@ -389,42 +411,104 @@ These are documented in full in `docs/ATARI_RE_SPEC.md`; don't re-derive them.
     `charset.bin` (`$43-$46` BRIDGE, `$47-$4E` gauge, `$5A` P1, `$5B` HI,
     `$5C` lives plane).  The full table is in
     `assets/atari/extracted/README.md`.
+13. **Sound timbre compromises (2026-10-30):** POKEY's poly distortions have no
+    exact 2A03 equivalent.  The engine (17-bit poly on ch1) and the explosion
+    (poly on ch2) share the single noise channel, so an explosion masks the
+    engine hiss until it ends.  The fuel tank note is the one place the original
+    uses a plain square - `AUDC1 = $A8..$A1` is POKEY "no poly" - so it is
+    ported as a 50% pulse at exactly 499 Hz, volume 8 -> 1, repeated while the
+    jet is over the tank.  The engine's noise index steps 11/12/13 for
+    fast/cruise/slow, where the Atari's `AUDF1` range (23-27) only spans
+    ~0.2 octave: the 2A03 noise steps are too coarse to reproduce it exactly,
+    so the port spreads it to ~1 octave on purpose (the Atari also raises the
+    volume for "up", which is kept exactly).
 
 ## Next step — Phase 6 (Phase 5 is complete)
 
-1. **Sound: implemented, REPORTED WRONG BY THE USER (2026-10-30) - needs a fix pass.**  The user
-   listened to it and says it sounds "way off" (specifics to come from the user's prompt).  What
-   exists (`src/sound.c`, commit `7d4a1ac`):
-   - `sound_update()` runs in the 30 Hz player group (`main.c`, after `player_update`/`collision_update`);
-     countdown timers advance by `game_ticks` (1-5 frames).  APU registers are written only on change.
-   - pulse 1 = shot chirp (12 frames, period `0x28 + (12-t)*10`, duty 25%, volume = frames left);
-     pulse 2 = refuel tone (`$4004=0x76`, period `0x80`, held 4 frames after the last
-     `sound_play_refuel()` call) and low-fuel beep (`hud_fuel < 64`, `$4004=0xB8`, period `0x50`,
-     on when `!(snd_clock & 8)`); triangle = engine hum (`$4008=0x81`, periods `0x300/0x240/0x1C0` for
-     slow/cruise/fast, off unless state is PLAY); noise = explosion (36 frames, volume `(t+2)/3`,
-     period index `5 + (36-t)/6`, mode 0).  `sound_init()` writes `$4017=0x40`, `$4015=0x0F`.
-   - Hook calls live in `player.c`: `sound_play_shot()` at shot launch, `sound_play_explosion()` when
-     `entities_hit_shot()` returns true and in `player_crash()`, `sound_play_refuel()` on
-     `ENT_HIT_FUEL`, `sound_set_engine(river_speed)` after the throttle line, `SOUND_ENGINE_OFF` in
-     `player_crash()` and when `player_disable` is set.  Nothing else (bridge hit, enemy fire, level
-     change, game over, start) triggers sound.
-   - Values were chosen by estimate, **not** derived from the Atari: no POKEY frequency/AUDC mapping
-     was done, the Atari's pitch tables (`$B4C0` shot pitch, `$B4E1` FX frequencies, `$B4AC` engine
-     AUDC) are not used, the engine noise layer is not ported, and the Atari's trigger values/timing
-     (`$C6` shot timer, `$7C` explosion, `$7D` shot sweep, `$7E` beep, `$7F` refuel/enemy tone) are
-     not reproduced.  Spec: `docs/ATARI_RE_SPEC.md` section 9; code: deferred VBI `$B2A5` in
-     `docs/atari_disasm_b2a5_b6ff.txt`.  The Atari runs this at 60 Hz in the VBI; the NES port ticks
-     at 30 Hz.
-   - Test: `tests/nes_sound.mjs` (13 checks, pass) records the APU register writes via a Lua write
-     callback on `$4000-$4017` (mailbox CHR-RAM `$1F00`) and checks *that* the expected registers are
-     written for each event.  It does **not** check pitch, timbre or whether it sounds right; it will
-     pass whatever the tuning is.  Nothing has been verified against Atari audio (AltirraBridge
-     can capture POKEY register writes; see `info/ALTIRRA_BRIDGE_NOTES.md`).
-   - Budget: RAM has 152 bytes free, fixed bank ~2.9 KB (`sound.c` is in the fixed bank, not banked).
+1. **Sound: DONE (2026-10-30, re-derived from the Atari).**  The first pass
+   (`7d4a1ac`) was tuned by estimate and sounded wrong; it has been replaced with
+   values read off a live Altirra run.  Ground truth: `tools/atari_sound_trace.py`
+   (per-frame POKEY register + `audio_state()` dump, `--fast` for long runs) and
+   `tools/atari_sound_events.py` (pokes one trigger variable at a time, e.g.
+   `$7D = $0F`, and dumps what the VBI then does); viewers
+   `tools/sound_trace_show.py` / `tools/sound_events_show.py`.
+   - **Conversion:** AUDCTL is never written, so every POKEY channel runs from the
+     64 kHz clock: `f = 63920/(2*(AUDF+1))`; 2A03 pulse `p = 111861/f - 1`, noise
+     index from `1789773/noise_period[i]`.  AUDC = volume in the low nibble, noise
+     select in bits 7-5 (`$80` = 17-bit poly = white noise, `$A0/$C0/$E0` = tone).
+   - **Shot** ($7D = $0F, fire button): ch3 pure tone, volume 8, `AUDF3 =
+     6*(27-$7D)` -> **405 Hz falling to 196 Hz in 15 one-frame steps**.  The old
+     port did 2728 -> 740 Hz, which is the "octave or two too high" the user heard.
+     Now pulse 1, 50% duty (POKEY's square), period 255 -> 549.
+   - **Engine** (ch1): **17-bit poly noise**, `AUDC1 = $B4AC[joystick & 3]` =
+     volume 6 accelerating / 4 level / 3 slowing (0 silent), `AUDF1 = $1F - (jet Y
+     >> 4)` = ~2.3-2.7 kHz.  The old port used a triangle hum (73-125 Hz), i.e. a
+     pulse-like drone instead of hiss.  Now the noise channel, volume 6/4/3 and
+     index 11/12/13, walked one step per 8 frames so a throttle change glides
+     in pitch instead of jumping (the Atari follows the jet's altitude).
+   - **Explosion** ($7C = $17 object / $37 jet): ch2 poly noise, volume
+     `((t>>1)+4)&$0F`, `AUDF2 = RANDOM|$18` (random pitch every frame); 23 or 55
+     frames -> `sound_play_explosion()` / `sound_play_crash()`.
+   - **Low fuel** (`$5B < $40`, `$B2FD-$B32A`): ch1 drops the engine and plays a
+     **volume-15 pure tone with `AUDF1 = 2 * $7B`** while `$7B` counts `$3E` down
+     to `$00`; the tone sounds only while `$7B >= $1C`, so 35 frames rising from
+     251 Hz to 561 Hz, then 28 frames of engine, repeating every 63 frames.
+     Ported on pulse 1 with **priority over every other sound** (nothing else
+     may write that channel while the tone sounds; the engine is muted during it,
+     as on POKEY).
+   - **Enemy shell** (ch4, `$50` counted by `$A609-$A674`): `AUDF4 = $B4C0[$50]`
+     with `AUDC4 = $AC` (pure tone, volume 12) for `$50 = 1..$10` - a four-octave
+     dive 2131 -> 143 Hz - then `AUDF4 = RANDOM|$20` with `AUDC4 = $8C` (17-bit
+     poly, volume 12) while the fireball swells.  Ported as
+     `sound_play_shell()` from `ent_shell_init()`, so it fires and refires with
+     the tank: chrome on pulse 2 (periods 52..780), tail on the noise channel.
+   - **Fuel tank** ($A40A, object type `$0F`): increments `$5B` (the fuel - the
+     DLI at `$B527` positions the gauge missile from `($5B >> 3) + $5C`) and sets
+     `$7A = 4, $7B = 8`.  The VBI (`$B2D9`) then writes `AUDF1 = Y` where Y is
+     `$3F` (499 Hz) for `$7A = 4` but **`$1F` (999 Hz) for `$7A = 3`** - and the
+     carry that selects `$7A = 3` only happens when `$5B` is already `$FF`, i.e.
+     the gauge is full (the code saturates instead of wrapping).  A full tank is
+     therefore one octave higher, as reported.  `AUDC1 = $7B + $A0 = $A8..$A1`
+     is a pure tone whose **volume runs 8 down to 1 over 8 frames**; the VBI
+     clears `$7A` when the sweep ends, so the next frame over the tank re-arms
+     it: **one note repeated back to back for the whole overlap**.  Ported on
+     pulse 2 as `FUEL_PERIOD` 223 (499 Hz) / `FUEL_PERIOD_FULL` 111 (999 Hz),
+     re-armed by `sound_play_pickup()` every frame of the overlap and choosing
+     the octave from `hud_fuel == 255`.
+   - `$7F = 9` (`$A5E0`) is **not** the tank sound: that path tests types
+     `$0A`/`$0B`, i.e. helicopters the shot passed.  Not ported.
+   - **Extra life** ($7E = $40): ch3 arpeggio 329/394/492/652 Hz, 16 frames each
+     with a 15..0 volume ramp = 64 frames; triggered where `$A574-$A587` does it,
+     i.e. `entities_add_score()` when the ten-thousands BCD digit changes
+     (`hud_lives < 9` -> lives++).
+   - **Start blip** ($C6 = 2): ch1 492 Hz pure tone, volume 15, 2 frames; played on
+     the START-after-game-over branch (title/attract can reuse it).
+   - Channel map: **pulse 1 = the low-fuel warning first, then the shot** (the
+     warning cannot be interrupted, so a shot fired during a tone is silent);
+     **pulse 2 = tank note > shell chirp > arpeggio > blip**; noise = engine +
+     explosion + the shell's fireball (the 2A03 has one noise channel where POKEY
+     has three, so the effects take it over and the engine resumes); **triangle
+     unused**.  `snd_p2_on` shadows "this channel still holds a tone" so a job
+     that ends on a different frame from its hold flag cannot leave it hanging.
+   - **Bugs found on the way:** the noise channel's length counter was never
+     loaded, so with the halt flag set it stayed 0 and the channel was silent
+     until the first effect loaded it (`$400F`; `sound_init()` now writes it once),
+     and the tank note hung at volume 1 after the jet left the tank because its
+     hold flag outlived the note's last frame (fixed by `snd_p2_on`).
+   - Test: `tests/nes_sound.mjs` (30 checks, pass) samples the live 2A03 state via
+     a persistent Lua end-frame callback (`apu.square1.realPeriod`,
+     `apu.noise.envelope.volume`, length counters) written to CHR-RAM `$1F80`, so
+     it checks the pitch the console emits and that each channel is actually
+     audible, not just that registers were written.
+   - Not ported yet: the `$7A = 1` hit/vibration sweep on ch1.  The ch4 `$50`
+     table (`$B4C0`) *is* ported - it turned out to be the enemy shell, driven by
+     the tank, not an enemy shot path gated by `$41` (verified live: firing the
+     player's gun sets `$7D` only, never `$50`).
 2. **Game states (open):** title/attract, SELECT game variations.  START / game-over / respawn
    already work in `player_update()` (WAIT -> READY -> PLAY -> DEAD/OVER; START after game over
    restarts), but there is no title screen, no attract mode and no game selection.
-3. **Budget:** internal RAM has **152 bytes free** (2026-10-30: the HUD/player boot-time tile buffers
+   `sound_play_blip()` is ready for the menu.
+3. **Budget:** internal RAM has **140 bytes free** (2026-10-30: the HUD/player boot-time tile buffers
    now alias `river_tile_pat`, see `river.h`; do not call `hud_init_graphics`/`player_init_graphics`
    after `river_init()` without that in mind), the fixed bank ~2.9 KB, bank 1 ~3 KB.
 4. Open fidelity items (small): road is 16 scanlines (Atari 20); balloon basket colour
@@ -445,8 +529,12 @@ node tests/nes_river.mjs                # Phase 4 row/state/collision validation
 ./tests/host_river.ps1                  # C generator vs the Python model, 20,000 tile rows (needs zig)
 python tools/object_host_check.py build/object_trace.jsonl build/object_trace_L15.jsonl build/object_trace_L24.jsonl   # spawner vs model
 python tools/river_repeat_rows.py       # repeat-row skip rule: 0 false positives
+python tools/atari_sound_events.py --out build/sound_events.json   # what each sound trigger does
+python tools/atari_sound_trace.py --frames 400 --fast --audio-state --out build/sound_trace.jsonl
+python tools/sound_events_show.py build/sound_events.json          # one line per frame
+python tools/sound_trace_show.py build/sound_trace.jsonl | Select-String 'v= [1-9]'
 node tests/nes_entity_hits.mjs          # 20 hit-box boundary cases
-node tests/nes_sound.mjs                # APU writes per event (13 checks)
+node tests/nes_sound.mjs                # live 2A03 pitch/volume/repeat checks (34)
 node tests/nes_gameplay.mjs            # steering, throttle, fuel, refuel, shot score
 ./tests/host_restart.ps1                 # river_restart() vs the Atari $B1C0 truth table (build/checkpoint_trace.jsonl)
 node tests/nes_sprite_lock.mjs          # entity sprites locked to the scroll
@@ -1453,3 +1541,175 @@ Open item "fuel rate / 16-bit gauge" traced from `$A3E9-$A453` (no Altirra run).
   Commit `7d4a1ac`.  Cadence unchanged (cruise 0.8% late passes, fast 23%).
 - The user then listened to it and reported that it sounds "way off"; a different agent is to
   take over the fix.  The register-write test cannot detect that class of problem.
+
+
+### 2026-10-30 - Phase 6: sound re-derived from the Atari (shots, engine noise)
+
+The user reported two concrete faults: shots an octave or two too high, and the
+jet engine sounding like a pulse wave instead of noise.  Both were correct - the
+first sound pass was estimated, not derived - so the whole engine was rebuilt
+from captured Atari behaviour.
+
+**Ground truth instead of estimates.**  `tools/atari_sound_trace.py` dumps, once
+per frame, the four POKEY `AUDF/AUDC` pairs, the zero-page variables that gate
+them, and Altirra's decoded `audio_state()` (per-channel volume, distortion,
+clock and `freq_hz`).  `tools/atari_sound_events.py` pokes one trigger variable
+at a time (`$C6`, `$7D`, `$7F`, `$7E`, `$7C`, `$7A`) and records what the deferred
+VBI at `$B2A5` then writes, which isolates each sound from the others.
+`tools/sound_trace_show.py` / `tools/sound_events_show.py` render the dumps.
+
+**What the original actually plays** (AUDCTL is never written, so all four
+channels run from the 64 kHz clock, `f = 63920/(2*(AUDF+1))`; AUDC = volume in
+the low nibble, noise select in bits 7-5, so `$80`-class is 17-bit poly noise and
+`$A0/$C0/$E0` are pure tones):
+
+| event | Atari | frames |
+|---|---|---|
+| shot (`$7D = $0F`) | ch3 pure tone vol 8, `AUDF3 = 6*(27-$7D)` -> **405 -> 196 Hz** | 15 |
+| engine (ch1) | **17-bit poly noise**, `AUDC1 = $B4AC[$19&3]` = vol 6/4/3, `AUDF1 = $1F-(jet Y>>4)` (~1.9 kHz) | continuous |
+| explosion (`$7C=$17/$37`) | ch2 poly noise, vol `((t>>1)+4)&$0F`, `AUDF2 = RANDOM|$18` | 23 / 55 |
+| fuel tank (`$A40A` -> ch1) | pure tone, vol 8 -> 1, re-armed while over the tank; 499 Hz, or 999 Hz when the gauge is full | 8, repeated |
+| extra life (`$7E=$40`) | ch3 arpeggio 329/394/492/652 Hz, vol ramp 15..0 per step | 64 |
+| start blip (`$C6=2`) | ch1 492 Hz pure tone vol 15 | 2 |
+
+Firing a shot live sets only `$7D`; `$50` (the `$B4C0` pitch table on ch4) stays
+`$FF` because that path needs `$41` bit 7, so the ch4 chirp is **not** part of a
+normal shot.
+
+**Ported** (`src/sound.c`): pulse 1 = shot (50% duty, volume 8, period
+255 -> 549 = 439 -> 204 Hz, 15 one-frame steps - the old build did 2728 -> 740
+Hz, the reported fault); noise = engine (vol 6/4/3 and index 11/12/13 for
+fast/cruise/slow, replacing the 73-125 Hz triangle hum), explosion (23), crash
+(55) and the tank note; pulse 2 = tank note, start blip and extra-life arpeggio;
+**triangle is no longer used**.  The 2A03 has one noise channel where POKEY has
+three, so the explosion takes it over and the engine resumes afterwards.
+
+**Bug found while measuring:** the noise channel's length counter was never
+loaded, so with the halt flag set it stayed zero and the channel emitted nothing
+until the first explosion wrote `$400F`.  `sound_init()` now loads it once.
+
+**Frame loop:** `sound_update()` moved from the 30 Hz player group into the
+every-frame path (the Atari's sound VBI is 60 Hz and the shot is a per-frame
+sweep).  `perf_frame_trace.mjs fast`: 4.5% late, 26.5k cycles/frame; no
+regression.
+
+**Extra life rule:** `entities_add_score()` now grants the life and plays the
+arpeggio when the ten-thousands BCD digit changes, as `$A574-$A587` does.
+
+**Test:** `tests/nes_sound.mjs` rewritten (21 checks).  An end-frame Lua callback
+copies the live 2A03 state (`apu.square1.realPeriod`, `apu.noise.envelope.volume`,
+the length counters) into CHR-RAM `$1F80`, so the test asserts the pitch and
+volume the console emits and that each channel is audible - the previous version
+only counted register writes and could not see a wrong pitch.  Verified: shot
+255 -> 549 in 15 steps, engine noise volume 3/4/6 at periods 1015/761/507,
+triangle unused, explosion loud then engine restored, tank note repeats.
+
+Smoke, scroll/HUD, river, gameplay (incl. the 30-point kill), entity-hits and
+sprite-lock all still pass.  RAM 145 bytes free, ROM 65,552 bytes.
+
+(An earlier attempt at this entry mapped the tank sound to `$7F = 9` on channel 2;
+ that was a misreading - see the next entry.)
+
+### 2026-10-30 - Fuel tank sound: two wrong readings corrected
+
+The user's second listen was right again: the tank note is not a warble and not
+noise, it is **one short note repeated for as long as the jet is on the tank**.
+
+Two misreadings in the first sound pass:
+
+1. `$7F = 9` (`$A5E0`) is **not** the refuelling sound.  That path (`$A5B7`) tests
+   `$0500,X` for types `$0A`/`$0B`, which are helicopters - it is the *shot*
+   passing a target.  The port had it wired to `ENT_HIT_FUEL`.
+2. The tank sound is the **channel 1** path.  `$A40A` (reached for object type
+   `$0F`, the fuel depot) increments `$5B`, which is the fuel level - the DLI
+   proves it, `$B527` positions the gauge missile from `($5B >> 3) + $5C` - and
+   sets `$7A = 4, $7B = 8`.  The VBI then runs (`$B2D9`):
+
+   ```
+   ldy #$1F / cpx #$02 / bcs $B2E6 / beq $B2EA
+   ldy #$3F          ; AUDF1 = $3F -> 499 Hz, constant
+   adc #$A0          ; AUDC1 = $7B + $A0 = $A8..$A1: pure tone, volume 8 -> 1
+   dec $7B           ; 8 frames, then $7A = 0
+   ```
+
+   Because the VBI clears `$7A` when the 8-frame sweep ends, the next frame over
+   the tank re-arms it, so the note repeats back to back for the whole overlap -
+   exactly "repeated single note for the duration the plane is over the fuel
+   entity".  It is a 50% square (POKEY "no poly"), 499 Hz, volume 8 down to 1.
+
+Implemented in `src/sound.c` as `FUEL_PERIOD`/`FUEL_FRAMES`: pulse 2, 50% duty,
+period 223 (499 Hz), volume 8,7,...,1 and re-armed while
+`sound_play_pickup()` keeps being called.  `player.c` calls it **every frame of
+the overlap** (the previous edge-trigger was based on the wrong `$7F` reading and
+is gone); the fuel itself still refills per pass.
+
+Verified in Mesen: `the tank note is a constant 499 Hz`, `the note volume walks 8
+down to 1`, `the note repeats while the jet is over the tank` (volumes
+`7,6,5,4,3,2,1,8,7,6,5,4,3,2,1,8,7,6`).  `tests/nes_sound.mjs` is 19 checks;
+gameplay (incl. the refuel rate) still passes.
+
+**Also now known (not implemented):** the low-fuel warning is a real Atari sound
+and the first port had guessed it.  While `$5B < $40` and no tank note is
+running, channel 1 plays a pure tone at volume 15 with `AUDF1 = 2 * $7B`, where
+`$7B` is a free-running 0..$3F counter, gated to sound only for `$7B >= $1C`:
+a rising 251 -> 561 Hz beep for 36 frames, then a 28-frame gap where the engine
+returns, repeating every 64 frames.  The port currently has no warning.
+
+**Pitch depends on the gauge (user report, verified): a full tank is one octave
+up.**  `$A40A` increments the fuel and picks `$7A = 4` - except when the
+increment carries, which only happens while `$5B` is already `$FF` (the code
+saturates `$5B` at `$FF` instead of wrapping) - and then `$7A = 3`.  In the VBI
+those two values take different paths: `$7A = 4` falls through to `ldy #$3F`
+(AUDF1 = 63 -> **499 Hz**), while `$7A = 3` hits `beq $B2EA` and keeps
+`ldy #$1F` (AUDF1 = 31 -> **999 Hz**).  So refuelling with room in the tank
+plays 499 Hz and refuelling a full gauge plays the same note an octave higher.
+Ported as `FUEL_PERIOD_FULL` 111, selected when `hud_fuel == 255`.
+
+`tests/nes_sound.mjs` is now 21 checks: 8-frame notes repeating at a constant
+period, volume 8 -> 1, 499 Hz with a partly full tank and 999 Hz with a full one,
+and the noise channel left at the engine level throughout.
+
+### 2026-10-30 - Low-fuel warning, enemy shell, engine glide (user reports)
+
+Three more listening reports, all verified in the source first:
+
+**Low-fuel warning was missing.**  `$B2FD`: below `$40` of fuel (`$5B`), channel 1
+drops the engine and plays `AUDC1 = $AF` (pure tone, **volume 15**) with
+`AUDF1 = 2 * $7B`, where `$7B` counts `$3E` down to `$00` and the tone only
+sounds while `$7B >= $1C`.  That is 35 frames rising 251 -> 561 Hz, then 28
+frames where the engine returns, repeating every 63 frames.  Ported on pulse 1
+as `snd_warn` (period `7*$7B + 3`), with the engine silenced while it sounds -
+POKEY plays it on the engine's own channel.  The user then asked for it to have
+**priority over every other sound**, so `sound_play_shot()` no longer writes the
+channel while the tone is up (`snd_warn_on`): a shot fired during a tone window
+is silent, which is the trade-off for an uninterruptible warning.
+
+**Enemy shell sound.**  The ch4 `$50` path is not an unused enemy-shot branch: it
+is the bridge tank's shell (`$A609-$A674`).  `AUDF4 = $B4C0[$50]`, `AUDC4 = $AC`
+(pure tone, volume 12) for `$50 = 1..$10`, then `RANDOM|$20` with `$8C` (17-bit
+poly, volume 12) while the fireball swells.  Ported as `sound_play_shell()`,
+called from `ent_shell_init()` so it fires and refires with the tank: the chirp
+runs on pulse 2 (periods 52,62,76,90,108,129,153,185,220,262,314,377,450,542,
+650,780 = 2131 -> 143 Hz), the tail on the noise channel.  A temporary
+`TANK_FIRE_ALWAYS` hook let every bridge tank shoot for listening and has been
+removed again (the Atari's `hud_bridge >= 5` gate is back).
+
+**Engine pitch glide.**  The Atari's engine pitch is `AUDF1 = $1F - (jet Y >> 4)`,
+so it slides as the jet climbs; the port snapped between three noise indices.
+`sound_update()` now walks the index one step per `ENGINE_STEP_FRAMES` (8) frames,
+so slow <-> fast takes ~16 frames instead of one.  The volume still changes
+immediately (`AUDC1 = $B4AC[$19 & 3]`), which is what the original does.
+
+**Bug fixed: the tank note used to hang at volume 1.**  Its 8-frame volume walk
+ends on volume 1, but the "still over the tank" hold flag expired on a *later*
+frame, so the silence write never ran and the pulse was left at volume 1 forever.
+Pulse 2 now keeps a `snd_p2_on` shadow ("this channel still holds a tone") and
+silences it whenever no job owns it.  Regression check: the note must fall silent
+within one note (8 frames) of the jet leaving the tank.
+
+`tests/nes_sound.mjs` is 34 checks; the audio-bearing states are: warning runs
+35 tone / 27 gap frames at volume 15 rising 437 -> 199, a shot cannot dim it, the
+tank note repeats at 223 (499 Hz) and 111 when full and stops after leaving, the
+shell chirp covers the whole `$B4C0` table, the fireball adds noise at volume 12,
+and the engine walks 13 -> 12 -> 11 while gliding.  Smoke, gameplay, entity-hits
+pass.  RAM 140 bytes free, ROM 65,552 bytes.

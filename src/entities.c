@@ -17,6 +17,7 @@
 #include "river.h"
 #include "entities.h"
 #include "player.h"
+#include "sound.h"
 
 /* Separate arrays (not an array of structs): SDCC indexes these with plain
  * absolute,X addressing, where a 5-byte struct needs a multiply per access. */
@@ -145,6 +146,7 @@ uint8_t entities_shot_tile(void) BANKED {
 }
 
 static uint8_t bcd_carry;
+static uint8_t score_tenk;      /* saved ten-thousands nibble: file scope, see AGENTS.md rule 3 */
 
 /* a + b in packed BCD; sets bcd_carry. */
 static uint8_t bcd_add(uint8_t a, uint8_t b) {
@@ -165,9 +167,17 @@ static uint8_t bcd_add(uint8_t a, uint8_t b) {
 void entities_add_score(uint8_t bcd_tens) BANKED {
     /* Table values are tens: the low digit lands in the tens column and
      * the high digit in the hundreds column. */
+    score_tenk = (uint8_t)(hud_score_bcd[1] & 0xF0u);
     hud_score_bcd[2] = bcd_add(hud_score_bcd[2], (uint8_t)((bcd_tens & 0x0Fu) << 4));
     hud_score_bcd[1] = bcd_add(hud_score_bcd[1], (uint8_t)((bcd_tens >> 4) + bcd_carry));
     hud_score_bcd[0] = bcd_add(hud_score_bcd[0], bcd_carry);
+
+    /* Every time the ten-thousands digit changes the original grants an extra
+     * life (up to 9) and plays the $7E = $40 arpeggio ($A574-$A587). */
+    if ((uint8_t)(hud_score_bcd[1] & 0xF0u) != score_tenk && hud_lives < 9u) {
+        hud_lives++;
+        sound_play_bonus();
+    }
 
     /* Track the hi-score. */
     if (hud_score_bcd[0] > hud_hi_bcd[0] ||
@@ -420,6 +430,7 @@ static void ent_shell_init(void) {
     ent_x[e_src] = e_c ? (uint8_t)(ent_x[e_slot] - 4u) : (uint8_t)(ent_x[e_slot] + 4u);
     ent_y[e_src] = (uint8_t)(ent_y[e_slot] - 6u);
     ent_aux[e_src] = 0;
+    sound_play_shell();         /* $50 = 0: the ch4 chirp starts with the shell */
 }
 
 /* The spawner met a bridge section: put the tank in a free slot.  It has no

@@ -121,8 +121,12 @@ void main(void) {
          *     since sprites redrawn only every other frame would lag it and
          *     snap back (jitter);
          *   - HUD and entities (full update and redraw; entities_update()
-         *     measures its own elapsed time and consumes river_scrolled). */
+         *     measures its own elapsed time and consumes river_scrolled).
+         * The APU runs every frame: the Atari's sound engine is driven from the
+         * 60 Hz VBI and the shot's 15-step pitch sweep needs one step per
+         * frame to sound like the original. */
         river_update();
+        sound_update();
 
         logic_acc = (uint8_t)(logic_acc + game_ticks);
         if (logic_acc >= LOGIC_FRAMES) {
@@ -131,7 +135,6 @@ void main(void) {
             entities_follow();
             player_update();
             collision_update();
-            sound_update();
         } else {
             hud_update();
             entities_update();
