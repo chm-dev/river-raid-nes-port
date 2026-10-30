@@ -12,6 +12,7 @@
 #ifndef HUD_H
 #define HUD_H
 
+#include <nes/nes.h>
 #include <stdint.h>
 
 /* True vertical scroll of the playfield, in pixels (0..239). */
@@ -28,16 +29,18 @@ extern uint8_t hud_bridge;          /* current bridge number (0..99) */
 
 /* Install the HUD and playfield background palettes in the PPU shadow.
  * Call this before DISPLAY_OFF so the blank screen uses the black backdrop. */
-void hud_init_palette(void);
+void hud_init_palette(void) BANKED;
 
 /* Load the charset, river tile set and HUD tiles; draw the static HUD text
  * and the initial dynamic values.  Must be called while the display is off. */
-void hud_init_graphics(void);
+void hud_init_graphics(void) BANKED;
 
 /* Queue only the HUD tiles whose state changed since the last call. */
-void hud_update(void);
+void hud_update(void) BANKED;
 
-/* Phase 3+ interface: set the playfield's absolute vertical scroll. */
+/* Phase 3+ interface: set the playfield's absolute vertical scroll.  Defined
+ * in main.c (fixed bank): the rest of the HUD lives in switchable bank 1 and
+ * river_update() sets the scroll every frame. */
 void hud_set_playfield_scroll(uint8_t y);
 
 #endif /* HUD_H */

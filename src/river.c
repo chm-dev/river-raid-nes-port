@@ -611,6 +611,12 @@ static void river_render_row(void) {
 /* State machine ($A6DE-$A9D5)                                               */
 /* ------------------------------------------------------------------------- */
 
+/* Signature of the last plain row that was rendered into river_raw_row (rs_isl
+ * is 0xFF when the buffer does not hold one) and whether the current row is a
+ * repeat of it. */
+static uint8_t rs_left, rs_phase, rs_width, rs_isl;
+static uint8_t rg_same;
+
 static void river_step_state(void) {
     rg_b5 = (rg_level < 9u) ? 6u : 0u;
     rg_rowcount++;
@@ -712,7 +718,27 @@ static void river_step_state(void) {
     }
 
     river_feature_select();
-    river_render_row();
+
+    /* A plain row (no feature template, no hit flash) is a pure function of
+     * left, phase, width and the island flag, and a third of all rows repeat
+     * the previous one (checked on 30,000 model rows: the rule below finds
+     * 33.1% of the 34.6% identical rows, no false positive).  Then the raw
+     * row buffer and the ring fields rg_row_* still hold the right values and
+     * the renderer is skipped. */
+    rg_same = 0;
+    if (rg_hit_flash || (rg_feature && rg_rowcount < rg_be)) {
+        rs_isl = 0xFFu;
+        river_render_row();
+    } else if (rs_isl == (uint8_t)(rg_island_flags & 0x80u) && rs_left == rg_left &&
+               rs_phase == rg_phase && rs_width == rg_width) {
+        rg_same = 1u;
+    } else {
+        river_render_row();
+        rs_left = rg_left;
+        rs_phase = rg_phase;
+        rs_width = rg_width;
+        rs_isl = (uint8_t)(rg_island_flags & 0x80u);
+    }
 }
 
 /* ------------------------------------------------------------------------- */
@@ -976,6 +1002,51 @@ static void river_convert_row(uint8_t line) {
     __endasm;
 #else
     river_convert_row_c(line);
+#endif
+}
+
+/* The current raw row equals the previous one (rg_same), which was converted
+ * into line + 1 of the same tile row: copy that scanline of every column
+ * (2 plane bytes) instead of converting again.  river_col_kind needs no update:
+ * AND-ing the same kinds again changes nothing.  line <= 6. */
+static void river_copy_line(uint8_t line) {
+#ifdef __SDCC
+    rc_off = (uint8_t)(line << 1);
+    __asm
+        ldy     _rc_off
+        ldx     #16                 ; columns 0-15: first page of the pattern buffer
+    1$:
+        lda     _river_tile_pat+2,y
+        sta     _river_tile_pat,y
+        lda     _river_tile_pat+3,y
+        sta     _river_tile_pat+1,y
+        tya
+        clc
+        adc     #16
+        tay
+        dex
+        bne     1$
+        ldy     _rc_off
+        ldx     #8                  ; columns 16-23: second page
+    2$:
+        lda     _river_tile_pat+258,y
+        sta     _river_tile_pat+256,y
+        lda     _river_tile_pat+259,y
+        sta     _river_tile_pat+257,y
+        tya
+        clc
+        adc     #16
+        tay
+        dex
+        bne     2$
+    __endasm;
+#else
+    uint8_t c;
+
+    for (c = 0; c < RIVER_TILE_COLS; c++) {
+        river_tile_pat[c * 16u + line * 2u] = river_tile_pat[c * 16u + line * 2u + 2u];
+        river_tile_pat[c * 16u + line * 2u + 1u] = river_tile_pat[c * 16u + line * 2u + 3u];
+    }
 #endif
 }
 
@@ -1531,6 +1602,8 @@ static void river_generate_raw_row(void) {
 
     if (river_road_left != 0u) {
         river_road_paint();
+        rs_isl = 0xFFu;                 /* the road recoloured the buffer */
+        rg_same = 0u;
     }
 
     /* $AB80: the object spawner runs right after the row renderer.  It only
@@ -1542,7 +1615,11 @@ static void river_generate_raw_row(void) {
     /* The Atari playfield is stored bottom-up relative to its display:
      * raw row 7 is the top scanline of the NES tile.  Reversing the row
      * order here inverts the whole playfield (trees included). */
-    river_convert_row((uint8_t)(7u - river_block_index));
+    if (rg_same && river_block_index != 0u) {
+        river_copy_line((uint8_t)(7u - river_block_index));
+    } else {
+        river_convert_row((uint8_t)(7u - river_block_index));
+    }
     if (river_block_index == 3u) {
         river_left_x[river_slot] = rg_row_left;
         river_right_x[river_slot] = rg_row_right;
@@ -1599,6 +1676,8 @@ void river_init_tiles(void) {
 void river_init(void) {
     uint8_t i;
 
+    rs_isl = 0xFFu;                     /* no rendered row to repeat yet */
+    rg_same = 0u;
     river_init_tiles();
 
     for (i = 0; i < RIVER_ROWS; i++) {

@@ -39,6 +39,10 @@ uint8_t game_ticks = 1u;
 static uint8_t main_last;
 static uint8_t logic_acc;       /* frames since the last logic pass */
 
+void hud_set_playfield_scroll(uint8_t y) {
+    playfield_scroll_y = y;
+}
+
 static void vbl_handler(void) NO_OVERLAY_LOCALS;
 static void lcd_handler(void) NO_OVERLAY_LOCALS;
 

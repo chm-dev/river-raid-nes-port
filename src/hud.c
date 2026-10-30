@@ -522,14 +522,14 @@ static void hud_refresh_all(void) {
 /* Public interface                                                          */
 /* ------------------------------------------------------------------------- */
 
-void hud_init_palette(void) {
+void hud_init_palette(void) BANKED {
     set_bkg_palette(HUD_PALETTE, 1, hud_palette);
     set_bkg_palette(PLAYFIELD_PALETTE, 1, playfield_palette);
     set_bkg_palette(PLAYFIELD_ALT_PALETTE, 1, playfield_alt_palette);
     set_bkg_palette(ROAD_PALETTE, 1, road_palette);
 }
 
-void hud_init_graphics(void) {
+void hud_init_graphics(void) BANKED {
     uint8_t i;
 
     /* Blank (solid gray) at tile 0, black digits 1..10, yellow digits 48..57. */
@@ -569,7 +569,7 @@ void hud_init_graphics(void) {
  * the per-pass cost low (the score/hi-score tile conversion alone is ~1k). */
 static uint8_t hud_phase;
 
-void hud_update(void) {
+void hud_update(void) BANKED {
     switch (hud_phase) {
     case 0: hud_write_score(); break;
     case 1: hud_write_hi(); break;
@@ -581,6 +581,3 @@ void hud_update(void) {
     hud_phase++;
 }
 
-void hud_set_playfield_scroll(uint8_t y) {
-    playfield_scroll_y = y;
-}

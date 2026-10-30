@@ -72,7 +72,7 @@ $linkFlags = @(
 
 # Modules placed in switchable ROM bank 1 (their public functions are BANKED);
 # the fixed bank ($C000-$FFFF) is full.
-$bankedSources = @('entities', 'entity_gfx', 'player')
+$bankedSources = @('entities', 'entity_gfx', 'player', 'hud')
 $sources = Get-ChildItem -Path $srcRoot -Filter '*.c' -File | Sort-Object Name
 if (-not $sources) {
     throw "No C sources found under $srcRoot"
