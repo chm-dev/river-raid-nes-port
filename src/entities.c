@@ -499,9 +499,12 @@ static uint8_t ent_shell_hits(void) {
     e_slot = (uint8_t)(((ent_aux[e_i] - SHELL_FLY_FRAMES) >> 3) << 2);
     e_l = (uint8_t)(ent_x[e_i] + shell_box[e_slot]);                   /* left */
     e_r = (uint8_t)(e_l + shell_box[(uint8_t)(e_slot + 1u)]);          /* right */
-    return e_px < e_r && (uint8_t)(e_px + 8u) > e_l &&
-           e_y < (uint8_t)(ent_y[e_i] + shell_box[(uint8_t)(e_slot + 3u)]) &&
-           (uint8_t)(e_y + 14u) > (uint8_t)(ent_y[e_i] + shell_box[(uint8_t)(e_slot + 2u)]);
+    /* The shell does not scroll, so undo the shift entities_check_player()
+     * applied to e_y (e_l is free again here). */
+    e_l = (uint8_t)(e_y + river_scrolled);
+    return e_px < e_r && (uint8_t)(e_px + 8u) > (uint8_t)(ent_x[e_i] + shell_box[e_slot]) &&
+           e_l < (uint8_t)(ent_y[e_i] + shell_box[(uint8_t)(e_slot + 3u)]) &&
+           (uint8_t)(e_l + 14u) > (uint8_t)(ent_y[e_i] + shell_box[(uint8_t)(e_slot + 2u)]);
 }
 
 /* Called by the river generator after every raw row ($AB80). */
@@ -616,6 +619,7 @@ static void ent_explode(void) {
 }
 
 uint8_t entities_hit_shot(uint8_t sx, uint8_t sy) BANKED {
+    sy = (uint8_t)(sy - river_scrolled);    /* see entities_check_player() */
     for (e_i = 0; e_i < MAX_ENTITIES; e_i++) {
         e_type = ent_type[e_i];
         if (e_type < ENT_AUX_JET || e_type > ENT_AUX_FUEL) {
@@ -740,7 +744,11 @@ static void ent_scan_player(void) {
 
 uint8_t entities_check_player(uint8_t px, uint8_t py) BANKED {
     e_px = px;
-    e_y = py;
+    /* ent_y is only brought up to date by entities_update() (the other frame
+     * group), while the sprites already follow the river every frame.  The
+     * entities' true position is ent_y + river_scrolled; compare against that
+     * by moving the jet the other way (the test only sees the difference). */
+    e_y = (uint8_t)(py - river_scrolled);
     e_i = 0;
     for (;;) {
         ent_scan_player();

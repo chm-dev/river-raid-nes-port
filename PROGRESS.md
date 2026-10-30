@@ -1302,3 +1302,22 @@ es_scroll_hud (split 30/31, HUD rows sampled at y 7/13/21,
   lives sprites at y 18) and 
 es_ring_integrity.mjs (default split now 30; 0 of
   18,828 visible-row checks changed) pass.  ROM is 65,552 bytes.
+
+### 2026-10-30 - Hitboxes lagged the sprites (branch main)
+
+Reported: enemies (the ship above all) felt smaller than their tile.  The boxes
+were the right size (ship 16x8, jet 8x14); the entity Y they were compared with
+was stale.
+
+- **Cause:** `entities_follow()` moves the entity sprites with the river on the
+  player's frame, but `ent_y[]` is only advanced by `entities_update()` on the
+  other frame.  On the frame the hit tests ran, the true position was
+  `ent_y + river_scrolled` while the box used `ent_y`: the box trailed the sprite
+  by the pending scroll (grows with speed; worst when flying fast).
+- **Fix:** `entities_check_player()` and `entities_hit_shot()` shift the jet/shot
+  Y by `-river_scrolled` (the box test only sees the difference, so the asm
+  `ent_scan_player` is unchanged).  `ent_shell_hits()` undoes the shift because
+  the shell does not scroll.
+- **Tests:** `nes_entity_hits` 20/20 and `nes_sprite_lock` pass, but both run with
+  the river frozen or sprite-only, so **the scrolling case is not covered by a
+  test yet** - verify by flying fast into a ship.  ROM 65,552 bytes.
