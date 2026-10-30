@@ -265,13 +265,18 @@ static void player_center(void) {
  * game) and go through the game-start sequence: the river scrolls in, then
  * the jet waits on it for input. */
 static void player_respawn(uint8_t new_game) {
+    /* Rebuilding the ring takes many frames: blank the screen first so the
+     * old river, its entities and the jet's shot vanish together. */
+    entities_clear();
+    player_kill_shot();
+    DISPLAY_OFF;
     if (new_game) {
         hud_bridge = 1u;
         river_init();
     } else {
         river_restart(hud_bridge);
     }
-    entities_clear();
+    DISPLAY_ON;
     player.alive = 1;
     player.speed = 1;
     hud_fuel = 255u;

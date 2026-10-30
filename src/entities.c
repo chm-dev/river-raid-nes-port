@@ -106,6 +106,10 @@ void entities_clear(void) BANKED {
     entity_count = 0;
     sp_hold = 0;
     bridge_x = 0;
+    while (ent_oam_used > ENT_OAM_TANK) {   /* the sprites go with the entities */
+        ent_oam_used--;
+        shadow_OAM[ent_oam_used].y = 240u;
+    }
     if (bridge_flash) {
         bridge_flash = 0;
         ent_water_color(BG_COLOR_BLUE);
