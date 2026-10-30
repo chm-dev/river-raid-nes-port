@@ -8,9 +8,9 @@
 - **Source Target:** `xex/River Raid (1983)(Activision)(US)[a3].xex` (8,220 bytes)
   - Contains a 16-byte XEX loader stub at `$9FF0–$9FFF` (`LDA #$60`, `STA $6A` [RAMTOP], `JSR $F3F6` [OS screen init], `JMP $A000`) and a linear, unbanked **8 KiB Atari 800 Left Cartridge ROM image (`$A000–$BFFF`)**.
 - **Target Platform & Toolchain:** **NES** using **GBDK-2020 v4.5.0** (`./gbdk/bin/lcc -mmos6502:nes`, SDCC `mos6502` backend; this build rejects the shorter `-mnes` spelling).
-- **Screen Layout & HUD Strategy:** **Top Stationary HUD (Scanlines 0–35 / Rows 0–3, 4 px bottom padding)** + **Vertically Scrolling River Playfield (Scanlines 36–239, 204 px)**.
+- **Screen Layout & HUD Strategy:** **Top Stationary HUD (Scanlines 0–24 / 3 tile rows, 1 px bottom padding)** + **Vertically Scrolling River Playfield (Scanlines 25–239, 215 px)**.
   - The HUD is drawn in nametable 0 (`$2000`); the 30-row (240-pixel) playfield ring lives in nametable 1 (`$2400`). The iNES header uses vertical mirroring so the two nametables are distinct.
-  - GBDK's deferred `add_LCD()` handler (`LYC=35`) switches the playfield scroll/nametable from the NMI path every frame, so river row streaming cannot delay or miss the split. The visible split lands on scanline 36/37; that one-line boundary jitter is inherent to GBDK's faked LCD delay.
+  - GBDK's deferred `add_LCD()` handler (`LYC=24`) switches the playfield scroll/nametable from the NMI path every frame, so river row streaming cannot delay or miss the split. The visible split lands on scanline 25/26; that one-line boundary jitter is inherent to GBDK's faked LCD delay.
   - The playfield scrolls **downward**: `playfield_scroll_y` decrements one pixel per frame, and each new 32-tile row is written just above the visible window. GBDK's split handler adds the current scanline to `bkg_scroll_y`, so the handler subtracts `HUD_SPLIT_SCANLINE` before calling `move_bkg()`.
   - A full 30-row playfield ring means fine scrolling never wraps into the HUD rows; the 26 visible rows need at most 203 exact 8x8 blocks, which fit the 207-slot CHR cache.
 - **Reverse Engineering Stack:**
@@ -64,7 +64,7 @@
 | Subsystem | Atari 8-Bit (*River Raid*) | NES Port (GBDK-2020) |
 | :--- | :--- | :--- |
 | **ROM / Mapper** | 8 KiB Cartridge (`$A000–$BFFF`) | Default GBDK-NES ROM configuration (NROM / UNROM with CHR-RAM or CHR-ROM) + `.noi` debug symbols. |
-| **Screen Layout** | scrolling playfield on top + ANTIC DLI split for HUD at the bottom. | **Top HUD (Rows 0–3, 32 px + 4 px padding)** fixed at scroll `(0, 0)` in NT0 + **Scrolling Playfield (Rows 4–29, 204 px)** in NT1, split at scanline 36/37 by GBDK's deferred `add_LCD()` handler. |
+| **Screen Layout** | scrolling playfield on top + ANTIC DLI split for HUD at the bottom. | **Top HUD (3 tile rows, 24 px + 1 px padding)** in NT0 (scrolled up 8 px to drop its blank row 0) + **Scrolling Playfield (215 px)** in NT1, split at scanline 25/26 by GBDK's deferred `add_LCD()` handler. |
 | **Vertical Scrolling** | ANTIC `VSCROL` fine scroll + Display List LMS row pointer updates. | Full 30-row (240 px) nametable ring in `$2400`; `playfield_scroll_y` **decrements** one pixel/frame (content moves down) and one 32-tile row is written just above the visible window every 8 pixels. |
 | **Terrain & Attributes** | 4-color playfield characters (green banks, blue water, black/gray roads, bridges). | 8×8 background CHR tiles uploaded verbatim from the generated scanlines (207-slot cache), so 1-px bank staircases and tree template fragments are exact. Solid land/water use fixed tiles; the playfield uses one 4-color palette. Road/bridge visuals (grey road, level-transition bridge) are deferred to Phase 5; see PROGRESS.md "Next step". |
 | **Sprites (Player, Enemies, Shots)** | 4 Players + 4 Missiles (1bpp full-height strips multiplexed vertically by band). | **NES 2bpp Hardware Metasprites (`move_metasprite`)**: Player jet (16×16), Enemy ship/heli/jet (16×16 or 24×16), Fuel depot (16×24), Player shot (8×8). Since *River Raid* places at most one obstacle per horizontal band, the NES 8-sprites-per-scanline limit is naturally respected. |
@@ -145,7 +145,7 @@
 ---
 
 ### Phase 3: Top HUD, Scanline Split, & CHR Graphics
-**Goal:** Render the stationary Top HUD and smoothly scrolling river viewport below scanline 36.
+**Goal:** Render the stationary Top HUD and smoothly scrolling river viewport below scanline 25.
 
 1. **CHR & Palette Setup:**
    - Load the HUD font/digits, fuel gauge tiles, the river tiles, and the three player flight shapes into CHR-RAM.
@@ -153,11 +153,11 @@
 2. **Top HUD & Split (`src/hud.c`, `src/main.c`):**
    - Draw the 4-row stationary HUD at nametable rows 0–3 (score, HI, GAME, fuel bar with `E ... F`, lives, BRIDGE count/icons), plus 4 px bottom padding.
    - Keep the HUD in NT0 (`$2000`) and the full 30-row playfield ring in NT1 (`$2400`), enabled by vertical mirroring in the iNES header.
-   - At VBlank the NMI restores `(0, 0)` in NT0.  The deferred `add_LCD()` handler then installs the playfield scroll/nametable at scanline 36/37; GBDK's PPUADDR + PPUSCROLL sequence sets both `t` and `v`, so the vertical scroll works mid-frame.  The one-line boundary jitter comes from the faked LCD delay, not the main loop.
+   - At VBlank the NMI sets the HUD scroll `(0, 8)` in NT0 (dropping its blank row 0).  The deferred `add_LCD()` handler then installs the playfield scroll/nametable at scanline 25/26; GBDK's PPUADDR + PPUSCROLL sequence sets both `t` and `v`, so the vertical scroll works mid-frame.  The one-line boundary jitter comes from the faked LCD delay, not the main loop.
 3. **Playfield Ring:**
    - `river_update()` moves the fine scroll 1 pixel/frame (downward) and writes the next 32-tile row just above the visible window every 8 pixels.
 4. **Verification (`tests/nes_scroll_hud.mjs`):**
-   - Confirms 120+ frames of 1-pixel/frame downward scroll with the top 36 scanlines unchanged, a stable split at scanline 36/37, an exact `A[y+1] == B[y]` frozen-scroll shift, and live score/fuel/lives/bridge updates.
+   - Confirms 120+ frames of 1-pixel/frame downward scroll with the top 25 scanlines unchanged, a stable split at scanline 25/26, an exact `A[y+1] == B[y]` frozen-scroll shift, and live score/fuel/lives/bridge updates.
 
 ---
 
