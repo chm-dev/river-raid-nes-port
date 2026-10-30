@@ -1,7 +1,7 @@
 # Project Progress & Session Handoff
 
 **Last updated:** 2026-10-30
-**Current phase:** Phase 5 functionally COMPLETE (2026-10-30) — jet, shot, entities, scoring, fuel, bridge/tank, respawn-at-bridge and the 30 Hz/60 Hz frame work are done and covered by `nes_gameplay`; open: the untraced `$B1C0` checkpoint branch, road/bridge visuals, then Phase 6 (sound)
+**Current phase:** Phase 5 COMPLETE (2026-10-30) — jet, shot, entities, scoring, fuel, bridge/road/tank, respawn-at-bridge (checkpoint rule verified against the real game) and the 30 Hz/60 Hz frame work are done and covered by `nes_gameplay`, `nes_respawn`, `nes_river_cache`, `host_restart.ps1`; next: Phase 6 (sound, game modes)
 **Branch note:** the performance work lives on `experiment/river60-logic30` (cut from `experiment/30fps`); play-tested on a MiSTer and accepted, to be merged to `main`.
 **Phase 1:** COMPLETE (reverse engineering + asset extraction)
 **Phase 2:** COMPLETE (scaffolding, build pipeline, boot ROM, Mesen smoke test)
@@ -47,9 +47,7 @@
   fail when the fixed bank overflows into the vectors at `$FFFA`: the ROM silently
   grows to 128 KiB - always check the `ROM` line of `build.ps1` (must be 65,552).
 - Test state on this branch: `nes_smoke` (50), `nes_scroll_hud` (14), `nes_river`
-  pass; `nes_river_cache` is **stale** (fails on every commit of this branch,
-  including before the performance work; its golden stream no longer matches the
-  game-start state) and needs updating.  New: `nes_entity_hits` (20 cases),
+  pass; `nes_river_cache` passes again (2026-10-30: it waits for the ring to turn over and uses the 210-line window).  New: `nes_entity_hits` (20 cases),
   `nes_sprite_lock`, the `compare_*` ROM-diff scripts and the `perf_*` profilers
   (see Key artifacts).
 - Phase 1 is complete. The cart is extracted, fully disassembled, the display
@@ -394,20 +392,7 @@ These are documented in full in `docs/ATARI_RE_SPEC.md`; don't re-derive them.
 
 ## Next step — Phase 5
 
-0. **Bridge and road visuals belong here (decided 2026-10-29, not yet built).**
-   The road (grey with a yellow centre line, across the land) at the start of
-   the river and at level transitions is not in the NES river palette and is
-   probably produced on the Atari by per-scanline colour changes (DLI); this is
-   **unverified**, so capture it with AltirraBridge first (DLI list, `$B2A5`
-   VBI colour code, bridge rows of `river_rows_157.bin`).  The bridge itself
-   is an object (`type $0F`, shared with fuel; `$A3E9` collision/score/
-   advance-section code), and level transitions drive the bridge counter,
-   `$2E`, and the odd/even land colour (`BG_COLOR_BRIGHT_GREEN`).  The
-   generator already flags those rows (`RIVER_FLAG_BRIDGE` in the collision
-   ring; rows currently render as plain river).  Candidate NES approach:
-   gray/yellow road tiles in the playfield pattern table with the playfield
-   attribute table (or the split handler) switching those rows to HUD palette
-   0 (`black, gray, yellow, white`); prototype before committing.
+0. **Bridge and road visuals: DONE** (2026-10-29 entries; natural level-1 bridge re-checked by eye 2026-10-30, `build/nes_natural_bridge.png` vs `build/atari_bridge/bridge_20.png`; only the 16-vs-20-scanline road remains).
 1. Start Phase 5 (player jet, entities, collisions).  Feed the entity slots
    into `river_obj_count/river_obj_aux/river_obj_x/river_obj_flags` so the
    bank-avoidance clamp matches the original.
@@ -429,8 +414,7 @@ These are documented in full in `docs/ATARI_RE_SPEC.md`; don't re-derive them.
 6. Perf: finished for now (see the 2026-10-29/30 performance entries).  If more is
    needed: commit the scroll at the end of the pass, cheaper `river_render_row`/
    `river_convert_row`, or the entity update loop (~0.9k cycles/frame).
-7. `tests/nes_river_cache.mjs` and its golden data need updating for the current
-   game-start state (road rows, spawner) before it is useful again.
+7. (done) `tests/nes_river_cache.mjs` is current; regenerate its golden data with `python tools/gen_river_tiles_golden.py 520` first.
 
 ## Handy commands
 
@@ -444,6 +428,8 @@ node tests/nes_river.mjs                # Phase 4 row/state/collision validation
 python tools/object_host_check.py build/object_trace.jsonl build/object_trace_L15.jsonl build/object_trace_L24.jsonl   # spawner vs model
 python tools/river_repeat_rows.py       # repeat-row skip rule: 0 false positives
 node tests/nes_entity_hits.mjs          # 20 hit-box boundary cases
+node tests/nes_gameplay.mjs            # steering, throttle, fuel, refuel, shot score
+./tests/host_restart.ps1                 # river_restart() vs the Atari $B1C0 truth table (build/checkpoint_trace.jsonl)
 node tests/nes_sprite_lock.mjs          # entity sprites locked to the scroll
 node tests/perf_scroll_cadence.mjs      # slow / cruise / fast scroll cadence
 node tests/perf_frame_trace.mjs cruise 900   # per-frame trace (restart Mesen between Lua runs)
@@ -1409,3 +1395,30 @@ Open item "fuel rate / 16-bit gauge" traced from `$A3E9-$A453` (no Altirra run).
 - **Still open from Phase 5:** (1) the `$B1C0` checkpoint advance/rewind branch is derived from
   the disassembly, not traced (needs deaths before / after / into a bridge in Altirra);
   (2) bridge/road visuals (Next step 0); (3) `nes_river_cache.mjs` is stale.
+
+
+### 2026-10-30 - Phase 5 finished: checkpoint verified, cache test repaired, bridge re-checked
+
+- **`$B1C0` checkpoint rule verified** with the real game.  `tools/atari_checkpoint_trace.py`
+  breaks at `$B1C0`, pokes sentinel seeds and inputs (level parity flipped since life start,
+  `$2E` zero / non-zero, `$23` bit 7, odd and even levels = 16 cases), and reads `$60`,
+  `$66-$69`, `$AD-$B0` at `$B1F8`.  `tests/host_restart.ps1` (harness `tests/host/restart_main.c`
+  includes `river.c` for its private state) feeds the same inputs to `river_restart()`:
+  **16/16 match**, covering advance (level+1, new seeds, old ones saved), rewind (level-1)
+  and keep.  Trace = `build/checkpoint_trace.jsonl` (about 25 min: the bridge round-trips are
+  slow).  Caveat: the port models `$2E != 0` as "hud_bridge changed since life start"; a
+  bridge count already at `HUD_BRIDGE_DIGIT_MAX` would not register (not reachable in
+  normal play).
+- **`tests/nes_river_cache.mjs` repaired.**  Not a generator bug: the ring starts as a
+  straight-channel prefill that the first procedural rows replace while the game-start road
+  scrolls in, so the early frames legitimately differ from the model.  The test now checks
+  only from distance 33 on and uses the 210-line window: 12,780 visible rows match exactly
+  (the only mismatches are the newest rows, still above the window).
+- **Road/bridge visuals:** already built (2026-10-29 entries); the "Next step 0" note was
+  stale.  Forced a natural level-1 bridge in Mesen (`rg_countdown = 1`, `rg_section_timer = 2`)
+  and compared with the Atari capture: grey road with dark edges across both banks, olive
+  striped bar with the tank, land colour change at the road all match.  Remaining known
+  difference: the road is 16 scanlines (Atari 20) because it is aligned to the 16x16
+  attribute grid.
+- **Phase 5 is closed.**  Remaining items are Phase 6: APU sound, title/attract, game
+  variations, game over flow.
