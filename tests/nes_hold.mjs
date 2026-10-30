@@ -35,12 +35,15 @@ try {
     await callTool('mesen_load_rom', { filepath: rom });
     await sleep(1500);
     await callTool('mesen_playback', { action: 'pause' });
-    // Level 1 is static in the original; start on bridge 5 (Up once) so ships patrol.
+    // Level 1 is static in the original; start on bridge 5 (GAME 3: Up twice,
+    // GAME 2 is level 1 for two players) so ships patrol.
     await step(30);
-    await press('Up');
-    await step(8);
-    await press('');
-    await step(8);
+    for (let i = 0; i < 2; i++) {
+        await press('Up');
+        await step(8);
+        await press('');
+        await step(8);
+    }
     await startGame();
     await step(30);                         // river scrolling in (WAIT)
     check((await u8('ent_hold')) === 1, 'ent_hold is set while the river scrolls in');

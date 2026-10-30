@@ -70,6 +70,7 @@
  *   29..30    wide "HI" label (two tiles)
  *   31..38    wide "BRIDGE" label (four glyphs, two tiles each)
  *   39..46    wide "GAME" letters (16x8 px, two tiles per letter)
+ *   58..59    wide "P2" label ($4F); the Atari swaps it for "HI" in two-player games
  *
  * These HUD tiles (0..46) live in pattern table $1000, shared with the
  * sprites (which start at SPRITE_TILE_BASE).  The playfield uses its own
@@ -102,6 +103,7 @@
 #define TILE_HI_WIDE            29u     /* 2 tiles */
 #define TILE_BRIDGE_WIDE        31u     /* 8 tiles: BR ID G E */
 #define TILE_GAME_WIDE          39u     /* 8 tiles: G A M E halves */
+#define TILE_P2_WIDE            58u     /* 2 tiles, right after the yellow digits */
 
 /* The playfield owns its own 256-tile background pattern table ($0000,
  * PPUCTRL bit 4 = 0 during the playfield pass).  The HUD tiles above and all

@@ -27,6 +27,14 @@ extern uint8_t hud_lives;           /* plane icons under BRIDGE (0..3) */
 extern uint8_t hud_game;            /* game variation / skill */
 extern uint8_t hud_bridge;          /* current bridge number (0..99) */
 
+/* Two-player scoreboard, as on the Atari ($AF80/$AF4B): the left field is
+ * always P1's score; the right field is "HI" + hi-score in a one-player game
+ * and "P2" + P2's score in a two-player game.  hud_score_bcd is the active
+ * player's score, hud_other_bcd (set by the player code) the idle player's. */
+extern uint8_t hud_two;             /* 1 = two players alternating */
+extern uint8_t hud_cur;             /* active player, 0 = P1 */
+extern uint8_t *hud_other_bcd;      /* idle player's score, 3 BCD bytes */
+
 /* Install the HUD and playfield background palettes in the PPU shadow.
  * Call this before DISPLAY_OFF so the blank screen uses the black backdrop. */
 void hud_init_palette(void) BANKED;

@@ -49,6 +49,9 @@ uint8_t hud_fuel;
 uint8_t hud_lives;
 uint8_t hud_game;
 uint8_t hud_bridge;
+uint8_t hud_two;
+uint8_t hud_cur;
+uint8_t *hud_other_bcd;
 
 /* The backdrop is black (Atari COLBK, needed for the river's black pixels), so
  * the gray band is pixel value 1 of the HUD tiles: black ink is value 0 (the
@@ -104,6 +107,7 @@ static const uint8_t fuel_bar_x[16] = {
 /* Cached values; hud_update() writes a field only when it differs. */
 static uint8_t shown_score[6];
 static uint8_t shown_hi[6];
+static uint8_t shown_two;            /* right-field label: 0 = HI, 1 = P2 */
 static uint8_t shown_bridge[2];
 static uint8_t shown_game;
 static uint8_t shown_lives;
@@ -332,7 +336,9 @@ static void hud_write_score(void) {
     uint8_t i;
     uint8_t changed = 0;
 
-    hud_bcd_tiles(hud_score_bcd, tiles, TILE_DIGIT_YELLOW_BASE);
+    /* The left field always belongs to P1 ($AF4B). */
+    hud_bcd_tiles(hud_cur ? hud_other_bcd : hud_score_bcd, tiles,
+                  TILE_DIGIT_YELLOW_BASE);
     for (i = 0; i < 6u; i++) {
         if (tiles[i] != shown_score[i]) {
             changed = 1u;
@@ -349,7 +355,22 @@ static void hud_write_hi(void) {
     uint8_t i;
     uint8_t changed = 0;
 
-    hud_bcd_tiles(hud_hi_bcd, tiles, TILE_DIGIT_BASE);
+    /* One player: "HI" + hi-score.  Two players: "P2" + P2's score, and the
+     * hi-score is not shown ($AF80: label $DB/$4F, digits $B06E/$B068). */
+    if (hud_two) {
+        hud_bcd_tiles(hud_cur ? hud_score_bcd : hud_other_bcd, tiles,
+                      TILE_DIGIT_YELLOW_BASE);
+    } else {
+        hud_bcd_tiles(hud_hi_bcd, tiles, TILE_DIGIT_BASE);
+    }
+    if (hud_two != shown_two) {
+        uint8_t label[2];
+
+        label[0] = hud_two ? TILE_P2_WIDE : TILE_HI_WIDE;
+        label[1] = (uint8_t)(label[0] + 1u);
+        set_bkg_tiles(HUD_HI_LABEL_X, HUD_HI_ROW, 2, 1, label);
+        shown_two = hud_two;
+    }
     for (i = 0; i < 6u; i++) {
         if (tiles[i] != shown_hi[i]) {
             changed = 1u;
@@ -441,6 +462,7 @@ static void hud_draw_static(void) {
     /* Labels are the game's own 4-pixel HUD glyphs, doubled like mode 6. */
     hud_wide_glyph(TILE_P1_WIDE, 0x5Au, 1u);          /* P1, yellow */
     hud_wide_glyph(TILE_HI_WIDE, 0x5Bu, 0u);          /* HI, black */
+    hud_wide_glyph(TILE_P2_WIDE, 0x4Fu, 1u);          /* P2, yellow like P1 */
     hud_wide_glyph(TILE_BRIDGE_WIDE + 0u, 0x43u, 1u); /* BR */
     hud_wide_glyph(TILE_BRIDGE_WIDE + 2u, 0x44u, 1u); /* ID */
     hud_wide_glyph(TILE_BRIDGE_WIDE + 4u, 0x45u, 1u); /* G */

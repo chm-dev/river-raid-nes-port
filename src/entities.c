@@ -53,6 +53,7 @@ static uint8_t ent_anim;
 
 /* Non-zero from the start of a game until the player first moves or fires: the river\n * scrolls in but the world (patrols, tanks, shells, wake-ups) stands still. */
 uint8_t ent_hold;
+uint8_t ent_paused;
 uint16_t ent_scrolled;                  /* rows scrolled since the game start (while held) */
 static uint8_t ent_oam_used;
 
@@ -1261,6 +1262,13 @@ void entities_update(void) BANKED {
     ent_anim = (uint8_t)sys_time;
     if (game_ticks > 4u) {
         game_ticks = 4u;
+    }
+
+    if (ent_paused) {
+        /* Pause menu: the sprites stay as the pause left them (it cleared the
+         * band the menu occupies); the next pass after resuming redraws all. */
+        river_scrolled = 0;
+        return;
     }
 
     if (player_disable) {

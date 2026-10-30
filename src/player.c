@@ -42,7 +42,9 @@ uint8_t player_invuln;
 #define PLAYER_STATE_WAIT       3u      /* game start: river still scrolling in */
 #define PLAYER_STATE_READY      4u      /* jet shown, river stopped until input */
 #define PLAYER_STATE_ATTRACT    5u      /* no jet; the river scrolls, the menu is live */
+#define PLAYER_STATE_PAUSE      6u      /* START pressed: frozen, RESUME / EXIT menu */
 #define PLAYER_START_INPUT      (J_A | J_LEFT | J_RIGHT | J_UP | J_DOWN)
+#define ATTRACT_REPEAT_FRAMES   30u     /* Atari $A6DA: Up/Down repeat while held */
 
 #define PLAYER_SHOT_SLOT        47u
 #define PLAYER_SHOT_SPEED       6u
@@ -60,6 +62,31 @@ uint8_t player_invuln;
 #define PLAYER_TILE_LEFT        (SPRITE_TILE_BASE + 0u)
 #define PLAYER_TILE_RIGHT       (SPRITE_TILE_BASE + 2u)
 #define PLAYER_TILE_STRAIGHT    (SPRITE_TILE_BASE + 4u)
+
+/* Pause menu, drawn with sprites (the playfield nametable is the scroll ring
+ * and its pattern table is the river cache, so it cannot hold text).  Letters
+ * R E S U M X I T are charset glyphs uploaded to sprite tiles PAUSE_TILE_BASE+0..7
+ * (clear of the debris tiles, which end at 238).  OAM slots 56..63 are free; 2..4
+ * are the tank/shell slots, idle while the entities are paused.  "RESUME" and
+ * "EXIT" sit in a band that is cleared of other sprites, so no scanline ever
+ * has more than 7 of them. */
+#define PAUSE_TILE_BASE         240u
+#define PAUSE_GLYPHS            8u
+#define PAUSE_PARTS             10u     /* letters; the cursor is slot PAUSE_CURSOR_SLOT */
+#define PAUSE_CURSOR_SLOT       2u
+#define PAUSE_ROW1_Y            112u
+#define PAUSE_ROW2_Y            128u
+#define PAUSE_BAND_TOP          104u    /* sprites overlapping these scanlines are hidden */
+#define PAUSE_BAND_BOT          144u
+#define PAUSE_CURSOR_X          88u
+
+/* Charset codes; the game only patches the letters its own text uses, so X is
+ * the OS-font glyph at 120, not the alphabetical 24 (that is a comma). */
+static const uint8_t pause_glyph[PAUSE_GLYPHS] = { 18, 5, 19, 21, 13, 120, 9, 20 };
+/* RESUME: R E S U M E   EXIT: E X I T */
+static const uint8_t pause_tile[PAUSE_PARTS] = { 0, 1, 2, 3, 4, 1, 1, 5, 6, 7 };
+static const uint8_t pause_slot[PAUSE_PARTS] = { 56, 57, 58, 59, 60, 61, 62, 63, 3, 4 };
+static const uint8_t pause_x[PAUSE_PARTS] = { 104, 112, 120, 128, 136, 144, 112, 120, 128, 136 };
 
 static const palette_color_t player_palette[4] = {
     0x0Fu, 0x28u, 0x30u, 0x16u
@@ -84,6 +111,9 @@ static uint8_t pl_cur;                  /* active player (joypad index) */
 static uint8_t pl_other[10];
 static uint8_t pl_hi[4][3];             /* hi-score per start level */
 static uint8_t pl_hi_idx;               /* start level hud_hi_bcd belongs to */
+static uint8_t pl_nocol;                /* debug start (SELECT): the jet cannot crash */
+static uint8_t pl_rep;                  /* attract: frames until Up/Down repeats */
+static uint8_t pause_sel;               /* 0 = RESUME, 1 = EXIT */
 static joypads_t pl_pads;
 static uint8_t pl_new;
 static uint8_t pl_i;
@@ -121,6 +151,9 @@ void player_init(void) BANKED {
     joypad_init(2u, &pl_pads);
     pl_two = 0;
     pl_cur = 0;
+    hud_other_bcd = pl_other;
+    hud_two = 0;
+    hud_cur = 0;
     pl_hi_idx = river_variant;
     hud_game = 1u;
     hud_lives = 0;
@@ -155,6 +188,17 @@ void player_init_graphics(void) BANKED {
 
     hide_sprite(PLAYER_SPRITE_TOP);
     hide_sprite(PLAYER_SPRITE_BOTTOM);
+
+    /* Pause-menu letters: charset glyphs as plane-0 sprite tiles. */
+    for (pl_step = 0; pl_step < PAUSE_GLYPHS; pl_step++) {
+        const uint8_t *src = atari_charset + (uint16_t)pause_glyph[pl_step] * 8u;
+
+        for (pl_i = 0; pl_i < 8u; pl_i++) {
+            player_tile_buf[pl_i * 2u] = src[pl_i];
+            player_tile_buf[pl_i * 2u + 1u] = 0x00u;
+        }
+        set_sprite_data((uint8_t)(PAUSE_TILE_BASE + pl_step), 1, player_tile_buf);
+    }
 }
 
 /*
@@ -379,10 +423,53 @@ static void player_swap_players(void) {
     pl_other[4] = pl_t;
     river_swap_checkpoint(&pl_other[5]);
     pl_cur ^= 1u;
+    hud_cur = pl_cur;
 }
 
+/* Game number (the Atari's $09 + 1) and the scoreboard layout that goes with it. */
 static void player_show_game(void) {
     hud_game = (uint8_t)(1u + (river_variant << 1) + pl_two);
+    hud_two = pl_two;
+    hud_cur = pl_cur;
+}
+
+/* Pause menu: the sprites other than the menu's own are cleared from its band
+ * (they are redrawn by the entity/player passes once the game resumes). */
+static void player_pause_draw(void) {
+    for (pl_i = 0; pl_i < PAUSE_PARTS; pl_i++) {
+        pl_slot = pause_slot[pl_i];
+        set_sprite_tile(pl_slot, (uint8_t)(PAUSE_TILE_BASE + pause_tile[pl_i]));
+        set_sprite_prop(pl_slot, S_PAL(0));
+        move_sprite(pl_slot, pause_x[pl_i],
+                    (uint8_t)((pl_i < 6u ? PAUSE_ROW1_Y : PAUSE_ROW2_Y) - 1u));
+    }
+    set_sprite_tile(PAUSE_CURSOR_SLOT, HUD_LIFE_TILE);     /* the plane icon */
+    set_sprite_prop(PAUSE_CURSOR_SLOT, S_PAL(0));
+    move_sprite(PAUSE_CURSOR_SLOT, PAUSE_CURSOR_X,
+                (uint8_t)((pause_sel ? PAUSE_ROW2_Y : PAUSE_ROW1_Y) - 1u));
+}
+
+static void player_pause_hide(void) {
+    for (pl_i = 0; pl_i < PAUSE_PARTS; pl_i++) {
+        hide_sprite(pause_slot[pl_i]);
+    }
+    hide_sprite(PAUSE_CURSOR_SLOT);
+}
+
+static void player_pause_enter(void) {
+    river_freeze = 1u;
+    ent_paused = 1u;
+    sound_set_engine(SOUND_ENGINE_OFF);
+    sound_play_blip();
+    for (pl_i = 0; pl_i < PLAYER_SHOT_SLOT + 1u; pl_i++) {
+        pl_t = shadow_OAM[pl_i].y;
+        if (pl_t < 232u && (uint8_t)(pl_t + 8u) > PAUSE_BAND_TOP && pl_t < PAUSE_BAND_BOT) {
+            shadow_OAM[pl_i].y = 240u;
+        }
+    }
+    pause_sel = 0;
+    player_pause_draw();
+    player_state = PLAYER_STATE_PAUSE;
 }
 
 /* Back to the attract screen on start level `variant`: a fresh river with no
@@ -396,6 +483,9 @@ static void player_attract(uint8_t variant) {
     entities_clear();
     hide_sprite(PLAYER_SPRITE_TOP);
     hide_sprite(PLAYER_SPRITE_BOTTOM);
+    player_pause_hide();
+    ent_paused = 0;
+    pl_nocol = 0;
     sound_set_engine(SOUND_ENGINE_OFF);
     DISPLAY_OFF;
     hud_bridge = river_init(variant);
@@ -410,11 +500,71 @@ static void player_attract(uint8_t variant) {
     hud_lives = 0;
     hud_fuel = 255u;
     pl_cur = 0;
+    pl_other[0] = 0;                    /* no P2 score left over from the last game */
+    pl_other[1] = 0;
+    pl_other[2] = 0;
     player.alive = 0;
     river_speed = 1u;
     river_vel = RIVER_VEL_CRUISE;
     player_show_game();
     player_state = PLAYER_STATE_ATTRACT;
+}
+
+/* RESUME / EXIT: Up, Down and SELECT move the cursor, START or A confirms. */
+static void player_pause_update(void) {
+    pl_new = (uint8_t)(pl_pad & ~player_prev_pad);
+    player_prev_pad = pl_pad;
+    if (pl_new & (J_UP | J_DOWN | J_SELECT)) {
+        pause_sel ^= 1u;
+        player_pause_draw();
+        sound_play_blip();
+    } else if (pl_new & (J_START | J_A)) {
+        sound_play_blip();
+        if (pause_sel) {
+            player_attract(river_variant);
+        } else {
+            player_pause_hide();
+            river_freeze = 0;
+            ent_paused = 0;
+            player_state = PLAYER_STATE_PLAY;
+        }
+    }
+}
+
+/* Atari $A69D: the game number steps 0..7 and wraps; bit 0 is "two players" and
+ * bits 1-2 the start level.  Up = next, Down = previous.  Only a change of start
+ * level needs a new river; 1P <-> 2P is a scoreboard change. */
+static void player_step_game(uint8_t pad) {
+    pl_t = (uint8_t)(((river_variant << 1) | pl_two) + ((pad & J_UP) ? 1u : 7u)) & 7u;
+    pl_two = (uint8_t)(pl_t & 1u);
+    if ((uint8_t)(pl_t >> 1) != river_variant) {
+        player_attract((uint8_t)(pl_t >> 1));
+    } else {
+        player_show_game();
+    }
+    sound_play_blip();
+}
+
+static void player_respawn(uint8_t new_game);
+
+/* New game from the attract screen; the other player (if any) starts on the
+ * same level. */
+static void player_start_game(void) {
+    hud_lives = 3u;
+    pl_cur = 0;
+    pl_other[0] = 0;
+    pl_other[1] = 0;
+    pl_other[2] = 0;
+    pl_other[3] = 3u;
+    pl_other[4] = atari_level_descriptors[river_variant * 6u + 4u];
+    pl_other[5] = pl_other[4];                  /* level */
+    pl_other[6] = atari_level_descriptors[river_variant * 6u + 0u];
+    pl_other[7] = atari_level_descriptors[river_variant * 6u + 1u];
+    pl_other[8] = atari_level_descriptors[river_variant * 6u + 2u];
+    pl_other[9] = atari_level_descriptors[river_variant * 6u + 3u];
+    player_show_game();
+    sound_play_blip();
+    player_respawn(1);
 }
 
 /* Put the jet at the centre of the river under it. */
@@ -476,29 +626,22 @@ void player_update(void) BANKED {
         pl_pad = joypad();
         pl_new = (uint8_t)(pl_pad & ~player_prev_pad);
         player_prev_pad = pl_pad;
-        if (pl_new & J_START) {
-            /* New game: the other player (if any) starts on the same level. */
-            hud_lives = 3u;
-            pl_cur = 0;
-            pl_other[0] = 0;
-            pl_other[1] = 0;
-            pl_other[2] = 0;
-            pl_other[3] = 3u;
-            pl_other[4] = atari_level_descriptors[river_variant * 6u + 4u];
-            pl_other[5] = pl_other[4];                  /* level */
-            pl_other[6] = atari_level_descriptors[river_variant * 6u + 0u];
-            pl_other[7] = atari_level_descriptors[river_variant * 6u + 1u];
-            pl_other[8] = atari_level_descriptors[river_variant * 6u + 2u];
-            pl_other[9] = atari_level_descriptors[river_variant * 6u + 3u];
-            sound_play_blip();
-            player_respawn(1);
+        if (pl_new & (J_START | J_SELECT)) {
+            /* SELECT is the debugging start: the same game, but the jet
+             * cannot crash into anything. */
+            pl_nocol = (pl_new & J_SELECT) ? 1u : 0u;
+            player_start_game();
         } else if (pl_new & (J_UP | J_DOWN)) {
-            player_attract((uint8_t)(river_variant + ((pl_new & J_UP) ? 1u : 3u)) & 3u);
-            sound_play_blip();
-        } else if (pl_new & J_SELECT) {
-            pl_two ^= 1u;
-            player_show_game();
-            sound_play_blip();
+            pl_rep = ATTRACT_REPEAT_FRAMES;
+            player_step_game(pl_new);
+        } else if (pl_pad & (J_UP | J_DOWN)) {
+            /* Held: repeat every $1E frames like the Atari ($A6DA). */
+            if (pl_rep > game_ticks) {
+                pl_rep = (uint8_t)(pl_rep - game_ticks);
+            } else {
+                pl_rep = ATTRACT_REPEAT_FRAMES;
+                player_step_game(pl_pad);
+            }
         }
         return;
     }
@@ -519,6 +662,11 @@ void player_update(void) BANKED {
         pl_pad = pl_pads.joypads[pl_cur];
     } else {
         pl_pad = joypad();
+    }
+
+    if (player_state == PLAYER_STATE_PAUSE) {
+        player_pause_update();
+        return;
     }
 
     if (player_state == PLAYER_STATE_READY) {
@@ -546,6 +694,12 @@ void player_update(void) BANKED {
         } else {
             player_attract(river_variant);  /* game over */
         }
+        player_prev_pad = pl_pad;
+        return;
+    }
+
+    if ((pl_pad & ~player_prev_pad) & J_START) {
+        player_pause_enter();
         player_prev_pad = pl_pad;
         return;
     }
@@ -599,8 +753,8 @@ void player_update(void) BANKED {
 
     if (player_invuln) {
         hud_fuel = 255u;
-    } else if (hud_fuel == 0u || pl_hit == ENT_HIT_DEADLY ||
-               player_hits_terrain()) {
+    } else if (hud_fuel == 0u ||
+               (!pl_nocol && (pl_hit == ENT_HIT_DEADLY || player_hits_terrain()))) {
         player_crash();
     }
     player_prev_pad = pl_pad;

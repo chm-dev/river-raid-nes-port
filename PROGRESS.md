@@ -1858,3 +1858,30 @@ is ever seen sliding there and vanishing.  `entities_clear_near()` (called when 
 stays as a safety net.  Bridges, tanks and shells are exempt.  `tests/nes_start_clear.mjs` watches
 every other frame of the scroll-in on all four start levels.  RAM 96 bytes free.
 Re-measure `ENT_WAIT_ROWS` (read `ent_scrolled` at READY) if the playfield height or start scroll changes.
+
+
+### 2026-10-30 - Phase 6: Atari-style game select, P2 scoreboard, debug start, pause menu
+
+- **Game select = the Atari's `$09`** (`$A69D`): Up/Down step the game number 1..8 and wrap
+  (bit 0 of `game-1` = two players, bits 1-2 = start level 1/5/20/50), held Up/Down repeats every 30
+  frames (`$A6DA`).  Only a change of start level rebuilds the river; 1P <-> 2P just redraws the
+  scoreboard.  `nes_hold.mjs` now presses Up twice to reach GAME 3 (level 5); one press is GAME 2
+  (level 1, two players, where ships do not patrol).
+- **Scoreboard (`$AF80`, `$AF4B`)**: the left field is always P1 (`$5A`) + P1's score.  The right
+  field is `HI` (`$5B`) + the level's hi-score for one player, and **`P2` (`$4F`, BG tiles 58/59,
+  yellow like P1) + P2's score** for two players - the hi-score is not shown then.  `hud_two`,
+  `hud_cur` and `hud_other_bcd` (the idle player's saved score) feed `hud_write_score/hi`.
+- **SELECT in attract = debug game**: same as START but `pl_nocol` (static in `player.c`) stops
+  terrain/enemy crashes.  Fuel still drains (refuel works), `player_invuln` is the separate test
+  hook.  The flag is cleared by `player_attract()`.
+- **START in play = pause**: `PLAYER_STATE_PAUSE`, `river_freeze` + `ent_paused` (new, makes
+  `entities_update()` return early) freeze the world.  A sprite menu "RESUME / EXIT" (plane icon =
+  cursor) is drawn in OAM slots 56..63 and 2..4 (tank slots, idle while paused) using charset glyphs
+  uploaded to sprite tiles 240..247 (R E S U M X I T; **X is charset code 120, code 24 is a comma**).
+  Other sprites in the menu's scanline band (104..143) are hidden so a scanline never exceeds
+  the 8-sprite limit; the entity/jet passes redraw them after RESUME.  Up/Down/SELECT move the
+  cursor, START or A confirms; EXIT -> `player_attract()`.
+- Not done: the Atari's 2P game-over line in row 2 (`$A399-$A3AE`, P2's bridge counter), and
+  checking the hi-score against both players at game over (`$B261`).
+- Build: ROM 65552, `_XINIT` ends `$FB03`, **70 bytes** internal RAM free.  `nes_menu.mjs` covers
+  game-number stepping, the HI/P2 label tiles, the debug start, pause/resume/exit.

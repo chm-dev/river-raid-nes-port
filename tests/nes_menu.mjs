@@ -3,9 +3,11 @@
  * swap.
  *
  * Boot goes straight to the attract screen (no jet, no lives).  Up/Down step the
- * start level 1/5/20/50 (river_variant 0..3), SELECT toggles one/two players
- * (GAME n = 1 + 2*variant + two), START begins.  In a two-player game every
- * death hands the jet to the other player, who keeps their own lives.
+ * Atari game number 1..8 (GAME n = 1 + 2*variant + two: start level 1/5/20/50 and
+ * one/two players together), START begins, SELECT begins a debug game in which the
+ * jet cannot crash.  The scoreboard's right label is HI (one player) or P2 (two).
+ * In a two-player game every death hands the jet to the other player, who keeps
+ * their own lives.  During play START pauses (RESUME / EXIT menu).
  *
  * Run:  node tests/nes_menu.mjs [rom] [noi]
  */
@@ -48,32 +50,40 @@ try {
     const alive = async () => (await readBytes(S('player'), 8))[6];   // unused byte: just proves reads work
     void alive;
 
+    // Up/Down step the Atari game number 1..8 ($A69D): bit 0 of (game - 1) is
+    // "two players", bits 1-2 the start level.
     await tap('Up');
     m = await menu();
-    check(m.variant === 1 && m.game === 3 && m.bridge === 5, 'Up: start level 5, GAME 3', JSON.stringify(m));
-    await tap('Up');
-    await tap('Up');
-    m = await menu();
-    check(m.variant === 3 && m.game === 7 && m.bridge === 50, 'Up twice more: start level 50, GAME 7', JSON.stringify(m));
+    check(m.game === 2 && m.variant === 0 && m.bridge === 1 && (await u8('hud_two')) === 1,
+        'Up: GAME 2 = level 1, two players', JSON.stringify(m));
     await tap('Up');
     m = await menu();
-    check(m.variant === 0 && m.game === 1 && m.bridge === 1, 'Up wraps to start level 1', JSON.stringify(m));
+    check(m.game === 3 && m.variant === 1 && m.bridge === 5 && (await u8('hud_two')) === 0,
+        'Up: GAME 3 = level 5, one player', JSON.stringify(m));
+    for (let i = 0; i < 5; i++) await tap('Up');
+    m = await menu();
+    check(m.game === 8 && m.variant === 3 && m.bridge === 50 && (await u8('hud_two')) === 1,
+        'Up x5: GAME 8 = level 50, two players', JSON.stringify(m));
+    await tap('Up');
+    m = await menu();
+    check(m.game === 1 && m.variant === 0 && m.bridge === 1, 'Up wraps from GAME 8 to GAME 1', JSON.stringify(m));
     await tap('Down');
     m = await menu();
-    check(m.variant === 3 && m.bridge === 50, 'Down wraps to start level 50', JSON.stringify(m));
-    await tap('Select');
+    check(m.game === 8 && m.variant === 3, 'Down wraps from GAME 1 to GAME 8', JSON.stringify(m));
+    for (let i = 0; i < 4; i++) await tap('Down');   // GAME 4 = level 5, two players
     m = await menu();
-    check(m.game === 8, 'SELECT toggles two players: GAME 8', JSON.stringify(m));
-    await tap('Select');
-    m = await menu();
-    check(m.game === 7, 'SELECT again: back to GAME 7', JSON.stringify(m));
-    await step(60);
+    check(m.game === 4 && m.variant === 1 && m.bridge === 5, 'level 5, two players: GAME 4', JSON.stringify(m));
 
-    // Start a two-player game on level 5: Down x2 from 50 -> 20 -> 5.
-    await tap('Down'); await tap('Down');
-    await tap('Select');
-    m = await menu();
-    check(m.variant === 1 && m.game === 4 && m.bridge === 5, 'level 5, two players: GAME 4', JSON.stringify(m));
+    // Scoreboard: the right-hand label is P2 ($4F glyph tiles 58/59) for two
+    // players and HI (29/30) for one.
+    await step(60);
+    let lab = await readBytes(0x2000 + 1 * 32 + 20, 2, 'NesPpuMemory');
+    check(lab[0] === 58 && lab[1] === 59, 'two players: the right label is P2', JSON.stringify(lab));
+    await tap('Down');                   // GAME 3 = one player
+    await step(60);
+    lab = await readBytes(0x2000 + 1 * 32 + 20, 2, 'NesPpuMemory');
+    check(lab[0] === 29 && lab[1] === 30, 'one player: the right label is HI', JSON.stringify(lab));
+    await tap('Up');                     // GAME 4 again
     await tap('Start');
     await step(420);
     m = await menu();
@@ -109,6 +119,56 @@ try {
     await step(420);
     m = await menu();
     check(m.lives === 2, 'player 1 is back with their remaining 2 lives', JSON.stringify(m));
+    check((await u8('hud_cur')) === 0, 'hud_cur follows the active player', '');
+
+    // ---- SELECT debug start and the pause menu (fresh one-player game) ----
+    const oamY = async slot => (await readBytes(S('shadow_OAM') + slot * 4, 1))[0];
+    const startOnePlayer = async button => {
+        await callTool('mesen_load_rom', { filepath: rom });
+        await sleep(1500);
+        await callTool('mesen_playback', { action: 'pause' });
+        await step(120);
+        await tap(button);
+        await step(420);                          // the river scrolls in, the jet waits
+        await press('A'); await step(10); await press(''); await step(4);
+    };
+
+    // Control: a normal START crashes into the bank within a few seconds.
+    await startOnePlayer('Start');
+    await setU8('player_invuln', 0);
+    await press('Left'); await step(360); await press('');
+    m = await menu();
+    check(m.lives < 3, 'START game: flying into the bank costs a life', JSON.stringify(m));
+
+    // SELECT: the same game, but the jet cannot crash into terrain.
+    await startOnePlayer('Select');
+    await setU8('player_invuln', 0);
+    await press('Left'); await step(360); await press('');
+    m = await menu();
+    check(m.lives === 3, 'SELECT game: the bank does not hurt (still 3 lives)', JSON.stringify(m));
+
+    // Pause: START freezes the world and shows RESUME / EXIT.
+    await startOnePlayer('Start');
+    await setU8('player_invuln', 1);
+    const scrollY = () => u8('playfield_scroll_y');
+    await step(20);
+    await tap('Start');
+    await step(10);
+    const frozen = await scrollY();
+    await step(30);
+    check((await scrollY()) === frozen && (await u8('river_freeze')) === 1, 'START pauses: the river stops', `scroll ${frozen}`);
+    check((await oamY(56)) !== 240 && (await oamY(2)) !== 240, 'pause menu sprites are shown', '');
+    await tap('Start');                           // RESUME is selected first
+    await step(10);
+    check((await u8('river_freeze')) === 0 && (await oamY(56)) === 240, 'RESUME continues and hides the menu', '');
+    await step(10);
+    check((await scrollY()) !== frozen, 'the river scrolls again after RESUME', '');
+    await tap('Start');                           // pause again
+    await tap('Down');                            // cursor on EXIT
+    await tap('Start');
+    await step(30);
+    m = await menu();
+    check(m.lives === 0 && (await oamY(56)) === 240, 'EXIT returns to the attract screen (no lives, menu hidden)', JSON.stringify(m));
 } finally {
     await press('');
 }
