@@ -613,12 +613,16 @@ uint8_t entities_hit_shot(uint8_t sx, uint8_t sy) BANKED {
         if (e_type < ENT_AUX_JET || e_type > ENT_AUX_FUEL) {
             continue;                       /* explosions, the tank and its shell */
         }
-        e_rows = ent_gfx_rows[e_type];
-        e_w = ent_width(e_type);
-        if ((uint16_t)sx < (uint16_t)ent_x[e_i] + e_w &&
-            (uint16_t)sx + 2u > ent_x[e_i] &&
-            (uint16_t)sy < (uint16_t)ent_y[e_i] + e_rows &&
-            (uint16_t)sy + 6u > ent_y[e_i]) {
+        /* Same wrap-around box test as entities_check_player (shot box 2x6). */
+        e_l = (uint8_t)(ent_y[e_i] - sy);
+        if (e_l >= 6u && (uint8_t)(sy - ent_y[e_i]) >= ent_gfx_rows[e_type]) {
+            continue;
+        }
+        e_l = (uint8_t)(ent_x[e_i] - sx);
+        if (e_l >= 2u && (uint8_t)(sx - ent_x[e_i]) >= ent_width(e_type)) {
+            continue;
+        }
+        {
             e_c = atari_score_tens[e_type];
             if (e_type == ENT_AUX_BRIDGE) {
                 if (hud_bridge < HUD_BRIDGE_DIGIT_MAX) {
@@ -652,17 +656,22 @@ uint8_t entities_check_player(uint8_t px, uint8_t py) BANKED {
         if (e_type < ENT_AUX_JET || e_type > ENT_AUX_FUEL) {
             continue;
         }
-        e_rows = ent_gfx_rows[e_type];
-        e_w = ent_width(e_type);
-        if ((uint16_t)px < (uint16_t)ent_x[e_i] + e_w &&
-            (uint16_t)px + 8u > ent_x[e_i] &&
-            (uint16_t)py < (uint16_t)ent_y[e_i] + e_rows &&
-            (uint16_t)py + 14u > ent_y[e_i]) {
-            if (e_type == ENT_AUX_FUEL) {
-                return ENT_HIT_FUEL;
-            }
-            return ENT_HIT_DEADLY;
+        /* Box overlap in 8-bit wrap-around arithmetic (all coordinates stay
+         * below 256): with d = entity - jet, the boxes meet when
+         * -size < d < jet size, i.e. d < jet size or -d < entity size.  The
+         * Y test comes first: most entities are far above or below the jet. */
+        e_l = (uint8_t)(ent_y[e_i] - py);
+        if (e_l >= 14u && (uint8_t)(py - ent_y[e_i]) >= ent_gfx_rows[e_type]) {
+            continue;
         }
+        e_l = (uint8_t)(ent_x[e_i] - px);
+        if (e_l >= 8u && (uint8_t)(px - ent_x[e_i]) >= ent_width(e_type)) {
+            continue;
+        }
+        if (e_type == ENT_AUX_FUEL) {
+            return ENT_HIT_FUEL;
+        }
+        return ENT_HIT_DEADLY;
     }
     return ENT_HIT_NONE;
 }
@@ -929,6 +938,16 @@ static void ent_draw(void) {
 }
 
 void entities_update(void) BANKED {
+    /* This group runs on its own frame (main.c staggers it against the
+     * player), so it measures its own elapsed time; ent_anim holds the system
+     * time of the previous run and then the current one, which the rotor
+     * animation below reads as a free-running frame counter. */
+    game_ticks = (uint8_t)((uint8_t)sys_time - ent_anim);
+    ent_anim = (uint8_t)sys_time;
+    if (game_ticks > 4u) {
+        game_ticks = 4u;
+    }
+
     if (player_disable) {
         /* Test hook: no entities while the jet is frozen. */
         river_scrolled = 0;
@@ -949,8 +968,6 @@ void entities_update(void) BANKED {
     if (bridge_flash) {
         ent_flash_tick();
     }
-    ent_anim = (uint8_t)(ent_anim + game_ticks);
-
     if (!river_freeze) {
         ent_wake_acc = (uint8_t)(ent_wake_acc + game_ticks);
         while (ent_wake_acc >= 16u) {

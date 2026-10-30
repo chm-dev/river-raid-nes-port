@@ -114,15 +114,21 @@ void main(void) {
          * accumulates in between so the entities still follow the river. */
         river_update();
 
+        /* Two logic groups, each once per LOGIC_FRAMES frames but on
+         * alternate frames, so their costs never land on the same frame:
+         * player (jet, shot, terrain and entity hit tests) here, HUD and
+         * entities on the frame in between (entities_update measures its own
+         * elapsed time). */
         logic_acc = (uint8_t)(logic_acc + game_ticks);
         if (logic_acc >= LOGIC_FRAMES) {
             game_ticks = logic_acc;         /* at most 1 + 4 */
             logic_acc = 0;
-            hud_update();
             player_update();
-            entities_update();
             collision_update();
             sound_update();
+        } else {
+            hud_update();
+            entities_update();
         }
     }
 }
