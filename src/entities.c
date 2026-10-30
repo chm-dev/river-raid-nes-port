@@ -590,9 +590,17 @@ void entities_row(void) BANKED {
     ent_x[e_i] = e_x;
     /* The object sits just above the newest generated row (scanline
      * PLAYFIELD_SCANLINE + owed - 9); entities_update() adds this pass's
-     * scroll to it again, so take it off here. */
-    ent_y[e_i] = (uint8_t)(PLAYFIELD_SCANLINE + river_owed - 10u - e_rows -
-                           river_scrolled);
+     * scroll to it again, so take it off here.  There are only
+     * PLAYFIELD_SCANLINE rows of headroom above the visible river, so the
+     * tallest objects (the 24-row fuel depot) would start above the top of the
+     * screen, which an 8-bit Y cannot hold (it would wrap into the culling
+     * window): start them at row 0, a few pixels lower than ideal. */
+    {
+        int16_t dy = (int16_t)PLAYFIELD_SCANLINE + river_owed - 10 - e_rows -
+                     river_scrolled;      /* no call between here and the store */
+
+        ent_y[e_i] = (dy < 0) ? 0u : (uint8_t)dy;
+    }
     ent_flags[e_i] = (uint8_t)(ENT_F_LATCH | (sp_left ? ENT_F_LEFT : 0u));
     ent_aux[e_i] = 0;
     entity_count++;
@@ -961,7 +969,7 @@ static void ent_draw_bridge_debris(void) {
 /* Constants hard-coded in ent_draw_reg(); keep them in step with the C side. */
 typedef char ent_asm_tile_base[(ENT_TILE_BASE == 88u) ? 1 : -1];
 typedef char ent_asm_flipx[(S_FLIPX == 0x40u) ? 1 : -1];
-typedef char ent_asm_split[(HUD_SPLIT_SCANLINE == 36u) ? 1 : -1];
+typedef char ent_asm_split[(HUD_SPLIT_SCANLINE == 25u) ? 1 : -1];
 typedef char ent_asm_fuel[(ENT_AUX_FUEL == 15u) ? 1 : -1];
 typedef char ent_asm_left[(ENT_F_LEFT == 1u) ? 1 : -1];
 
@@ -1020,7 +1028,7 @@ static void ent_draw_reg(void) {
         sta     _e_t
     2$:                             ; one 8-pixel tile row per pass
         lda     _e_y
-        cmp     #36                 ; HUD_SPLIT_SCANLINE
+        cmp     #25                 ; HUD_SPLIT_SCANLINE
         bcc     5$
         cmp     #232
         bcs     5$

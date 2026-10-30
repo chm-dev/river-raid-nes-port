@@ -31,19 +31,24 @@
 #define HUD_TILES_H             4u
 #define HUD_SCANLINES           (HUD_TILES_H * 8u)          /* 32 */
 
-/* Requested LYC row for the playfield split.  The HUD content ends at
- * scanline 31; four more gray scanlines give a little bottom padding, and
- * GBDK's faked LCD delay applies the entry one scanline later, so LYC=35
- * puts the playfield at scanline 36/37. */
+/* The HUD is three tile rows (nametable rows 1..3, 24 scanlines) plus one gray
+ * scanline of padding.  Nametable row 0 is blank padding that is scrolled out
+ * of view (the HUD pass runs with a vertical scroll of HUD_SCROLL_Y), which
+ * keeps every HUD tile position unchanged.
+ *
+ * Requested LYC row for the playfield split.  GBDK's faked LCD delay applies
+ * the entry one scanline later, so LYC=24 puts the playfield at scanline
+ * 25/26; the gray padding line absorbs that one-line jitter. */
+#define HUD_SCROLL_Y            8u
 #ifndef HUD_SPLIT_LYC
-#define HUD_SPLIT_SCANLINE      36u     /* content + 4 px bottom padding */
-#define HUD_SPLIT_LYC           35u     /* -> visible split 36/37 */
+#define HUD_SPLIT_SCANLINE      25u     /* content (24) + 1 px bottom padding */
+#define HUD_SPLIT_LYC           24u     /* -> visible split 25/26 */
 #endif
 
 #define PLAYFIELD_TOP_ROW       HUD_TILES_H                 /* 4 */
-#define PLAYFIELD_SCANLINE      HUD_SPLIT_SCANLINE          /* 36 */
-#define PLAYFIELD_ROWS          25u                             /* 26 visible rows */
-#define PLAYFIELD_SCANLINES     204u                            /* 240 - 36 */
+#define PLAYFIELD_SCANLINE      HUD_SPLIT_SCANLINE          /* 25 */
+#define PLAYFIELD_ROWS          26u                             /* 27 visible rows */
+#define PLAYFIELD_SCANLINES     215u                            /* 240 - 25 */
 
 /* Visible width of the Atari mode-E playfield in bytes/tiles. */
 #define ATARI_ROW_BYTES         48u
@@ -139,14 +144,16 @@
 #define HUD_GAUGE_E_X           80u
 #define HUD_GAUGE_F_X           136u
 #define HUD_FRAC_X              104u
-#define HUD_FRAC_Y              17u
-#define HUD_GAUGE_LABEL_Y       23u
-#define HUD_FUEL_BAR_Y          21u     /* just below the top markers */
-#define HUD_FUEL_BAR_Y2         29u     /* ends just above the bottom rule */
+/* Screen Y of the HUD sprites (the HUD pass scrolls the nametable up by
+ * HUD_SCROLL_Y, so these are 8 less than the tile-row-based positions). */
+#define HUD_FRAC_Y              9u
+#define HUD_GAUGE_LABEL_Y       15u
+#define HUD_FUEL_BAR_Y          13u     /* just below the top markers */
+#define HUD_FUEL_BAR_Y2         21u     /* ends just above the bottom rule */
 #define HUD_FUEL_BAR_X_MIN      80u     /* empty, on the E marker */
 #define HUD_FUEL_BAR_X_MAX      142u    /* full, on the F marker */
 #define HUD_LIFE_X              160u
-#define HUD_LIFE_Y              24u
+#define HUD_LIFE_Y              16u
 
 /* ------------------------------------------------------------------------- */
 /* Background palettes                                                       */

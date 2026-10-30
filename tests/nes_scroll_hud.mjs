@@ -10,7 +10,7 @@
  * Verifies:
  *   - the playfield scroll moves one pixel down per frame (playfield_scroll_y
  *     decrements) and the HUD stays fixed for 120+ frames,
- *   - the sprite-0 split lands exactly on scanline 36/37 with no seam,
+ *   - the split lands on scanline 25/26 (HUD = 24 scanlines + 1 padding line) with no seam,
  *   - a frozen scroll + scroll+1 pair shifts the whole playfield up by
  *     exactly one pixel (A[y+1] == B[y]),
  *   - the dynamic HUD fields (score, fuel, lives, bridge, icons) update.
@@ -71,7 +71,7 @@ function isBlue(r, g, b) {
 }
 
 function firstPlayfieldRow(image) {
-    for (let y = 30; y < 50; y++) {
+    for (let y = 18; y < 40; y++) {
         let n = 0;
         for (let x = 0; x < 256; x++) {
             const [r, g, b] = image.pixel(x, y);
@@ -84,7 +84,7 @@ function firstPlayfieldRow(image) {
 
 function hudHash(image) {
     let hash = 2166136261;
-    for (let y = 0; y < 36; y++) {
+    for (let y = 0; y < 25; y++) {
         for (let x = 0; x < 256; x++) {
             const [r, g, b] = image.pixel(x, y);
             hash ^= r;
@@ -163,19 +163,19 @@ async function main() {
         const img = await screenshot(SHOT_HUD);
         hashes.push(hudHash(img));
     }
-    check('top 36 scanlines stay identical over 120+ frames',
+    check('top 25 scanlines stay identical over 120+ frames',
         hashes.every(h => h === hashes[0]),
         `${new Set(hashes).size} unique hash(es)`);
 
     const running = await screenshot(SHOT_HUD);
     let hudLit = 0;
-    for (let y = 0; y < 36; y++) {
+    for (let y = 0; y < 25; y++) {
         for (let x = 0; x < 256; x++) {
             const [r, g, b] = running.pixel(x, y);
             if (r > 100 || g > 100 || b > 100) hudLit++;
         }
     }
-    check('top 36 scanlines contain HUD text', hudLit > 200, `lit=${hudLit}`);
+    check('top 25 scanlines contain HUD text', hudLit > 200, `lit=${hudLit}`);
 
     // ---------------------------------------------------------------------
     // 3. Exact 1-pixel shift: freeze the scroll, capture 100 and 101
@@ -212,7 +212,7 @@ async function main() {
     const b = await screenshot(SHOT_B);
 
     let hudDiff = 0;
-    for (let y = 0; y < 36; y++) {
+    for (let y = 0; y < 25; y++) {
         for (let x = 0; x < 256; x++) {
             const pa = a.pixel(x, y);
             const pb = b.pixel(x, y);
@@ -224,7 +224,7 @@ async function main() {
 
     let shifted = 0;
     let shiftDiff = 0;
-    for (let y = 39; y < 239; y++) {
+    for (let y = 28; y < 239; y++) {
         for (let x = 0; x < 256; x++) {
             // Raising the scroll by one moves the nametable image up one
             // pixel, so B[y] equals A[y+1].
@@ -237,11 +237,11 @@ async function main() {
     check('river advances by exactly one pixel per scroll step',
         shiftDiff === 0, `matched=${shifted} diff=${shiftDiff}`);
 
-    check('split is on scanline 36/37 for scroll 100',
-        firstPlayfieldRow(a) === 36 || firstPlayfieldRow(a) === 37,
+    check('split is on scanline 25/26 for scroll 100',
+        firstPlayfieldRow(a) === 25 || firstPlayfieldRow(a) === 26,
         `first=${firstPlayfieldRow(a)}`);
-    check('split is on scanline 36/37 for scroll 101',
-        firstPlayfieldRow(b) === 36 || firstPlayfieldRow(b) === 37,
+    check('split is on scanline 25/26 for scroll 101',
+        firstPlayfieldRow(b) === 25 || firstPlayfieldRow(b) === 26,
         `first=${firstPlayfieldRow(b)}`);
 
     // ---------------------------------------------------------------------
@@ -297,8 +297,8 @@ async function main() {
     const life1 = await readBytes(oam + (HUD_LIFE_SLOT + 1) * 4, 4, 'NesMemory');
     const life2 = await readBytes(oam + (HUD_LIFE_SLOT + 2) * 4, 4, 'NesMemory');
     check('two lives icons remain visible',
-        life0[3] === 160 && life0[0] === 23 &&
-        life1[3] === 168 && life1[0] === 23 &&
+        life0[3] === 160 && life0[0] === 15 &&
+        life1[3] === 168 && life1[0] === 15 &&
         life2[0] === 240,
         `x=${life0[3]},${life1[3]} y2=${life2[0]}`);
 

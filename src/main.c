@@ -14,7 +14,7 @@
  *   nametable 1 ($2400).  GBDK's deferred LCD handler runs from the NMI path
  *   and switches the playfield scroll/nametable every frame, so the split
  *   cannot be delayed by main-loop work (river row streaming).  The visible
- *   split lands on scanline 36/37.
+ *   split lands on scanline 25/26.
  */
 #include <nes/nes.h>
 #include <stdint.h>
@@ -48,8 +48,10 @@ static void lcd_handler(void) NO_OVERLAY_LOCALS;
 
 static void vbl_handler(void) {
     /* The NMI applies this entry during VBlank.  Ask for the faked LCD
-     * entry at HUD_SPLIT_LYC; the handler installs the playfield scroll. */
-    move_bkg(0, 0);
+     * entry at HUD_SPLIT_LYC; the handler installs the playfield scroll.  The
+     * HUD pass scrolls nametable 0 up by HUD_SCROLL_Y to drop its blank
+     * padding row 0, so the three content rows start at scanline 0. */
+    move_bkg(0, HUD_SCROLL_Y);
     /* HUD pass: nametable 0 and the HUD/sprite pattern table ($1000). */
     shadow_PPUCTRL = (uint8_t)((shadow_PPUCTRL & 0xECu) | BG_TABLE_BIT);
     LYC_REG = HUD_SPLIT_LYC;
@@ -60,7 +62,7 @@ static void lcd_handler(void) {
     /* Playfield pass: nametable 1 and the fine scroll.  GBDK's deferred ISR
      * adds the current scanline to bkg_scroll_y when it writes the entry
      * (see write_shadow_registers_to_buffer), so subtract the split line
-     * here.  Without this the playfield is 36 px ahead of the ring: the
+     * here.  Without this the playfield is 25 px ahead of the ring: the
      * newest row lands at the bottom instead of entering at the top. */
     uint8_t sy = playfield_scroll_y;
 
