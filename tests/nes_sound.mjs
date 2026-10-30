@@ -113,9 +113,10 @@ try {
         await step(1);
         sweep.push((await apu()).s1per);
     }
-    // Keep the rising run (a second shot can start once this one is spent).
+    // Keep the rising run (a second shot can start once this one is spent).  A late
+    // frame repeats a value and the next one catches up, so a repeat does not end it.
     const run = [sweep[0]];
-    for (let i = 1; i < sweep.length && sweep[i] > run[run.length - 1]; i++) run.push(sweep[i]);
+    for (let i = 1; i < sweep.length && sweep[i] >= run[run.length - 1]; i++) run.push(sweep[i]);
     const first = run[0], last = run[run.length - 1];
     check(first >= 254 && first <= 258, 'the shot starts at 405 Hz (period 256)', `first ${first} (${Math.round(1789773 / (16 * first))} Hz)`);
     check(last >= 546 && last <= 554, 'the shot falls to 196 Hz (period 550)', `last ${last} (${Math.round(1789773 / (16 * last))} Hz)`);

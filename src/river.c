@@ -27,7 +27,9 @@
 #include "entities.h"
 #include "river_lut.h"
 
-#define static /* PROF */
+#ifdef PROF_EXPORT_STATICS
+#define static                  /* ./build.ps1 -Profile: statics get .noi symbols */
+#endif
 
 /* 48-byte mode-E row.  The original's last fill writes one byte past the
  * row (it overwrites the next row's first land byte); keep one spare. */
@@ -421,16 +423,6 @@ static void river_clamp_decision(void) {
 /* Row renderer ($AA7A-$AB7E)                                                */
 /* ------------------------------------------------------------------------- */
 
-/* NES recolour: Atari pixel value 2 (outline, near black) becomes value 0
- * (black backdrop) on bank edges, so value 2 is free for the hills' brown.
- * Mirrors nes_edge_black() in tools/river_model.py. */
-static uint8_t river_edge_black(uint8_t b) {
-    uint8_t hi = (uint8_t)(b & 0xAAu);
-    uint8_t lo = (uint8_t)((uint8_t)(b << 1) & 0xAAu);
-
-    return (uint8_t)(b & (uint8_t)~(hi & (uint8_t)~lo));
-}
-
 static uint8_t rf_val, rf_cnt;
 
 #ifdef __SDCC
@@ -475,7 +467,10 @@ static void river_fill(uint8_t y, uint8_t value, uint8_t edge) {
     rf_val = value;
     rf_cnt = (uint8_t)(y + 1u);
 #ifdef __SDCC
-    river_fill_core();
+    /* the row clear already wrote land and the fills only move forward */
+    if (value != 0x55u) {
+        river_fill_core();
+    }
 #else
     {
         uint8_t i;
@@ -488,20 +483,46 @@ static void river_fill(uint8_t y, uint8_t value, uint8_t edge) {
     rg_row_b4 = (uint8_t)(rg_row_b4 + y);
 }
 
+/* NES recolour: Atari pixel value 2 (outline, near black) becomes value 0
+ * (black backdrop) on bank edges, so value 2 is free for the hills' brown.
+ * nes_edge_black() in tools/river_model.py, for every byte. */
+static const uint8_t river_black_lut[256] = {
+    0x00, 0x01, 0x00, 0x03, 0x04, 0x05, 0x04, 0x07, 0x00, 0x01, 0x00, 0x03, 0x0C, 0x0D, 0x0C, 0x0F,
+    0x10, 0x11, 0x10, 0x13, 0x14, 0x15, 0x14, 0x17, 0x10, 0x11, 0x10, 0x13, 0x1C, 0x1D, 0x1C, 0x1F,
+    0x00, 0x01, 0x00, 0x03, 0x04, 0x05, 0x04, 0x07, 0x00, 0x01, 0x00, 0x03, 0x0C, 0x0D, 0x0C, 0x0F,
+    0x30, 0x31, 0x30, 0x33, 0x34, 0x35, 0x34, 0x37, 0x30, 0x31, 0x30, 0x33, 0x3C, 0x3D, 0x3C, 0x3F,
+    0x40, 0x41, 0x40, 0x43, 0x44, 0x45, 0x44, 0x47, 0x40, 0x41, 0x40, 0x43, 0x4C, 0x4D, 0x4C, 0x4F,
+    0x50, 0x51, 0x50, 0x53, 0x54, 0x55, 0x54, 0x57, 0x50, 0x51, 0x50, 0x53, 0x5C, 0x5D, 0x5C, 0x5F,
+    0x40, 0x41, 0x40, 0x43, 0x44, 0x45, 0x44, 0x47, 0x40, 0x41, 0x40, 0x43, 0x4C, 0x4D, 0x4C, 0x4F,
+    0x70, 0x71, 0x70, 0x73, 0x74, 0x75, 0x74, 0x77, 0x70, 0x71, 0x70, 0x73, 0x7C, 0x7D, 0x7C, 0x7F,
+    0x00, 0x01, 0x00, 0x03, 0x04, 0x05, 0x04, 0x07, 0x00, 0x01, 0x00, 0x03, 0x0C, 0x0D, 0x0C, 0x0F,
+    0x10, 0x11, 0x10, 0x13, 0x14, 0x15, 0x14, 0x17, 0x10, 0x11, 0x10, 0x13, 0x1C, 0x1D, 0x1C, 0x1F,
+    0x00, 0x01, 0x00, 0x03, 0x04, 0x05, 0x04, 0x07, 0x00, 0x01, 0x00, 0x03, 0x0C, 0x0D, 0x0C, 0x0F,
+    0x30, 0x31, 0x30, 0x33, 0x34, 0x35, 0x34, 0x37, 0x30, 0x31, 0x30, 0x33, 0x3C, 0x3D, 0x3C, 0x3F,
+    0xC0, 0xC1, 0xC0, 0xC3, 0xC4, 0xC5, 0xC4, 0xC7, 0xC0, 0xC1, 0xC0, 0xC3, 0xCC, 0xCD, 0xCC, 0xCF,
+    0xD0, 0xD1, 0xD0, 0xD3, 0xD4, 0xD5, 0xD4, 0xD7, 0xD0, 0xD1, 0xD0, 0xD3, 0xDC, 0xDD, 0xDC, 0xDF,
+    0xC0, 0xC1, 0xC0, 0xC3, 0xC4, 0xC5, 0xC4, 0xC7, 0xC0, 0xC1, 0xC0, 0xC3, 0xCC, 0xCD, 0xCC, 0xCF,
+    0xF0, 0xF1, 0xF0, 0xF3, 0xF4, 0xF5, 0xF4, 0xF7, 0xF0, 0xF1, 0xF0, 0xF3, 0xFC, 0xFD, 0xFC, 0xFF
+};
+
+static const uint8_t *rt_src;
+static uint8_t *rt_dst;
+
 static void river_copy_template(void) {
     uint8_t i;
 
     /* Large hills (widths 4, 5, 8, 9, 10: the ones with blue highlights) are
      * drawn black instead of brown; small hills keep brown + black.  Mirrors
      * NES_BLACK_HILLS in tools/river_model.py. */
+    rt_src = atari_river_templates + rg_tpl_off;
+    rt_dst = river_raw_row + rg_row_pos;
     if (rg_bc == 4u || rg_bc == 5u || rg_bc >= 8u) {
         for (i = 0; i < rg_bc; i++) {
-            river_raw_row[rg_row_pos + i] =
-                river_edge_black(atari_river_templates[rg_tpl_off + i]);
+            rt_dst[i] = river_black_lut[rt_src[i]];
         }
     } else {
         for (i = 0; i < rg_bc; i++) {
-            river_raw_row[rg_row_pos + i] = atari_river_templates[rg_tpl_off + i];
+            rt_dst[i] = rt_src[i];
         }
     }
     rg_row_pos = (uint8_t)(rg_row_pos + rg_bc);
@@ -509,18 +530,18 @@ static void river_copy_template(void) {
     rg_tpl_off = (uint16_t)(rg_tpl_off + rg_bc);
 }
 
-static void river_pattern(uint8_t index, uint8_t flash) {
-    const unsigned char *table;
-    uint8_t off;
+/* nes_edge_black() of atari_bank_patterns + atari_bank_patterns_island. */
+static const uint8_t river_bank_black[32] = {
+    0x00, 0xFF, 0x00, 0x55, 0x40, 0x3F, 0xC0, 0x15, 0x50, 0x0F, 0xF0, 0x05, 0x54, 0x03, 0xFC, 0x01,
+    0x00, 0xFF, 0x00, 0x00, 0x00, 0x3F, 0xC0, 0x00, 0x00, 0x0F, 0xF0, 0x00, 0x00, 0x03, 0xFC, 0x00
+};
 
+static void river_pattern(uint8_t index, uint8_t flash) {
     if (flash && rg_hit_flash) {
         index = (uint8_t)(index + 0x10u);
     }
-    table = (index < 0x10u) ? atari_bank_patterns
-                            : atari_bank_patterns_island;
-    off = (uint8_t)(index & 0x0Fu);
-    river_raw_row[rg_row_pos] = river_edge_black(table[off]);
-    river_raw_row[rg_row_pos + 1u] = river_edge_black(table[off + 1u]);
+    river_raw_row[rg_row_pos] = river_bank_black[index];
+    river_raw_row[rg_row_pos + 1u] = river_bank_black[(uint8_t)(index + 1u)];
     rg_row_pos = (uint8_t)(rg_row_pos + 2u);
     rg_row_b4 = (uint8_t)(rg_row_b4 + 2u);
 }
@@ -851,114 +872,108 @@ static void river_convert_row_c(uint8_t line) {
 
 static uint8_t rc_off, rc_sx, rc_cc, rc_t0, rc_t1;
 
-/* Hand-written 6502: SDCC needed ~235 cycles per column here, this loop takes
- * ~75 for the common solid columns.  X = source byte index (2 per column),
- * Y = offset inside the 256-byte page of river_tile_pat.  The 24 columns are
- * done as two page-sized halves (16 + 8 columns). */
+/* Hand-written 6502.  Only ~5 of the 24 columns of a tile row ever need pattern
+ * bytes; the others stay solid land or water for all eight lines and use the fixed
+ * tiles.  river_col_kind says what a column has been so far (3 = nothing yet, 1 =
+ * land, 2 = water, 0 = mixed), so a solid column that stays solid costs ~34 cycles
+ * and writes nothing.  When one stops being solid the lines already done are filled
+ * in (lines run 7 down to 0).  X = source byte index, Y = column in the fast path. */
 static void river_convert_row(uint8_t line) {
 #ifdef __SDCC
     rc_off = (uint8_t)(line << 1);
     __asm
         ldx     #0
-        stx     _rc_cc
-        ldy     _rc_off
+        ldy     #0
     1$:
-        stx     _rc_sx
         lda     _river_raw_row,x
         cmp     _river_raw_row+1,x
-        bne     4$
+        bne     20$
         cmp     #0x55
-        bne     2$
-        lda     #0xFF
-        sta     _river_tile_pat,y
-        lda     #0
-        sta     _river_tile_pat+1,y
+        bne     3$
+        lda     _river_col_kind,y
+        cmp     #1
+        beq     8$
+        cmp     #3
+        bne     20$
         lda     #1
-        jmp     6$
-    2$:
-        cmp     #0xFF
-        bne     4$
-        sta     _river_tile_pat,y
-        sta     _river_tile_pat+1,y
-        lda     #2
-        jmp     6$
-    4$:
-        tax
-        lda     _river_lut_p0,x
-        asl     a
-        asl     a
-        asl     a
-        asl     a
-        sta     _rc_t0
-        lda     _river_lut_p1,x
-        asl     a
-        asl     a
-        asl     a
-        asl     a
-        sta     _rc_t1
-        ldx     _rc_sx
-        lda     _river_raw_row+1,x
-        tax
-        lda     _river_lut_p0,x
-        ora     _rc_t0
-        sta     _river_tile_pat,y
-        sta     _rc_t0
-        lda     _river_lut_p1,x
-        ora     _rc_t1
-        sta     _river_tile_pat+1,y
-        ldx     #0
-        lda     _rc_t0
-        cmp     #0xFF
-        bne     5$
-        lda     _river_tile_pat+1,y
-        beq     3$
-        cmp     #0xFF
-        bne     5$
-        ldx     #2
-        jmp     5$
+        sta     _river_col_kind,y
+        jmp     8$
     3$:
-        ldx     #1
-    5$:
-        txa
-    6$:
-        ldx     _rc_cc
-        and     _river_col_kind,x
-        sta     _river_col_kind,x
-        inc     _rc_cc
-        ldx     _rc_sx
+        cmp     #0xFF
+        bne     20$
+        lda     _river_col_kind,y
+        cmp     #2
+        beq     8$
+        cmp     #3
+        bne     20$
+        lda     #2
+        sta     _river_col_kind,y
+    8$:
         inx
         inx
-        tya
-        clc
-        adc     #16
-        tay
-        cpx     #32
-        beq     9$
-        jmp     1$
-    9$:
-        ; ---- columns 16..23: second page of the pattern buffer ----
-        ldy     _rc_off
-    11$:
+        iny
+        cpx     #48
+        bne     1$
+        jmp     99$
+    20$:
+        ; this line needs bytes: fill in the earlier lines if it was solid so far
+        sty     _rc_cc
         stx     _rc_sx
-        lda     _river_raw_row,x
-        cmp     _river_raw_row+1,x
-        bne     14$
-        cmp     #0x55
-        bne     12$
+        lda     _river_col_kind,y
+        beq     40$
+        cmp     #3
+        beq     38$
+        ldx     #0
+        cmp     #2
+        bne     21$
+        ldx     #0xFF
+    21$:
+        stx     _rc_t1
+        tya
+        asl     a
+        asl     a
+        asl     a
+        asl     a
+        ora     _rc_off
+        tay
+        bcs     25$
+    22$:
+        iny
+        iny
+        tya
+        and     #15
+        beq     37$
+        lda     #0xFF
+        sta     _river_tile_pat,y
+        lda     _rc_t1
+        sta     _river_tile_pat+1,y
+        jmp     22$
+    25$:
+        iny
+        iny
+        tya
+        and     #15
+        beq     37$
         lda     #0xFF
         sta     _river_tile_pat+256,y
+        lda     _rc_t1
+        sta     _river_tile_pat+257,y
+        jmp     25$
+    37$:
+        ldy     _rc_cc
+        ldx     _rc_sx
+    38$:
         lda     #0
-        sta     _river_tile_pat+257,y
-        lda     #1
-        jmp     16$
-    12$:
-        cmp     #0xFF
-        bne     14$
-        sta     _river_tile_pat+256,y
-        sta     _river_tile_pat+257,y
-        lda     #2
-        jmp     16$
-    14$:
+        sta     _river_col_kind,y
+    40$:
+        tya
+        asl     a
+        asl     a
+        asl     a
+        asl     a
+        ora     _rc_off
+        tay
+        lda     _river_raw_row,x
         tax
         lda     _river_lut_p0,x
         asl     a
@@ -975,43 +990,28 @@ static void river_convert_row(uint8_t line) {
         ldx     _rc_sx
         lda     _river_raw_row+1,x
         tax
+        lda     _rc_cc
+        cmp     #16
+        bcs     50$
+        lda     _river_lut_p0,x
+        ora     _rc_t0
+        sta     _river_tile_pat,y
+        lda     _river_lut_p1,x
+        ora     _rc_t1
+        sta     _river_tile_pat+1,y
+        jmp     60$
+    50$:
         lda     _river_lut_p0,x
         ora     _rc_t0
         sta     _river_tile_pat+256,y
-        sta     _rc_t0
         lda     _river_lut_p1,x
         ora     _rc_t1
         sta     _river_tile_pat+257,y
-        ldx     #0
-        lda     _rc_t0
-        cmp     #0xFF
-        bne     15$
-        lda     _river_tile_pat+257,y
-        beq     13$
-        cmp     #0xFF
-        bne     15$
-        ldx     #2
-        jmp     15$
-    13$:
-        ldx     #1
-    15$:
-        txa
-    16$:
-        ldx     _rc_cc
-        and     _river_col_kind,x
-        sta     _river_col_kind,x
-        inc     _rc_cc
+    60$:
+        ldy     _rc_cc
         ldx     _rc_sx
-        inx
-        inx
-        tya
-        clc
-        adc     #16
-        tay
-        cpx     #48
-        beq     19$
-        jmp     11$
-    19$:
+        jmp     8$
+    99$:
     __endasm;
 #else
     river_convert_row_c(line);
@@ -1019,39 +1019,45 @@ static void river_convert_row(uint8_t line) {
 }
 
 /* The current raw row equals the previous one (rg_same), which was converted
- * into line + 1 of the same tile row: copy that scanline of every column
- * (2 plane bytes) instead of converting again.  river_col_kind needs no update:
- * AND-ing the same kinds again changes nothing.  line <= 6. */
+ * into line + 1 of the same tile row: copy that scanline of the mixed columns (a
+ * solid column has no bytes and stays solid).  line <= 6. */
 static void river_copy_line(uint8_t line) {
 #ifdef __SDCC
     rc_off = (uint8_t)(line << 1);
     __asm
         ldy     _rc_off
-        ldx     #16                 ; columns 0-15: first page of the pattern buffer
+        ldx     #0                  ; columns 0-15: first page of the pattern buffer
     1$:
+        lda     _river_col_kind,x
+        bne     2$
         lda     _river_tile_pat+2,y
         sta     _river_tile_pat,y
         lda     _river_tile_pat+3,y
         sta     _river_tile_pat+1,y
+    2$:
         tya
         clc
         adc     #16
         tay
-        dex
+        inx
+        cpx     #16
         bne     1$
-        ldy     _rc_off
-        ldx     #8                  ; columns 16-23: second page
-    2$:
+        ldy     _rc_off             ; columns 16-23: second page
+    3$:
+        lda     _river_col_kind,x
+        bne     4$
         lda     _river_tile_pat+258,y
         sta     _river_tile_pat+256,y
         lda     _river_tile_pat+259,y
         sta     _river_tile_pat+257,y
+    4$:
         tya
         clc
         adc     #16
         tay
-        dex
-        bne     2$
+        inx
+        cpx     #24
+        bne     3$
     __endasm;
 #else
     uint8_t c;
@@ -1115,32 +1121,44 @@ static uint8_t vp_v, vp_pos, vp_cyc, vp_dst, vp_k;
  * river_tile_pat holds GBDK-style interleaved 2bpp (p0,p1 per scanline) and
  * set_bkg_data() de-interleaves it for the NES, so the pattern loops write the
  * eight plane-0 bytes first, then the eight plane-1 bytes. */
+/* Unrolled: 9 cycles a byte instead of 24.  Pattern loops write the eight
+ * plane-0 bytes first, then the eight plane-1 bytes. */
 static void vp_copy_pat_lo(void) {
     __asm
         ldx     _vp_dst
         ldy     _vp_src
-        lda     #8
-        sta     _vp_k
-    1$:
-        lda     _river_tile_pat,y
-        sta     0x0100,x
-        inx
-        iny
-        iny
-        dec     _vp_k
-        bne     1$
-        ldy     _vp_src
-        iny
-        lda     #8
-        sta     _vp_k
-    2$:
-        lda     _river_tile_pat,y
-        sta     0x0100,x
-        inx
-        iny
-        iny
-        dec     _vp_k
-        bne     2$
+        lda     _river_tile_pat+0,y
+        sta     0x100,x
+        lda     _river_tile_pat+2,y
+        sta     0x101,x
+        lda     _river_tile_pat+4,y
+        sta     0x102,x
+        lda     _river_tile_pat+6,y
+        sta     0x103,x
+        lda     _river_tile_pat+8,y
+        sta     0x104,x
+        lda     _river_tile_pat+10,y
+        sta     0x105,x
+        lda     _river_tile_pat+12,y
+        sta     0x106,x
+        lda     _river_tile_pat+14,y
+        sta     0x107,x
+        lda     _river_tile_pat+1,y
+        sta     0x108,x
+        lda     _river_tile_pat+3,y
+        sta     0x109,x
+        lda     _river_tile_pat+5,y
+        sta     0x10A,x
+        lda     _river_tile_pat+7,y
+        sta     0x10B,x
+        lda     _river_tile_pat+9,y
+        sta     0x10C,x
+        lda     _river_tile_pat+11,y
+        sta     0x10D,x
+        lda     _river_tile_pat+13,y
+        sta     0x10E,x
+        lda     _river_tile_pat+15,y
+        sta     0x10F,x
     __endasm;
 }
 
@@ -1148,28 +1166,38 @@ static void vp_copy_pat_hi(void) {
     __asm
         ldx     _vp_dst
         ldy     _vp_src
-        lda     #8
-        sta     _vp_k
-    1$:
         lda     _river_tile_pat+256,y
-        sta     0x0100,x
-        inx
-        iny
-        iny
-        dec     _vp_k
-        bne     1$
-        ldy     _vp_src
-        iny
-        lda     #8
-        sta     _vp_k
-    2$:
-        lda     _river_tile_pat+256,y
-        sta     0x0100,x
-        inx
-        iny
-        iny
-        dec     _vp_k
-        bne     2$
+        sta     0x100,x
+        lda     _river_tile_pat+258,y
+        sta     0x101,x
+        lda     _river_tile_pat+260,y
+        sta     0x102,x
+        lda     _river_tile_pat+262,y
+        sta     0x103,x
+        lda     _river_tile_pat+264,y
+        sta     0x104,x
+        lda     _river_tile_pat+266,y
+        sta     0x105,x
+        lda     _river_tile_pat+268,y
+        sta     0x106,x
+        lda     _river_tile_pat+270,y
+        sta     0x107,x
+        lda     _river_tile_pat+257,y
+        sta     0x108,x
+        lda     _river_tile_pat+259,y
+        sta     0x109,x
+        lda     _river_tile_pat+261,y
+        sta     0x10A,x
+        lda     _river_tile_pat+263,y
+        sta     0x10B,x
+        lda     _river_tile_pat+265,y
+        sta     0x10C,x
+        lda     _river_tile_pat+267,y
+        sta     0x10D,x
+        lda     _river_tile_pat+269,y
+        sta     0x10E,x
+        lda     _river_tile_pat+271,y
+        sta     0x10F,x
     __endasm;
 }
 
@@ -1202,22 +1230,81 @@ static void vp_copy_misc(void) {
     __endasm;
 }
 
+static uint8_t vp_ok;
+
+/* Entry header + bookkeeping; the copy loops above fill in the data. */
+static void river_put_begin(void) {
+    __asm
+        lda     __vram_transfer_buffer_valid
+        sta     _vp_v
+        and     #0x7F
+        sta     __vram_transfer_buffer_valid
+        lda     #0
+        sta     _vp_ok
+        lda     #131
+        sec
+        sbc     _vp_n
+        cmp     __vram_transfer_buffer_pos_w
+        bcc     8$
+        lda     _vp_n
+        clc
+        adc     #5
+        sta     _vp_k
+        lda     __vram_transfer_buffer_num_cycles_x8
+        cmp     _vp_k
+        bcc     8$
+        sbc     _vp_k
+        sta     _vp_cyc
+        ldx     __vram_transfer_buffer_pos_w
+        lda     _vp_n
+        asl     a
+        asl     a
+        eor     #0xFF
+        sec
+        adc     #0x81
+        sta     0x100,x
+        lda     #0
+        sta     0x101,x
+        lda     _vp_hi
+        sta     0x102,x
+        lda     _vp_lo
+        sta     0x103,x
+        txa
+        clc
+        adc     #4
+        sta     _vp_dst
+        adc     _vp_n
+        sta     _vp_pos
+        inc     _vp_ok
+        rts
+    8$:
+        lda     _vp_v
+        sta     __vram_transfer_buffer_valid
+    __endasm;
+}
+
+static void river_put_end(void) {
+    __asm
+        ldx     _vp_pos
+        lda     #0
+        sta     0x100,x
+        lda     __vram_transfer_buffer_pos_w
+        sta     __vram_transfer_buffer_pos_old
+        stx     __vram_transfer_buffer_pos_w
+        lda     _vp_cyc
+        sta     __vram_transfer_buffer_num_cycles_x8
+        lda     __vram_transfer_buffer_valid
+        lsr     a
+        ora     #0x80
+        sta     __vram_transfer_buffer_valid
+    __endasm;
+}
+
 static uint8_t river_put(void) {
-    vp_v = _vram_transfer_buffer_valid;
-    _vram_transfer_buffer_valid = (uint8_t)(vp_v & 0x7Fu);
-    vp_pos = _vram_transfer_buffer_pos_w;
-    vp_cyc = _vram_transfer_buffer_num_cycles_x8;
-    if (vp_pos > (uint8_t)(131u - vp_n) || vp_cyc < (uint8_t)(vp_n + 5u)) {
-        _vram_transfer_buffer_valid = vp_v;
+    river_put_begin();
+    if (!vp_ok) {
         return 0u;
     }
-    vp_dst = (uint8_t)(vp_pos + 4u);
-    VTB_BUF[vp_pos] = (uint8_t)(0x81u - (uint8_t)(vp_n << 2));
-    VTB_BUF[(uint8_t)(vp_pos + 1u)] = 0u;
-    VTB_BUF[(uint8_t)(vp_pos + 2u)] = vp_hi;
-    VTB_BUF[(uint8_t)(vp_pos + 3u)] = vp_lo;
-    vp_cyc = (uint8_t)(vp_cyc - (uint8_t)(vp_n + 5u));
-    vp_pos = (uint8_t)(vp_dst + vp_n);          /* new pos_w */
     if (vp_kind == 0u) {
         vp_copy_pat_lo();
     } else if (vp_kind == 1u) {
@@ -1227,12 +1314,7 @@ static uint8_t river_put(void) {
     } else {
         vp_copy_ids();
     }
-    VTB_BUF[vp_pos] = 0u;
-    _vram_transfer_buffer_pos_old = _vram_transfer_buffer_pos_w;
-    _vram_transfer_buffer_pos_w = vp_pos;
-    _vram_transfer_buffer_num_cycles_x8 = vp_cyc;
-    _vram_transfer_buffer_valid = (uint8_t)(0x80u |
-        (uint8_t)(_vram_transfer_buffer_valid >> 1));
+    river_put_end();
     return 1u;
 }
 #else
@@ -1249,13 +1331,12 @@ static uint8_t river_put(void) { return 1u; }
  * solid columns use the land/water tiles, a pattern identical to an earlier
  * column of the row reuses its slot, anything else is uploaded into the next
  * cache slot.  The nametable stripe is written last, after every pattern it
- * references.  This "job" runs in slices from river_update(); when the
- * transfer buffer is full it simply resumes on the next pass.  Row generation
+ * references.  This "job" runs from river_update(); when the transfer buffer is
+ * full it simply resumes on the next pass.  Row generation
  * (which overwrites river_tile_pat) waits until the job is done, and the
  * scroll keeps moving meanwhile because the generator runs ahead of the
  * display (see river_owed).
  */
-#define RIVER_JOB_COLS  12u   /* columns classified per pass, at most */
 
 static uint8_t river_black_rows;      /* ring slots still holding black */
 
@@ -1441,21 +1522,17 @@ static void river_find_dup(void) {
     __asm
         lda     #0xFF
         sta     _rj_id
-        lda     #0
-        sta     _rj_k
+        ldx     _rj_c
     1$:
-        lda     _rj_k
-        cmp     _rj_c
-        bcc     2$
+        dex
+        bpl     2$
         jmp     9$                  ; no candidate left
     2$:
-        tax
         lda     _river_col_kind,x
-        and     #3
-        beq     3$
-        jmp     8$                  ; solid column: nothing to share
+        bne     1$                  ; solid column: nothing to share
+        stx     _rj_k
     3$:
-        lda     _rj_k               ; X = candidate offset in its page
+        txa                         ; X = candidate offset in its page
         asl     a
         asl     a
         asl     a
@@ -1512,39 +1589,76 @@ static void river_find_dup(void) {
         sta     _rj_id
         jmp     9$
     8$:
-        inc     _rj_k
+        ldx     _rj_k
         jmp     1$
     9$:
     __endasm;
 #endif
 }
 
+static void river_reset_kinds(void) {
+#ifdef __SDCC
+    __asm
+        lda     #3
+        ldx     #23
+    1$:
+        sta     _river_col_kind,x
+        dex
+        bpl     1$
+    __endasm;
+#else
+    memset(river_col_kind, 3, sizeof(river_col_kind));
+#endif
+}
+
+/* Advance river_job_col over solid columns: kind 1 = TILE_LAND (0), kind 2 =
+ * TILE_WATER (1), i.e. the tile is kind - 1. */
+typedef char river_solid_tiles_assert[(TILE_LAND == 0u && TILE_WATER == 1u) ? 1 : -1];
+static void river_job_solids(void) {
+#ifdef __SDCC
+    __asm
+        ldx     _river_job_col
+    1$:
+        cpx     #24
+        bcs     9$
+        ldy     _river_col_kind,x
+        beq     9$
+        dey
+        tya
+        sta     _river_row_ids,x
+        inx
+        bne     1$
+    9$:
+        stx     _river_job_col
+    __endasm;
+#else
+    while (river_job_col < RIVER_TILE_COLS && river_col_kind[river_job_col]) {
+        river_row_ids[river_job_col] = (uint8_t)(river_col_kind[river_job_col] - 1u);
+        river_job_col++;
+    }
+#endif
+}
+
 static void river_run_job(void) {
-    rj_n = RIVER_JOB_COLS;
-    while (river_job_col < RIVER_TILE_COLS) {
+    for (;;) {
+        river_job_solids();
+        if (river_job_col >= RIVER_TILE_COLS) {
+            break;
+        }
         rj_c = river_job_col;
-        if (river_col_kind[rj_c] & 1u) {
-            rj_id = TILE_LAND;
-        } else if (river_col_kind[rj_c] & 2u) {
-            rj_id = TILE_WATER;
-        } else {
-            river_find_dup();
-            if (rj_id == 0xFFu) {
-                rj_id = (uint8_t)(TILE_RIVER_BASE + river_alloc);
-                if (!river_emit_pattern()) {
-                    return;             /* buffer full: resume next pass */
-                }
-                river_alloc++;
-                if (river_alloc >= TILE_RIVER_COUNT) {
-                    river_alloc = 0u;
-                }
+        river_find_dup();
+        if (rj_id == 0xFFu) {
+            rj_id = (uint8_t)(TILE_RIVER_BASE + river_alloc);
+            if (!river_emit_pattern()) {
+                return;             /* buffer full: resume next pass */
+            }
+            river_alloc++;
+            if (river_alloc >= TILE_RIVER_COUNT) {
+                river_alloc = 0u;
             }
         }
         river_row_ids[rj_c] = rj_id;
         river_job_col++;
-        if (--rj_n == 0u) {
-            return;
-        }
     }
     if (!river_emit_stripe()) {
         return;
@@ -1561,7 +1675,7 @@ static void river_run_job(void) {
     }
     river_road_stage = 0u;
     river_job_margin = 0u;
-    memset(river_col_kind, 3, sizeof(river_col_kind));
+    river_reset_kinds();
     river_job = 0u;
 }
 
@@ -1923,10 +2037,17 @@ uint8_t river_slot_at_scanline(uint8_t scanline) {
 static uint8_t ru_next;
 static uint8_t ru_rows;
 static uint8_t ru_gen;
+uint8_t river_gen_budget = RIVER_GEN_PER_PASS;  /* rows this pass may generate (main.c) */
 
 void river_update(void) {
     river_live = 1u;
-    if (river_job) {
+    /* Behind schedule: spend more now, a clamped scroll is worse than a late
+     * frame.  A budget of 1 marks the heavy entity pass, which leaves the tile
+     * job to the next pass unless the generator has fallen behind. */
+    if (river_owed >= 3u) {
+        river_gen_budget++;
+    }
+    if (river_job && river_gen_budget != 1u) {
         river_run_job();
     }
 
@@ -1944,7 +2065,9 @@ void river_update(void) {
     if (!river_freeze) {
         ru_target = (river_speed == 0u) ? RIVER_VEL_SLOW :
                     (river_speed == 1u) ? RIVER_VEL_CRUISE : RIVER_VEL_FAST;
+        ru_sum = river_acc;
         for (ru_rows = 0; ru_rows < game_ticks; ru_rows++) {
+            ru_sum += river_vel;
             if (river_vel < ru_target) {
                 river_vel = (ru_target - river_vel > RIVER_ACCEL)
                     ? (uint8_t)(river_vel + RIVER_ACCEL) : ru_target;
@@ -1953,7 +2076,6 @@ void river_update(void) {
                     ? (uint8_t)(river_vel - RIVER_ACCEL) : ru_target;
             }
         }
-        ru_sum = (uint16_t)river_acc + (uint16_t)river_vel * game_ticks;
         ru_rows = (uint8_t)(ru_sum >> 5);
         river_acc = (uint8_t)(ru_sum & 31u);
         if (ru_rows > (uint8_t)(RIVER_MAX_OWED - river_owed)) {
@@ -1973,12 +2095,14 @@ void river_update(void) {
         }
     }
 
-    ru_gen = RIVER_GEN_PER_PASS;
+    ru_gen = river_gen_budget;
     while (river_owed && ru_gen && !river_job) {
         river_generate_raw_row();
         if (river_block_index == 8u) {
             river_finish_tile_row();
-            river_run_job();
+            if (river_gen_budget != 1u) {
+                river_run_job();
+            }
         }
         river_owed--;
         ru_gen--;

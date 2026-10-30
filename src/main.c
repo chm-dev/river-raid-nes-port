@@ -125,6 +125,9 @@ void main(void) {
          * The APU runs every frame: the Atari's sound engine is driven from the
          * 60 Hz VBI and the shot's 15-step pitch sweep needs one step per
          * frame to sound like the original. */
+        /* Level the load: fewer rows and no tile job next to the heavy entity
+         * group, so the catch-up cannot pile onto it (see river_update). */
+        river_gen_budget = ((uint8_t)(logic_acc + game_ticks) >= LOGIC_FRAMES) ? 3u : 1u;
         river_update();
         sound_update();
 

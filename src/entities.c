@@ -18,6 +18,9 @@
 #include "entities.h"
 #include "player.h"
 #include "sound.h"
+#ifdef PROF_EXPORT_STATICS
+#define static                  /* ./build.ps1 -Profile: statics get .noi symbols */
+#endif
 
 /* Separate arrays (not an array of structs): SDCC indexes these with plain
  * absolute,X addressing, where a 5-byte struct needs a multiply per access. */

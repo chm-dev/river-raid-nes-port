@@ -16,6 +16,12 @@
 
 ## Current status
 
+- **Late frames (2026-10-30, branch `experiment/perf-tuning`):** late frames fell
+  to 3-6% in fast flight and 2% at level 50 cruise (was 16-25% and 9%); see the
+  session entry.  **Fast flight stays at 1.5 px/frame:** 2.0 was play-tested and felt
+  worse.  Newer than the Memory layout bullet below: bank 1 has **154 bytes free**,
+  the fixed bank ~1 KB, RAM 67 bytes.  `tools/object_host_check.py` no longer links
+  (its stubs lack `sound_play_bonus`, `sound_play_shell`, `hud_lives`), also on `main`.
 - **Compact HUD (2026-10-30, branch `feature/hud-compact`):** the HUD is 24
   scanlines of content with 3 px padding above and below (was 32 + 4, plus an 8 px
   blank row at the top); the playfield is **210 scanlines** (was 204), split at **30/31**.  The
@@ -359,13 +365,12 @@ These are documented in full in `docs/ATARI_RE_SPEC.md`; don't re-derive them.
    Superseded by the 2026-10-29/30 performance entries: the upload job streams
    through `river_put()`, the loop is 60 Hz river + 30 Hz logic, and cruise
    overruns only ~0.5% of frames.
-1b. **Remaining performance limits (2026-10-30):** fast flight (Up) is at the CPU
-   limit: 1.5 px/frame with 19-23% late passes, and on a late pass an NMI that
-   lands mid-pass shows the new scroll with the previous sprite positions for one
-   frame (1-2 px, fast only).  A fix would commit `playfield_scroll_y` at the end
-   of the pass instead of inside `river_update()` (needs one byte of RAM; hit
-   tests read the scroll).  The `river_convert_row`/`river_render_row` cost
-   (~1.4k + ~1.7k cycles per generated row) is what bounds fast.  MMC3 + cc65 was
+1b. **Remaining performance limits (updated 2026-10-30, see the "Late frames"
+   session entry):** a late pass shows an exact duplicate of the previous frame, then
+   a jump (`0 3`).  The library's NMI replays the scroll table and skips OAM DMA until
+   `vsync()` has run, so the scroll and the sprites cannot disagree (the earlier note
+   here about a mid-pass desync was wrong; nothing needs committing at the end of the
+   pass).  Late frames: fast 3-6%, level 50 cruise 2%.  MMC3 + cc65 was
    assessed (the `MMC3Template` repo) and rejected as too expensive; it would
    recover the ~5.4k-cycle NMI split spin and add 8 KB WRAM.
 1c. **Player, shot, hit tests and the HUD run at 30 Hz** (steering runs the
@@ -1885,3 +1890,64 @@ Re-measure `ENT_WAIT_ROWS` (read `ent_scrolled` at READY) if the playfield heigh
   checking the hi-score against both players at game over (`$B261`).
 - Build: ROM 65552, `_XINIT` ends `$FB03`, **70 bytes** internal RAM free.  `nes_menu.mjs` covers
   game-number stepping, the HI/P2 label tiles, the debug start, pause/resume/exit.
+
+### 2026-10-30 - Late frames: cheaper rows and jobs, paced generator (branch `experiment/perf-tuning`)
+
+**Symptom.** Occasional stutter, choppy fast flight.  A late pass repeats the whole
+previous frame, then jumps (`0 3`); it also sustains itself, as a late pass owes more
+rows and makes the next one late (`03 03 03`).
+
+**Measured with `tests/perf_pass_trace.mjs`** (per pass, true cycle counter; a pass has
+~23.7k cycles).  The old per-row figures were far too low: one row cost 7-8.6k (render
+3-4.5k, convert 2.4k, state 1.7k), a tile-row job with 5-7 uploads 9-13k, 11 entities
+~13.5k.  Only ~5 of 24 columns of a tile row ever need pattern data.
+
+**Changes.**
+- `river_convert_row`: a column that stays solid costs ~34 cycles and writes nothing;
+  `river_col_kind` is 3 = nothing yet, 1 = land, 2 = water, 0 = mixed, and earlier lines
+  are filled in when a column stops being solid.  `river_copy_line` copies mixed columns.
+- Tile job: hand-written `river_put`, unrolled pattern copies (9 cycles a byte),
+  `river_find_dup` walks only mixed candidates, `river_job_solids` scans solid columns.
+  One job now takes one pass unless the transfer buffer fills.
+- Render: no land fill (the row clear wrote it and fills only move forward),
+  `river_bank_black` / `river_black_lut` instead of per-byte calls, no multiply in
+  `river_update()`.
+- Pacing: `river_gen_budget` = 3 rows next to the player group, 1 next to the entity
+  group, +1 and the tile job allowed when `river_owed >= 3`.  Pacing alone did nothing
+  before the cost cuts; without the owed rule it starved the generator and the scroll
+  clamped (`1 2 0 2`, 1.37 px/frame).
+
+**Result (late frames, 400-frame runs, invulnerable jet, shooting).**
+
+| Scenario | before | after |
+|---|---|---|
+| level 1 cruise | 0.0% | 0.0% |
+| level 50 cruise | 8.8% | 2.0% |
+| level 1 fast | 17.3% | 5.3% |
+| level 5 fast | 15.8% | 3.0% |
+| level 20 fast | 22.8% | 5.8% |
+| level 50 fast | 24.6% | 5.8% |
+
+**Fast at 2.0 px/frame** gives even steps and was late 9.5-13.5%, but the user
+play-tested it and it felt worse than 1.5.  Do not raise it again without new evidence.
+
+**Findings kept for later.**
+- Dedupe removes only 4% of uploads but keeps the peak cache window ~25 slots lower, so
+  it protects Known issue 1d.  Keep it.
+- `rg_hit_flash` is only ever assigned 0: its branches in the renderer are dead code.
+- Unused spare time: the NMI spins through scanlines 0-29 (~3.2k cycles).
+  `.tim_emulation` is a hook inside the NMI after the vblank work, so that wait could
+  do bounded work when the main loop is idle in `vsync()` and end on a sprite-0 hit.
+  Not built; needs a hardware test.
+
+**Tooling.** `./build.ps1 -Profile` exports the statics of `river.c` and `entities.c`
+(`#define static` was committed unguarded before).  `perf_frame_trace`,
+`perf_scroll_cadence` and `perf_cadence_levels` read `river_job`, and `perf_pass_trace`
+and `perf_prof_level` need the function symbols, so all need that build.
+`tests/perf_exp.ps1 <name>` builds it and measures the standard scenarios.
+`compare_tile_rows.mjs` takes a ROM, `.noi` and start level.
+
+**Verified.** `compare_tile_rows` against the `main` ROM over 2,400 frames from start
+levels 1, 20 and 50: 0 of 846 rows differ (control: levels differ on 282/282 rows).  All
+Mesen suites and `host_river.ps1` pass.  `nes_sound` now tolerates a repeated sweep
+value, which is what one late frame produces.  Not yet play-tested on hardware.
