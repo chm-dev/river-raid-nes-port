@@ -84,7 +84,6 @@ static uint8_t rg_seeds[4];       /* $66-$69: LFSR + rg_left at the start of the
 static uint8_t rg_prev[4];        /* $AD-$B0: the same one section back */
 static uint8_t rg_life;           /* $4C bit 2 -> bit 7, bridge counter at life start -> bits 0..6 */
 static uint8_t rg_b7;
-static uint8_t rg_hit_flash;
 
 /* Object-avoidance inputs.  Phase 4 has no objects; Phase 5 fills these. */
 uint8_t river_obj_count;
@@ -102,7 +101,6 @@ static uint8_t rg_row_island_right;
  * block-local saved row value with the register used by the next call, which
  * silently shifts the island/feature overlay. */
 static uint8_t rg_row_pos;
-static uint8_t rg_row_b4;
 static uint8_t rg_ysave;
 
 /* The 32-entry bank-walk table at $BA8F. */
@@ -166,6 +164,22 @@ uint8_t river_block_index;
 /* ------------------------------------------------------------------------- */
 
 static void river_lfsr_step(void) {
+#ifdef __SDCC
+    /* $B183, as on the Atari: bit 7 of (b << 5) ^ b feeds a -> c -> b. */
+    __asm
+        lda     _rg_lfsr_b
+        asl     a
+        asl     a
+        asl     a
+        asl     a
+        asl     a
+        eor     _rg_lfsr_b
+        asl     a
+        rol     _rg_lfsr_a
+        rol     _rg_lfsr_c
+        rol     _rg_lfsr_b
+    __endasm;
+#else
     uint8_t a = (uint8_t)((uint8_t)(rg_lfsr_b << 5) ^ rg_lfsr_b);
     uint8_t carry = (uint8_t)((a >> 7) & 1u);
     uint8_t na, nc, nb;
@@ -181,6 +195,7 @@ static void river_lfsr_step(void) {
     rg_lfsr_a = na;
     rg_lfsr_b = nb;
     rg_lfsr_c = nc;
+#endif
 }
 
 static void river_level_advance(void) {
@@ -440,26 +455,67 @@ static void river_fill_core(void) {
     __endasm;
 }
 
+/* Unrolled: 4 cycles a byte instead of 10. */
 static void river_clear_row(void) {
     __asm
         lda     #0x55
-        ldx     #47
-    1$:
-        sta     _river_raw_row,x
-        dex
-        bpl     1$
+        sta     _river_raw_row+0
+        sta     _river_raw_row+1
+        sta     _river_raw_row+2
+        sta     _river_raw_row+3
+        sta     _river_raw_row+4
+        sta     _river_raw_row+5
+        sta     _river_raw_row+6
+        sta     _river_raw_row+7
+        sta     _river_raw_row+8
+        sta     _river_raw_row+9
+        sta     _river_raw_row+10
+        sta     _river_raw_row+11
+        sta     _river_raw_row+12
+        sta     _river_raw_row+13
+        sta     _river_raw_row+14
+        sta     _river_raw_row+15
+        sta     _river_raw_row+16
+        sta     _river_raw_row+17
+        sta     _river_raw_row+18
+        sta     _river_raw_row+19
+        sta     _river_raw_row+20
+        sta     _river_raw_row+21
+        sta     _river_raw_row+22
+        sta     _river_raw_row+23
+        sta     _river_raw_row+24
+        sta     _river_raw_row+25
+        sta     _river_raw_row+26
+        sta     _river_raw_row+27
+        sta     _river_raw_row+28
+        sta     _river_raw_row+29
+        sta     _river_raw_row+30
+        sta     _river_raw_row+31
+        sta     _river_raw_row+32
+        sta     _river_raw_row+33
+        sta     _river_raw_row+34
+        sta     _river_raw_row+35
+        sta     _river_raw_row+36
+        sta     _river_raw_row+37
+        sta     _river_raw_row+38
+        sta     _river_raw_row+39
+        sta     _river_raw_row+40
+        sta     _river_raw_row+41
+        sta     _river_raw_row+42
+        sta     _river_raw_row+43
+        sta     _river_raw_row+44
+        sta     _river_raw_row+45
+        sta     _river_raw_row+46
+        sta     _river_raw_row+47
     __endasm;
 }
 #endif
 
 /* Fill y+1 bytes of the raw row at rg_row_pos with `value`, then advance the
  * position by y (the original's fills overlap by one byte). */
-static void river_fill(uint8_t y, uint8_t value, uint8_t edge) {
+static void river_fill(uint8_t y, uint8_t value) {
     if (y & 0x80u) {
         return;
-    }
-    if (!edge && rg_hit_flash) {
-        value = 0xAAu;
     }
     if (value == 0xAAu) {
         value = 0u;
@@ -480,7 +536,6 @@ static void river_fill(uint8_t y, uint8_t value, uint8_t edge) {
     }
 #endif
     rg_row_pos = (uint8_t)(rg_row_pos + y);
-    rg_row_b4 = (uint8_t)(rg_row_b4 + y);
 }
 
 /* NES recolour: Atari pixel value 2 (outline, near black) becomes value 0
@@ -526,7 +581,6 @@ static void river_copy_template(void) {
         }
     }
     rg_row_pos = (uint8_t)(rg_row_pos + rg_bc);
-    rg_row_b4 = (uint8_t)(rg_row_b4 + rg_bc);
     rg_tpl_off = (uint16_t)(rg_tpl_off + rg_bc);
 }
 
@@ -536,22 +590,85 @@ static const uint8_t river_bank_black[32] = {
     0x00, 0xFF, 0x00, 0x00, 0x00, 0x3F, 0xC0, 0x00, 0x00, 0x0F, 0xF0, 0x00, 0x00, 0x03, 0xFC, 0x00
 };
 
-static void river_pattern(uint8_t index, uint8_t flash) {
-    if (flash && rg_hit_flash) {
-        index = (uint8_t)(index + 0x10u);
-    }
+static void river_pattern(uint8_t index) {
     river_raw_row[rg_row_pos] = river_bank_black[index];
     river_raw_row[rg_row_pos + 1u] = river_bank_black[(uint8_t)(index + 1u)];
     rg_row_pos = (uint8_t)(rg_row_pos + 2u);
-    rg_row_b4 = (uint8_t)(rg_row_b4 + 2u);
 }
+
+#ifdef __SDCC
+/* river_render_row() for the commonest rendered row, no island and no feature:
+ * land, left edge, water, right edge, land.  The land is the row clear's.  The
+ * two y tests are river_fill()'s: a "negative" length writes nothing and does
+ * not advance.  Host builds and tests/nes_river check it against the model. */
+static void river_render_plain(void) {
+    river_clear_row();
+    __asm
+        lda     #0
+        sta     _rg_row_island_left
+        sta     _rg_row_island_right
+        lda     _rg_left
+        clc
+        adc     _rg_phase
+        sta     _rg_row_left
+        tay
+        lsr     a
+        lsr     a
+        sec
+        sbc     #1
+        bpl     1$
+        lda     #0
+    1$:
+        tax                         ; X = position in the row
+        tya
+        and     #3
+        asl     a
+        asl     a
+        tay
+        lda     _river_bank_black,y
+        sta     _river_raw_row,x
+        lda     _river_bank_black+1,y
+        sta     _river_raw_row+1,x
+        inx
+        inx
+        stx     _rf_cnt
+        lda     _rg_row_left
+        clc
+        adc     _rg_width
+        sta     _rg_row_right
+        lsr     a
+        lsr     a
+        sec
+        sbc     _rf_cnt
+        bmi     3$
+        tay                         ; y + 1 water bytes, then back to the last
+        lda     #0xFF
+    2$:
+        sta     _river_raw_row,x
+        inx
+        dey
+        bpl     2$
+        dex
+    3$:
+        lda     _rg_row_right
+        and     #3
+        asl     a
+        asl     a
+        ora     #2
+        tay
+        lda     _river_bank_black,y
+        sta     _river_raw_row,x
+        lda     _river_bank_black+1,y
+        sta     _river_raw_row+1,x
+    __endasm;
+}
+#endif
 
 static void river_render_row(void) {
     uint8_t island = (uint8_t)(rg_island_flags & 0x80u);
     uint8_t x, y, a, b7;
 
     rg_row_pos = 0;
-    rg_row_b4 = 0;
 #ifdef __SDCC
     river_clear_row();
 #else
@@ -567,12 +684,12 @@ static void river_render_row(void) {
     if (!island && (rg_feature & 0x80u) && rg_rowcount < rg_be) {
         rg_ysave = y;
         y = rg_bd;
-        river_fill(y, 0x55u, 0u);
+        river_fill(y, 0x55u);
         river_copy_template();
         y = (uint8_t)(rg_ysave - rg_bc - rg_bd);
     }
-    river_fill(y, 0x55u, 0u);
-    river_pattern((uint8_t)((x & 3u) * 4u), 1u);
+    river_fill(y, 0x55u);
+    river_pattern((uint8_t)((x & 3u) * 4u));
 
     /* --- island / right bank ----------------------------------------- */
     a = rg_width;
@@ -584,33 +701,33 @@ static void river_render_row(void) {
             a = (uint8_t)((rg_width >> 1) + b7);
             x = a;
             rg_row_island_left = x;
-            y = (uint8_t)((a >> 2) - rg_row_b4);
-            river_fill(y, 0xFFu, 0u);
+            y = (uint8_t)((a >> 2) - rg_row_pos);
+            river_fill(y, 0xFFu);
             a = (uint8_t)((x & 3u) * 4u + 2u);
             if (rg_phase < 8u) {
                 a = (uint8_t)(a + 0x10u);
             }
-            river_pattern(a, 0u);
+            river_pattern(a);
             b7 = x;
             a = (uint8_t)((rg_phase << 1) + b7);
             x = a;
             rg_row_island_right = x;
-            y = (uint8_t)((a >> 2) - rg_row_b4 - 1u);
+            y = (uint8_t)((a >> 2) - rg_row_pos - 1u);
             if (rg_phase < 8u) {
-                river_fill(y, 0xAAu, 1u);
-                river_pattern((uint8_t)((x & 3u) * 4u + 0x10u), 0u);
+                river_fill(y, 0xAAu);
+                river_pattern((uint8_t)((x & 3u) * 4u + 0x10u));
             } else {
                 if (rg_feature && rg_rowcount < rg_be) {
-                    b7 = (uint8_t)(rg_bd - rg_row_b4);
+                    b7 = (uint8_t)(rg_bd - rg_row_pos);
                     y = (uint8_t)(y - b7 - rg_bc);
                     rg_ysave = y;
                     y = b7;
-                    river_fill(y, 0x55u, 0u);
+                    river_fill(y, 0x55u);
                     river_copy_template();
                     y = rg_ysave;
                 }
-                river_fill(y, 0x55u, 0u);
-                river_pattern((uint8_t)((x & 3u) * 4u), 0u);
+                river_fill(y, 0x55u);
+                river_pattern((uint8_t)((x & 3u) * 4u));
             }
             a = (uint8_t)(rg_width >> 1);
         }
@@ -620,25 +737,22 @@ static void river_render_row(void) {
     a = (uint8_t)(a + b7);
     x = a;
     rg_row_right = x;
-    y = (uint8_t)((a >> 2) - rg_row_b4);
-    river_fill(y, 0xFFu, 0u);
-    river_pattern((uint8_t)((x & 3u) * 4u + 2u), 1u);
+    y = (uint8_t)((a >> 2) - rg_row_pos);
+    river_fill(y, 0xFFu);
+    river_pattern((uint8_t)((x & 3u) * 4u + 2u));
 
     /* --- right-side feature and right land --------------------------- */
-    y = (uint8_t)(0x30u - rg_row_b4);
+    y = (uint8_t)(0x30u - rg_row_pos);
     if (!island && rg_feature && !(rg_feature & 0x80u) &&
         rg_rowcount < rg_be) {
         y = (uint8_t)(y - rg_bd - rg_bc);
         y++;
-        river_fill(y, 0x55u, 0u);
+        river_fill(y, 0x55u);
         river_copy_template();
         y = (uint8_t)(rg_bd - 1u);
     }
-    river_fill(y, 0x55u, 0u);
+    river_fill(y, 0x55u);
 
-    if (rg_hit_flash) {
-        rg_hit_flash--;
-    }
 }
 
 /* ------------------------------------------------------------------------- */
@@ -753,21 +867,29 @@ static void river_step_state(void) {
 
     river_feature_select();
 
-    /* A plain row (no feature template, no hit flash) is a pure function of
+    /* A plain row (no feature template) is a pure function of
      * left, phase, width and the island flag, and a third of all rows repeat
      * the previous one (checked on 30,000 model rows: the rule below finds
      * 33.1% of the 34.6% identical rows, no false positive).  Then the raw
      * row buffer and the ring fields rg_row_* still hold the right values and
      * the renderer is skipped. */
     rg_same = 0;
-    if (rg_hit_flash || (rg_feature && rg_rowcount < rg_be)) {
+    if (rg_feature && rg_rowcount < rg_be) {
         rs_isl = 0xFFu;
         river_render_row();
     } else if (rs_isl == (uint8_t)(rg_island_flags & 0x80u) && rs_left == rg_left &&
                rs_phase == rg_phase && rs_width == rg_width) {
         rg_same = 1u;
     } else {
+#ifdef __SDCC
+        if (rg_island_flags & 0x80u) {
+            river_render_row();
+        } else {
+            river_render_plain();
+        }
+#else
         river_render_row();
+#endif
         rs_left = rg_left;
         rs_phase = rg_phase;
         rs_width = rg_width;
@@ -1755,8 +1877,7 @@ static void river_generate_raw_row(void) {
         river_flags[river_slot] = (uint8_t)(
             ((rg_flags23 & 0x80u) ? RIVER_FLAG_BRIDGE : 0u) |
             ((rg_island_flags & 0x80u) ? RIVER_FLAG_ISLAND : 0u) |
-            (rg_feature ? RIVER_FLAG_FEATURE : 0u) |
-            (rg_hit_flash ? RIVER_FLAG_FLASH : 0u));
+            (rg_feature ? RIVER_FLAG_FEATURE : 0u));
     }
     if (river_block_index == 7u) {
         river_debug_state[0] = rg_left;
@@ -1871,7 +1992,6 @@ static void river_start(uint8_t restart, uint8_t bridges) {
     rg_target = 0;
     rg_v35 = 0;
     rg_b7 = 0;
-    rg_hit_flash = 0;
     river_obj_count = 0x0Bu;
     river_obj_v37 = 0;
     river_obj_aux[0] = 0;
