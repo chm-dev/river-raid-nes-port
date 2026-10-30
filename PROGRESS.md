@@ -1951,3 +1951,28 @@ and `perf_prof_level` need the function symbols, so all need that build.
 levels 1, 20 and 50: 0 of 846 rows differ (control: levels differ on 282/282 rows).  All
 Mesen suites and `host_river.ps1` pass.  `nes_sound` now tolerates a repeated sweep
 value, which is what one late frame produces.  Not yet play-tested on hardware.
+
+### 2026-10-30 - Row render and pacing, part 2 (branch `perf/row-render`)
+
+- `river_render_plain()`: hand-written path for rows with no island and no feature
+  (34% of all rows; a third of rows are skipped as repeats).  Unrolled row clear (4
+  cycles a byte), asm LFSR.  Removed `rg_hit_flash` (only ever assigned 0) and
+  `rg_row_b4` (always equal to `rg_row_pos`).  `RIVER_FLAG_FLASH` is now never set.
+- Pacing: after those cuts every late pass was a player pass generating 3-4 rows, while
+  entity passes peaked at 18.9k.  So the player pass is capped at 3 rows, and catch-up
+  goes to the entity pass (`river_owed >= 2` raises its budget from 1 to 2 and allows
+  the tile job).
+
+| Late frames | before all this | part 1 | part 2 |
+|---|---|---|---|
+| level 1 fast | 17.3% | 5.8% | 1.8% |
+| level 5 fast | 15.8% | 3.0% | 1.0% |
+| level 20 fast | 22.8% | 6.5% | 1.5% |
+| level 50 cruise | 8.8% | 2.0% | 1.3% |
+| level 50 fast | 24.6% | 5.8% | 3.3% |
+
+Speed stays 1.50 px/frame with no scroll clamping.  `compare_tile_rows` against the ROM
+from before part 1: 0 of 846 rows differ.  All Mesen suites and `host_river.ps1` pass.
+`host_river` only runs the C paths, so the asm is covered by `nes_river`,
+`nes_river_cache` and the diff.  Not yet play-tested on hardware.  The hand-written
+entity loop and the split-wait work are not needed for now; RAM 72 bytes free.
