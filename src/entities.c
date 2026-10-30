@@ -1143,6 +1143,53 @@ static void ent_draw(void) {
     }
 }
 
+/* Entity sprites occupy OAM slots ENT_OAM_TANK .. ent_oam_used-1, except the
+ * shell's two (it does not scroll with the river).  Sprites at or below
+ * scanline 232 are hidden or about to be culled by the next full draw.  The
+ * 8-bit add cannot wrap: a sprite below 232 moves by at most 6.  Hand-written
+ * because the per-frame cost of a C loop over ~15-38 sprites would eat the
+ * saving. */
+void entities_follow(void) BANKED {
+    if (river_rows_last == 0u) {
+        return;
+    }
+#ifndef __SDCC
+    for (e_t = ENT_OAM_TANK; e_t < ent_oam_used; e_t++) {
+        if ((e_t == ENT_OAM_SHELL || e_t == ENT_OAM_SHELL + 1u) ||
+            shadow_OAM[e_t].y >= 232u) {
+            continue;
+        }
+        shadow_OAM[e_t].y = (uint8_t)(shadow_OAM[e_t].y + river_rows_last);
+    }
+#else
+    e_off = (uint8_t)(ent_oam_used << 2);
+    __asm
+        ldx     #8                  ; OAM slot 2 (ENT_OAM_TANK)
+    1$:
+        cpx     _e_off
+        bcs     5$
+        cpx     #16                 ; slots 4-5: the shell stays on the screen
+        bcc     2$
+        cpx     #24
+        bcc     4$
+    2$:
+        lda     _shadow_OAM,x
+        cmp     #232
+        bcs     4$
+        clc
+        adc     _river_rows_last
+        sta     _shadow_OAM,x
+    4$:
+        inx
+        inx
+        inx
+        inx
+        bne     1$
+    5$:
+    __endasm;
+#endif
+}
+
 void entities_update(void) BANKED {
     /* This group runs on its own frame (main.c staggers it against the
      * player), so it measures its own elapsed time; ent_anim holds the system

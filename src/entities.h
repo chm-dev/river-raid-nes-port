@@ -62,6 +62,12 @@ void entities_init_graphics(void) BANKED;
 /* Scroll with the river, patrol, animate and draw. */
 void entities_update(void) BANKED;
 
+/* On a frame without entities_update(): move the drawn entity sprites down by
+ * the rows the river just scrolled, so they stay locked to it.  Entities run
+ * at 30 Hz, the river at 60 Hz; the next entities_update() redraws them from
+ * their exact positions. */
+void entities_follow(void) BANKED;
+
 /* The Atari spawn block ($AB80-$AE96), called by the river generator after
  * each raw row it renders (see river.c). */
 void entities_row(void) BANKED;

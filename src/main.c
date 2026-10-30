@@ -111,26 +111,28 @@ void main(void) {
         }
         frame_counter++;
 
-        /* The river (scroll, row generation, tile uploads) and the entities
-         * run every frame: sprites that are only redrawn every other frame
-         * lag the scrolling river and snap back, which shows as jitter.
-         * entities_update() measures its own elapsed time and consumes
-         * river_scrolled. */
+        /* The river (scroll, row generation, tile uploads) runs every frame;
+         * everything else runs once per LOGIC_FRAMES frames, in two groups on
+         * alternate frames so their costs never land together:
+         *   - player (jet, shot, terrain and entity hit tests), plus a cheap
+         *     entities_follow() that moves the entity sprites with the river,
+         *     since sprites redrawn only every other frame would lag it and
+         *     snap back (jitter);
+         *   - HUD and entities (full update and redraw; entities_update()
+         *     measures its own elapsed time and consumes river_scrolled). */
         river_update();
-        entities_update();
 
-        /* Player (jet, shot, terrain and entity hit tests) and the HUD run
-         * once per LOGIC_FRAMES frames, on alternate frames so their costs
-         * never land together. */
         logic_acc = (uint8_t)(logic_acc + game_ticks);
         if (logic_acc >= LOGIC_FRAMES) {
             game_ticks = logic_acc;         /* at most 1 + 4 */
             logic_acc = 0;
+            entities_follow();
             player_update();
             collision_update();
             sound_update();
         } else {
             hud_update();
+            entities_update();
         }
     }
 }

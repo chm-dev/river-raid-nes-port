@@ -7,6 +7,7 @@
 #include <string.h>
 #include <stdlib.h>
 #include "nes/nes.h"
+volatile uint16_t sys_time;     /* GBDK's frame counter, read by entities_update() */
 #include "../../src/entities.c"
 
 volatile uint8_t playfield_scroll_y;

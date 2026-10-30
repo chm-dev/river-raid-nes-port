@@ -74,6 +74,9 @@ extern uint8_t river_vel;
 /* Pixels (raw rows) the playfield advanced in the last river_update(): 0..2. */
 extern uint8_t river_scrolled;
 
+/* Rows (pixels) the last river_update() alone scrolled: 0..6. */
+extern uint8_t river_rows_last;
+
 /* Frames elapsed since the previous main-loop pass (1..4), set in main().  All
  * game logic scales with this so a slow pass never slows the game down. */
 extern uint8_t game_ticks;
