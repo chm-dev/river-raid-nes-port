@@ -73,7 +73,7 @@ extern uint8_t river_speed;
 extern uint8_t river_gen_budget;
 #define RIVER_VEL_SLOW      16u
 #define RIVER_VEL_CRUISE    32u
-#define RIVER_VEL_FAST      64u
+#define RIVER_VEL_FAST      48u
 #define RIVER_ACCEL         1u
 extern uint8_t river_vel;
 
