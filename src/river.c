@@ -27,7 +27,9 @@
 #include "entities.h"
 #include "river_lut.h"
 
-#define static /* PROF */
+#ifdef PROF_EXPORT_STATICS
+#define static                  /* ./build.ps1 -Profile: statics get .noi symbols */
+#endif
 
 /* 48-byte mode-E row.  The original's last fill writes one byte past the
  * row (it overwrites the next row's first land byte); keep one spare. */
@@ -421,16 +423,6 @@ static void river_clamp_decision(void) {
 /* Row renderer ($AA7A-$AB7E)                                                */
 /* ------------------------------------------------------------------------- */
 
-/* NES recolour: Atari pixel value 2 (outline, near black) becomes value 0
- * (black backdrop) on bank edges, so value 2 is free for the hills' brown.
- * Mirrors nes_edge_black() in tools/river_model.py. */
-static uint8_t river_edge_black(uint8_t b) {
-    uint8_t hi = (uint8_t)(b & 0xAAu);
-    uint8_t lo = (uint8_t)((uint8_t)(b << 1) & 0xAAu);
-
-    return (uint8_t)(b & (uint8_t)~(hi & (uint8_t)~lo));
-}
-
 static uint8_t rf_val, rf_cnt;
 
 #ifdef __SDCC
@@ -491,7 +483,9 @@ static void river_fill(uint8_t y, uint8_t value, uint8_t edge) {
     rg_row_b4 = (uint8_t)(rg_row_b4 + y);
 }
 
-/* river_edge_black() of every byte. */
+/* NES recolour: Atari pixel value 2 (outline, near black) becomes value 0
+ * (black backdrop) on bank edges, so value 2 is free for the hills' brown.
+ * nes_edge_black() in tools/river_model.py, for every byte. */
 static const uint8_t river_black_lut[256] = {
     0x00, 0x01, 0x00, 0x03, 0x04, 0x05, 0x04, 0x07, 0x00, 0x01, 0x00, 0x03, 0x0C, 0x0D, 0x0C, 0x0F,
     0x10, 0x11, 0x10, 0x13, 0x14, 0x15, 0x14, 0x17, 0x10, 0x11, 0x10, 0x13, 0x1C, 0x1D, 0x1C, 0x1F,
@@ -536,7 +530,7 @@ static void river_copy_template(void) {
     rg_tpl_off = (uint16_t)(rg_tpl_off + rg_bc);
 }
 
-/* river_edge_black() of atari_bank_patterns + atari_bank_patterns_island. */
+/* nes_edge_black() of atari_bank_patterns + atari_bank_patterns_island. */
 static const uint8_t river_bank_black[32] = {
     0x00, 0xFF, 0x00, 0x55, 0x40, 0x3F, 0xC0, 0x15, 0x50, 0x0F, 0xF0, 0x05, 0x54, 0x03, 0xFC, 0x01,
     0x00, 0xFF, 0x00, 0x00, 0x00, 0x3F, 0xC0, 0x00, 0x00, 0x0F, 0xF0, 0x00, 0x00, 0x03, 0xFC, 0x00
@@ -1337,13 +1331,12 @@ static uint8_t river_put(void) { return 1u; }
  * solid columns use the land/water tiles, a pattern identical to an earlier
  * column of the row reuses its slot, anything else is uploaded into the next
  * cache slot.  The nametable stripe is written last, after every pattern it
- * references.  This "job" runs in slices from river_update(); when the
- * transfer buffer is full it simply resumes on the next pass.  Row generation
+ * references.  This "job" runs from river_update(); when the transfer buffer is
+ * full it simply resumes on the next pass.  Row generation
  * (which overwrites river_tile_pat) waits until the job is done, and the
  * scroll keeps moving meanwhile because the generator runs ahead of the
  * display (see river_owed).
  */
-#define RIVER_JOB_COLS  24u   /* columns classified per pass, at most */
 
 static uint8_t river_black_rows;      /* ring slots still holding black */
 
@@ -2048,7 +2041,9 @@ uint8_t river_gen_budget = RIVER_GEN_PER_PASS;  /* rows this pass may generate (
 
 void river_update(void) {
     river_live = 1u;
-    /* Behind schedule: spend more now, a clamped scroll is worse than a late frame. */
+    /* Behind schedule: spend more now, a clamped scroll is worse than a late
+     * frame.  A budget of 1 marks the heavy entity pass, which leaves the tile
+     * job to the next pass unless the generator has fallen behind. */
     if (river_owed >= 3u) {
         river_gen_budget++;
     }

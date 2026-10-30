@@ -4,7 +4,8 @@
  * The content must be identical whatever the timing; used for the tile-job
  * dedupe and the repeat-row skip.
  *
- * Run:  node tests/compare_tile_rows.mjs <out.json> [frames]   (per ROM, then diff the JSON)
+ * Run:  node tests/compare_tile_rows.mjs <out.json> [frames] [rom] [noi] [variant]
+ *       (per ROM, then diff the JSON; variant 0..3 = start level 1/5/20/50)
  */
 import path from 'node:path';
 import fs from 'node:fs';
@@ -12,14 +13,23 @@ import { init, callTool, readBytes, readU16, writeBytes, symbolsFromNoi, require
 
 const out = process.argv[2];
 const FRAMES = Number(process.argv[3] || 800);
-const sym = symbolsFromNoi(path.resolve('roms/river_raid.noi'));
+const ROM = path.resolve(process.argv[4] || 'roms/river_raid.nes');
+const VARIANT = Number(process.argv[6] || 0);
+const sym = symbolsFromNoi(path.resolve(process.argv[5] || 'roms/river_raid.noi'));
 const S = n => requireSymbol(sym, n);
 const RING = 30, FIRST_SLOT = 28, LEFT = 4, COLS = 24, LAG = 20;
 
 await init();
-await callTool('mesen_load_rom', { filepath: path.resolve('roms/river_raid.nes') });
+await callTool('mesen_load_rom', { filepath: ROM });
 await sleep(900);
 await callTool('mesen_playback', { action: 'pause' });
+{
+    // Up in attract steps the GAME number; two steps = the next start level.
+    const step = async n => { for (let i = 0; i < n; i++) await callTool('mesen_step', { cpuType: 'Nes', count: 1, stepType: 'PpuFrame' }); };
+    const press = async b => { await callTool('mesen_input_override', { action: 'set', port: 0, buttons: b }); await step(4); await callTool('mesen_input_override', { action: 'set', port: 0, buttons: '' }); await step(4); };
+    if (VARIANT) await step(60);
+    for (let i = 0; i < VARIANT * 2; i++) await press('Up');
+}
 await startGame();
 await sleep(100);
 

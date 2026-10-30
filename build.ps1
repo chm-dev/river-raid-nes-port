@@ -14,13 +14,18 @@
 .PARAMETER Clean
   Delete build/ and the generated ROM/NOI/map files first.
 
+.PARAMETER Profile
+  Export the statics of river.c and entities.c as .noi symbols, for the perf_*
+  scripts that split costs by function or read river_job.
+
 .EXAMPLE
   ./build.ps1
   ./build.ps1 -Clean
 #>
 [CmdletBinding()]
 param(
-    [switch]$Clean
+    [switch]$Clean,
+    [switch]$Profile
 )
 
 $ErrorActionPreference = 'Stop'
@@ -60,6 +65,7 @@ $compileFlags = @(
     "-I$srcRoot"
     '-Wf--opt-code-size'
 )
+if ($Profile) { $compileFlags += '-DPROF_EXPORT_STATICS' }
 
 $linkFlags = @(
     '-mmos6502:nes'

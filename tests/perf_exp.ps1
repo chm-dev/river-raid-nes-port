@@ -10,7 +10,7 @@ param([Parameter(Mandatory)][string]$Name, [int]$Frames = 400,
 $root = Split-Path $PSScriptRoot -Parent
 Push-Location $root
 try {
-    ./build.ps1 | Select-String '^(ROM|RAM) ' | ForEach-Object { $_.Line }
+    ./build.ps1 -Profile | Select-String '^(ROM|RAM) ' | ForEach-Object { $_.Line }
     $map = Select-String -Path roms/river_raid.map -Pattern '^_CODE_1 |^_XINIT ' | ForEach-Object { $_.Line -replace '\s+', ' ' }
     $map
     New-Item -ItemType Directory -Force build/exp | Out-Null
