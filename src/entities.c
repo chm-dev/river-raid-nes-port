@@ -18,6 +18,7 @@
 #include "entities.h"
 #include "player.h"
 #include "sound.h"
+#define static /* PROF */
 
 /* Separate arrays (not an array of structs): SDCC indexes these with plain
  * absolute,X addressing, where a 5-byte struct needs a multiply per access. */
