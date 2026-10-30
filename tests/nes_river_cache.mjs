@@ -31,7 +31,11 @@ const GOLDEN = path.resolve('tests/data/river_tiles_golden.json');
 const FRAMES = Number(process.env.FRAMES || 800);
 const RING = 30;
 const FIRST_SLOT = 28;          /* slot of tile row 0 (the init lead row) */
-const VISIBLE_LINES = 204;      /* scanlines 36..239 */
+const VISIBLE_LINES = 210;      /* scanlines 30..239 (PLAYFIELD_SCANLINES) */
+/* The ring starts as a straight-channel prefill and the game-start road rows (0..2);
+ * the first RING procedural rows replace it while they scroll in, so only check once
+ * every ring row is a generated one. */
+const WARMUP_DIST = RING + 3;
 const TILE_COLS = 24;           /* whole 48-byte Atari row */
 const LEFT_COL = 4;            /* first river nametable column */
 
@@ -76,6 +80,7 @@ async function main() {
         lastDist = dist;
         maxDist = Math.max(maxDist, dist);
         if (dist >= golden.length) break;
+        if (dist < WARMUP_DIST) continue;
 
         for (let s = Math.max(0, dist - RING); s < dist; s++) {
             // Tile rows 1 and 2 are the game-start road (recoloured land);
