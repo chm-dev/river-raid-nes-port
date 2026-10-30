@@ -1,2 +1,2 @@
-- [ ] Tanks shots are scrolling with the river 
+- [x] Tanks shots are scrolling with the river (fixed 2026-10-30: the shell scrolls like every entity, as on the Atari)
 - [ ] baloon basket color - should be brown

@@ -499,12 +499,11 @@ static uint8_t ent_shell_hits(void) {
     e_slot = (uint8_t)(((ent_aux[e_i] - SHELL_FLY_FRAMES) >> 3) << 2);
     e_l = (uint8_t)(ent_x[e_i] + shell_box[e_slot]);                   /* left */
     e_r = (uint8_t)(e_l + shell_box[(uint8_t)(e_slot + 1u)]);          /* right */
-    /* The shell does not scroll, so undo the shift entities_check_player()
-     * applied to e_y (e_l is free again here). */
-    e_l = (uint8_t)(e_y + river_scrolled);
+    /* e_y is the jet's Y shifted by entities_check_player() to compensate for
+     * the stale ent_y, so it can be compared with the shell directly. */
     return e_px < e_r && (uint8_t)(e_px + 8u) > (uint8_t)(ent_x[e_i] + shell_box[e_slot]) &&
-           e_l < (uint8_t)(ent_y[e_i] + shell_box[(uint8_t)(e_slot + 3u)]) &&
-           (uint8_t)(e_l + 14u) > (uint8_t)(ent_y[e_i] + shell_box[(uint8_t)(e_slot + 2u)]);
+           e_y < (uint8_t)(ent_y[e_i] + shell_box[(uint8_t)(e_slot + 3u)]) &&
+           (uint8_t)(e_y + 14u) > (uint8_t)(ent_y[e_i] + shell_box[(uint8_t)(e_slot + 2u)]);
 }
 
 /* Called by the river generator after every raw row ($AB80). */
@@ -837,6 +836,10 @@ static void ent_shell_tick(void) {
     } else {
         e_src = e_i;
         ent_shell_init();
+        if (e_slot > e_i) {
+            /* the tank is later in the loop and not scrolled yet this pass */
+            ent_y[e_i] = (uint8_t)(ent_y[e_i] + river_scrolled);
+        }
     }
 }
 
@@ -1159,8 +1162,8 @@ static void ent_draw(void) {
     }
 }
 
-/* Entity sprites occupy OAM slots ENT_OAM_TANK .. ent_oam_used-1, except the
- * shell's two (it does not scroll with the river).  Sprites at or below
+/* Entity sprites occupy OAM slots ENT_OAM_TANK .. ent_oam_used-1 (the shell
+ * scrolls with the river like everything else, $AB7E).  Sprites at or below
  * scanline 232 are hidden or about to be culled by the next full draw.  The
  * 8-bit add cannot wrap: a sprite below 232 moves by at most 6.  Hand-written
  * because the per-frame cost of a C loop over ~15-38 sprites would eat the
@@ -1171,8 +1174,7 @@ void entities_follow(void) BANKED {
     }
 #ifndef __SDCC
     for (e_t = ENT_OAM_TANK; e_t < ent_oam_used; e_t++) {
-        if ((e_t == ENT_OAM_SHELL || e_t == ENT_OAM_SHELL + 1u) ||
-            shadow_OAM[e_t].y >= 232u) {
+        if (shadow_OAM[e_t].y >= 232u) {
             continue;
         }
         shadow_OAM[e_t].y = (uint8_t)(shadow_OAM[e_t].y + river_rows_last);
@@ -1184,11 +1186,6 @@ void entities_follow(void) BANKED {
     1$:
         cpx     _e_off
         bcs     5$
-        cpx     #16                 ; slots 4-5: the shell stays on the screen
-        bcc     2$
-        cpx     #24
-        bcc     4$
-    2$:
         lda     _shadow_OAM,x
         cmp     #232
         bcs     4$
@@ -1273,9 +1270,7 @@ void entities_update(void) BANKED {
         if (e_type == ENT_AUX_TANK && (ent_flags[e_i] & ENT_F_WAIT)) {
             continue;                       /* no position until the bar is placed */
         }
-        if (e_type != ENT_AUX_SHELL) {      /* the shell stays where it burst on screen */
-            ent_y[e_i] = (uint8_t)(ent_y[e_i] + river_scrolled);
-        }
+        ent_y[e_i] = (uint8_t)(ent_y[e_i] + river_scrolled);    /* the shell too ($AB7E: inc $40) */
         if (ent_y[e_i] >= 232u && ent_y[e_i] < 250u) {
             ent_type[e_i] = ENTITY_NONE;
             entity_count--;

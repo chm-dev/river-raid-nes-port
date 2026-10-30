@@ -1316,8 +1316,29 @@ was stale.
   by the pending scroll (grows with speed; worst when flying fast).
 - **Fix:** `entities_check_player()` and `entities_hit_shot()` shift the jet/shot
   Y by `-river_scrolled` (the box test only sees the difference, so the asm
-  `ent_scan_player` is unchanged).  `ent_shell_hits()` undoes the shift because
-  the shell does not scroll.
+  `ent_scan_player` is unchanged).  (`ent_shell_hits()` used to undo the shift
+  because the shell was thought not to scroll; see the tank-shell entry below.)
 - **Tests:** `nes_entity_hits` 20/20 and `nes_sprite_lock` pass, but both run with
   the river frozen or sprite-only, so **the scrolling case is not covered by a
   test yet** - verify by flying fast into a ship.  ROM 65,552 bytes.
+
+### 2026-10-30 - Tank shell scrolled wrongly (branch main)
+
+Reported in `BUGS.md`: "tank shots are scrolling with the river" - the shell
+drifted against the river while the tank moved with it.
+
+- **Cause:** a wrong assumption.  The shell (and `entities_follow()`) were
+  written so the shell stayed fixed on screen.  The Atari does not do that: the
+  scroll step `$AB7C-$AB7E` runs `inc $3A` (tank Y) and `inc $40` (shell Y)
+  together with all other objects after every generated row, so the shell moves
+  down with the river, 1 px per row.
+- **Fix (`entities.c`):** `entities_update()` scrolls the shell like every
+  entity; `entities_follow()` no longer skips OAM slots 4-5 (asm and C
+  fallback); `ent_shell_hits()` no longer undoes the `river_scrolled` shift of
+  the jet Y; `ent_shell_tick()` adds the pending scroll when it refires from a
+  tank in a later slot (not scrolled yet in that pass).  A shell that scrolls
+  off the bottom is culled by the normal 232..249 window.
+- **Verified:** by eye in Mesen with a temporary ROM that made every tank fire on
+  every bridge (bridge counter / range / on-bridge kill gates disabled); that
+  debug code is removed again.  No automated test covers the shell yet.  ROM
+  65,552 bytes, 4 bytes RAM free.
