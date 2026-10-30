@@ -1,7 +1,8 @@
 # Project Progress & Session Handoff
 
-**Last updated:** 2026-10-29
-**Current phase:** Phase 5 IN PROGRESS — jet, shot, entities, throttle done; bridge, respawn-at-bridge, audio-free polish next
+**Last updated:** 2026-10-30
+**Current phase:** Phase 5 IN PROGRESS — jet, shot, entities, throttle ramp, bridge/tank/flash done; **frame-time work done (30 Hz game logic + 60 Hz river, see the 2026-10-29/30 performance entry)**; respawn-at-bridge, sound, fuel parity, entity fidelity next
+**Branch note:** the performance work lives on `experiment/river60-logic30` (cut from `experiment/30fps`); play-tested on a MiSTer and accepted, to be merged to `main`.
 **Phase 1:** COMPLETE (reverse engineering + asset extraction)
 **Phase 2:** COMPLETE (scaffolding, build pipeline, boot ROM, Mesen smoke test)
 **Phase 3:** COMPLETE (HUD, deferred LCD split, playfield ring, 1-px scroll test)
@@ -15,6 +16,32 @@
 
 ## Current status
 
+- **Frame loop (2026-10-30, final shape):** `river_update()` runs **every frame**
+  (60 Hz scroll, row generation, tile uploads).  Everything else runs at **30 Hz,
+  in two groups on alternate frames** so their costs never land together: the
+  player group (`player_update`, `collision_update`, `sound_update`, preceded by
+  `entities_follow()`) and the HUD + entity group (`hud_update`,
+  `entities_update`).  `entities_follow()` nudges the drawn entity sprites by the
+  rows the river scrolled on the in-between frames, so 30 Hz entities do not lag
+  the 60 Hz river.  `game_ticks` is the elapsed time of the group being run;
+  `entities_update()` measures its own from `sys_time`.
+- **Measured (per-frame trace, ~5 entities, invulnerable jet, shooting):** slow
+  0.50 px/frame with no overruns; cruise 1.00 px/frame, **0.5-0.7% late frames**
+  (was 5%); fast 1.50 px/frame (the target), **19-23% late passes** (was 68%),
+  scroll steps spread over 1-2 rows instead of 0/3.  Details and the per-group
+  cost table are in the performance entry of the Session log.
+- **Memory layout (fixed bank / bank 1 / RAM):** ROM is 4 x 16 KiB (mapper 30).
+  The **fixed bank has ~2.9 KB free** and **bank 1 ~3 KB free** (`hud.c`,
+  `entities.c`, `entity_gfx.c`, `player.c` are built with `-Wf-bo1`; their public
+  functions are `BANKED`).  **Internal RAM: 4 bytes free.**  The linker does *not*
+  fail when the fixed bank overflows into the vectors at `$FFFA`: the ROM silently
+  grows to 128 KiB - always check the `ROM` line of `build.ps1` (must be 65,552).
+- Test state on this branch: `nes_smoke` (50), `nes_scroll_hud` (14), `nes_river`
+  pass; `nes_river_cache` is **stale** (fails on every commit of this branch,
+  including before the performance work; its golden stream no longer matches the
+  game-start state) and needs updating.  New: `nes_entity_hits` (20 cases),
+  `nes_sprite_lock`, the `compare_*` ROM-diff scripts and the `perf_*` profilers
+  (see Key artifacts).
 - Phase 1 is complete. The cart is extracted, fully disassembled, the display
   and PMG model are confirmed, the procedural river data/algorithm is
   documented, and all sprites/tables/charset are extracted into C arrays.
@@ -233,6 +260,13 @@
 | `tests/nes_scroll_hud.mjs` | Scroll/split/HUD regression (14 checks) |
 | `tests/nes_river.mjs` | Phase 4 row/state/collision validation (3 checks, 397/400 sampled) |
 | `tests/data/river_golden.json` | 400 golden tile rows from `river_model.py` |
+| `tests/nes_entity_hits.mjs` | 20 jet-vs-entity box boundary cases (guards `ent_scan_player`) |
+| `tests/nes_sprite_lock.mjs` | Entity sprite Y + scroll constant per frame (guards `entities_follow`) |
+| `tests/compare_oam.mjs`, `tests/compare_tile_rows.mjs` | Dump entity sprites / on-screen river tile pixels so two ROMs can be diffed (proves an optimisation did not change output) |
+| `tests/perf_scroll_cadence.mjs` | Frames per pass, rows per frame, px/frame for slow/cruise/fast |
+| `tests/perf_function_cycles.mjs` | Estimated cycles per frame by function (Lua exec sampler) |
+| `tests/perf_frame_trace.mjs` | Per-frame cost trace; what the heavy / late frames contain |
+| `tools/river_repeat_rows.py` | Validates the repeat-row rule used by `river_step_state` against the model |
 | `tools/patch_nes_header.py` | Patches the iNES mirroring byte |
 | `roms/river_raid.nes` / `.noi` / `.map` | ROM + symbols + linker map |
 | `build/flip_fixed.png` | Correct orientation: newest row at top, exact edges/trees |
@@ -288,9 +322,21 @@ These are documented in full in `docs/ATARI_RE_SPEC.md`; don't re-derive them.
    `SPRITE_TILE_BASE`); the split handlers flip PPUCTRL bit 4 per pass.  The
    generator runs **one tile row ahead** of the display (8 pre-generated
    rows at init), so pattern uploads/stripe writes are spread over frames.
-   Main loop now runs ~0.98 iterations per PPU frame (was 0.45).  Remaining
-   cost: a few frames per minute still exceed one frame (rows with >6 new
-   patterns fall back to a blocking `set_bkg_data`).
+   Superseded by the 2026-10-29/30 performance entries: the upload job streams
+   through `river_put()`, the loop is 60 Hz river + 30 Hz logic, and cruise
+   overruns only ~0.5% of frames.
+1b. **Remaining performance limits (2026-10-30):** fast flight (Up) is at the CPU
+   limit: 1.5 px/frame with 19-23% late passes, and on a late pass an NMI that
+   lands mid-pass shows the new scroll with the previous sprite positions for one
+   frame (1-2 px, fast only).  A fix would commit `playfield_scroll_y` at the end
+   of the pass instead of inside `river_update()` (needs one byte of RAM; hit
+   tests read the scroll).  The `river_convert_row`/`river_render_row` cost
+   (~1.4k + ~1.7k cycles per generated row) is what bounds fast.  MMC3 + cc65 was
+   assessed (the `MMC3Template` repo) and rejected as too expensive; it would
+   recover the ~5.4k-cycle NMI split spin and add 8 KB WRAM.
+1c. **Player, shot, hit tests and the HUD run at 30 Hz** (steering is 2 px per
+   step, the shot moves 12 px per pass); the 20-case hit-box test guards the
+   boundaries, but a fast shot could in principle skip a very small target.
 2. **Fuel/bridge scores (Phase 5):** confirm the 80/500 candidates and how
    `$BB0B` is indexed for those objects.
 3. **Collision ring is per tile row:** bounds are sampled at raw row 3 of
@@ -353,10 +399,15 @@ These are documented in full in `docs/ATARI_RE_SPEC.md`; don't re-derive them.
    the display: the jet must index it with that lead in mind.
 4. Visual A/B the exact cache against `river_rows_157.bin` and live Altirra
    frames, especially the bridge flash and island forks.
-5. RAM is tight: 36 bytes free (queue 64 B, tile buffer 320 B, ring arrays
-   150 B, debug hooks 64 B).  Phase 5 will need to reclaim some of it
-   (e.g. gate `river_debug_*` behind a macro, shrink `RIVER_Q_MAX`).
-6. Perf: see the 2026-10-29 performance entry; entities (~4k/pass) are the next cost.
+5. RAM is tight: **4 bytes free** (tile buffer 384 B, ring arrays 150 B, debug
+   hooks `river_debug_state` 16 B, entity arrays...).  Anything new needs
+   something reclaimed first (e.g. gate `river_debug_*` behind a macro, which the
+   tests read).  The fixed bank has ~2.9 KB and bank 1 ~3 KB of room.
+6. Perf: finished for now (see the 2026-10-29/30 performance entries).  If more is
+   needed: commit the scroll at the end of the pass, cheaper `river_render_row`/
+   `river_convert_row`, or the entity update loop (~0.9k cycles/frame).
+7. `tests/nes_river_cache.mjs` and its golden data need updating for the current
+   game-start state (road rows, spawner) before it is useful again.
 
 ## Handy commands
 
@@ -365,6 +416,15 @@ These are documented in full in `docs/ATARI_RE_SPEC.md`; don't re-derive them.
 node tests/nes_smoke.mjs                # Phase 3 boot/HUD regression (50 checks)
 node tests/nes_scroll_hud.mjs           # scroll/split/HUD regression (14 checks)
 node tests/nes_river.mjs                # Phase 4 row/state/collision validation (397/397 sampled)
+
+./tests/host_river.ps1                  # C generator vs the Python model, 20,000 tile rows (needs zig)
+python tools/object_host_check.py build/object_trace.jsonl build/object_trace_L15.jsonl build/object_trace_L24.jsonl   # spawner vs model
+python tools/river_repeat_rows.py       # repeat-row skip rule: 0 false positives
+node tests/nes_entity_hits.mjs          # 20 hit-box boundary cases
+node tests/nes_sprite_lock.mjs          # entity sprites locked to the scroll
+node tests/perf_scroll_cadence.mjs      # slow / cruise / fast scroll cadence
+node tests/perf_frame_trace.mjs cruise 900   # per-frame trace (restart Mesen between Lua runs)
+node tests/perf_function_cycles.mjs named fast   # cycles per function
 
 python tools/gen_river_golden.py 400    # regenerate tests/data/river_golden.json
 python tools/river_validate.py build/river_trace.jsonl  # model vs. Altirra trace
@@ -1024,3 +1084,143 @@ own hit path runs; `--tank-over` pokes the tank under the bridge; frames in
 - `bridge_wait` was merged into `bridge_x` (0 = none) to pay for the flash
   counter; RAM is still 1 byte free.  Host stubs (`tests/host`) gained
   `set_bkg_palette_entry` and a `prop` alias for the OAM attribute.
+### 2026-10-29 - Throttle ramp, tank-only bridge flash, remaining Phase 5 work
+
+- **Throttle acceleration.** `river_speed` (0/1/2) is now only the target;
+  `river_vel` (`river.c`/`river.h`, 1/32 row per frame) eases toward it at
+  `RIVER_ACCEL` = 1 unit per elapsed frame (slow 16, cruise 32, fast 64), so
+  cruise -> fast takes ~32 frames and cruise -> slow ~16.  `river_acc` is a
+  5-bit sub-row accumulator.  `river_vel` snaps to cruise on `river_init`,
+  respawn, level reset and `player_disable` (tests keep 1 px/frame).  The ramp
+  rate is a guess; the Atari's `$76` throttle byte is analogue (128 -> 0 -> 233
+  in the play_left trace) but its rate has not been traced.  Build only; not
+  yet play-tested or run against the Mesen suites.
+- **Bridge flash is now tank-only (deliberate deviation).**  The Atari sets
+  `$31` on every bridge hit (see the previous entry), but by request
+  `entities_hit_shot` only starts `bridge_flash` when `ent_bridge_hit()`
+  returned `TANK_BONUS_TENS` (tank on the bridge).  A plain hit still scores
+  500, explodes and advances the counter.  Revert by setting `bridge_flash`
+  unconditionally.
+- RAM is again **1 byte free** (the throttle state cost 8); any new global
+  needs something reclaimed first.
+- **Remaining Phase 5:** respawn at the last bridge; sound (engine, shot,
+  explosions, tank bonus/hit); fuel rate / 16-bit gauge / PAL `$BF`; shell
+  killing enemy objects (`$A4C1`) and helicopter/ship shells from level 7;
+  entity fidelity (generator-placed objects + bank clamp, 11-slot eviction,
+  spawn timing); collision sampled at the jet's exact scanline instead of once
+  per tile row; visual checks (natural level-1 bridge, bridge/feature A/B,
+  death animation, 20-row 4-tone road); commit the pending object-model tools.
+  (The `Makefile` banked-source list now matches `build.ps1`; `build.ps1` is the
+  tested path.)
+
+### 2026-10-29/30 - Performance: 30 Hz game logic, 60 Hz river (branch `experiment/river60-logic30`)
+
+**Symptom.** Game speed was inconsistent: it slowed whenever there were more
+entities, shots or explosions, and fast flight (Up) was unplayable.  Considered
+and rejected: a rewrite on cc65 + MMC3 (assessed with the `MMC3Template` repo: it
+would recover the ~5.4k-cycle NMI split spin and give 8 KB WRAM, but needs a CHR-RAM
+variant, a new split/IRQ handler, ca65 rewrites of all asm and a new test harness
+- 4-8 sessions) and a black bar at the bottom of the screen (a second split costs
+a full frame of NMI spin with GBDK's faked LCD, and does not reduce the per-row
+generation cost).
+
+**Method.** Everything was measured in Mesen with frame-stepped runs (invulnerable
+jet, shooting every 20 frames, ~5 entities); see `tests/perf_*.mjs`.
+`perf_function_cycles.mjs` and `perf_frame_trace.mjs` arm a persistent Lua exec
+callback over `$8000-$FFFF`, add each instruction's base cycle cost to the
+function (symbol range) it is in and publish the totals through unused CHR-RAM
+(`$1F00`).  Numbers are ~10-15% low (taken branches ignored) but good enough to
+rank costs; the frame budget is 29,780 cycles of which the NMI split spin
+(`.delay_to_lcd_scanline`) takes ~5.4k.
+
+**What the measurements showed (in order).**
+1. The 30 Hz experiment (`MAIN_FRAMES_PER_PASS`, commit `c5aefd9`) was *not* CPU
+   bound: 299/300 passes took exactly 2 frames, but cruise scrolled only 0.80
+   px/frame because the generator could make `RIVER_GEN_PER_PASS` = 2 rows per
+   pass, exactly the cruise demand, so every pass blocked by a pending tile job
+   lost its scroll rows for good.  `RIVER_GEN_PER_PASS` 4, `RIVER_MAX_OWED` 6,
+   `RIVER_VEL_FAST` 48 fixed that (cruise 1.00 px/frame).
+2. A pure 30 Hz loop scrolls in 2-row steps and fast became choppy, so the loop
+   became a hybrid: `river_update()` every frame, the rest at 30 Hz.
+   `river_scrolled` now *accumulates* until `entities_update()` consumes it.
+3. A per-frame trace (`perf_frame_trace.mjs`) found the real peaks: the tile-job
+   slice cost **10-13.5k cycles** (the duplicate-pattern search was a C loop of
+   ~100 cycles per candidate pair) and coincided with entity move/draw (4-7k) on
+   the frames that overran.
+4. Average cost is not the problem: in fast the idle wait loop still took ~22% of
+   the frame, but 36% of frames carried 20-24k of work.  Peaks matter.
+
+**What changed (commits, oldest first).**
+- `c5aefd9` 30 Hz loop experiment; `86c1837` generator catch-up constants;
+  `0b5f16c` hybrid loop (river 60 Hz / logic 30 Hz).
+- `ec0a491` 8-bit wrap-around box tests in `entities_check_player` /
+  `entities_hit_shot`; the player group and the HUD+entity group run on
+  alternate frames; `entities_update()` measures its own elapsed time from
+  `sys_time` (`ent_anim` now holds the previous run's time and doubles as the
+  rotor-animation clock).
+- `9c3d5e0` `ent_scan_player()` in hand-written 6502 (20-case boundary test
+  `nes_entity_hits.mjs`).
+- `38d5eb1` `river_find_dup()` in hand-written 6502: the tile job's
+  duplicate-pattern search (job spikes 10-13k -> a few k; also frees 4 bytes of
+  RAM and ~130 bytes of fixed bank).
+- `017e919` `ent_draw_reg()` in hand-written 6502: common draw path for object
+  types 7..15 (explosions, bridge debris, tank and shell stay in C).  Verified by
+  diffing the OAM of 9 planted scenes against the previous ROM (only rotor
+  tiles differ, by one animation frame).
+- `b606feb` **repeat-row skip**: a plain row (no feature template, no hit flash)
+  is a pure function of `rg_left`, `rg_phase`, `rg_width` and the island flag;
+  33.1% of all rows repeat the previous one (`tools/river_repeat_rows.py`: 30,000
+  rows, 0 false positives).  Such a row skips `river_render_row()` and, inside a
+  tile row, `river_copy_line()` copies the previous converted scanline instead of
+  converting again.  The signature (`rs_*`) is invalidated by init, flash/feature
+  rows and road painting.  Because that overflowed the fixed bank, **`hud.c` moved
+  to bank 1** (`hud_init_palette/graphics/update` are `BANKED`;
+  `hud_set_playfield_scroll` is now in `main.c`).
+- `2fb94f5` (intermediate) entities at 60 Hz; `9963cf7` (final) entities back at
+  30 Hz plus **`entities_follow()`**: on the in-between frames it adds
+  `river_rows_last` (this frame's scroll) to every entity sprite's OAM Y (shell
+  slots excluded), so sprites stay locked to the river (`nes_sprite_lock.mjs`:
+  80/80 frames locked in cruise, vs 40/80 off by 1 px without it).
+
+**Result (same scenarios).**
+
+| | start of the hybrid | final |
+|---|---|---|
+| cruise: late passes / frames | 29/569 (5.1%) | 3/596 and 6/900 (0.5-0.7%) |
+| cruise: mean work, normal frames | ~13.3k | ~12.0k cycles |
+| fast: speed | 1.46 px/frame, steps mostly 0 or 3 rows | 1.50, steps 1-2 rows evenly |
+| fast: late passes | 68% | 19-23% |
+| fast: mean work, normal frames | ~18.1k | ~15.8k cycles |
+
+Cost table (cruise, cycles per frame): convert 1.7k, render 1.6k, job 1.3k,
+generator state + misc 1.7k, entity move/draw block 1.6k, entity update loop
+1.1k, shot/spawner bucket 0.6k.  The heaviest remaining frames are tile-row
+boundaries that generate 2-4 rows at once (render 7-12k + convert 4-6k).
+
+**Lessons (also in AGENTS.md).**
+- A profile bucket for banked code covers every static up to the next *public*
+  function (banked statics have no `.noi` symbols).  `entities_check_player`
+  appeared to cost 2.45k/frame; that bucket was really the whole move/draw block.
+  To see statics, temporarily drop `static` (24 functions were exported with a
+  sed one-liner, profiled, and reverted with `git checkout`).
+- SDCC's `setupDPTR` array pattern is *not* always the cause of slow code: the
+  assembly of `ent_draw` has one `setupDPTR`; its cost is plain instruction count.
+  Count `setupDPTR` / `jsr __mul` per function in `lcc -S` output before assuming.
+- Persistent Lua scripts survive `mesen_load_rom`; restart MesenCE-MCP between
+  profiling runs or stale scripts overwrite the mailbox.
+- `.noi` addresses move whenever the RAM layout changes: read them from the file,
+  never hard-code them in a probe.
+- Prove an optimisation with a diff, not just a test: `compare_oam.mjs` /
+  `compare_tile_rows.mjs` capture what is on screen for two ROMs.
+- Test on hardware-like pacing: Mesen frame-stepping hides mid-pass NMI effects.
+
+**Not done / options.** Commit the scroll at the end of the pass (removes the
+mid-pass sprite/scroll desync on late fast frames); cheaper render/convert;
+entity update loop; MMC3 + cc65 (rejected, see above); PAL 50 Hz (would need the
+NES region, a longer vblank and NMI spin, and no Atari PAL traces).
+
+**Verification state at the end:** `nes_smoke`, `nes_scroll_hud`, `nes_river`,
+`nes_entity_hits` (20/20), `nes_sprite_lock`, `host_river.ps1` (19,999 rows) and
+`object_host_check.py` (2,539 states, 116 spawns, 0 mismatches) pass;
+`nes_river_cache` is stale (see Current status).  Play-tested on a MiSTer:
+cruise smooth, fast playable.

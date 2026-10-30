@@ -196,8 +196,13 @@ exact tile cache are implemented and covered by the test suites.
    - **Player vs. Terrain:** Check player jet hitbox against `river_left_x` / `river_right_x` / `island_*` for the jet's current row.
    - **Shot vs. Terrain:** Destroy player shot if it hits a riverbank or island edge.
    - **Player / Shot vs. Entities:** Handle enemy destruction, fuel depot destruction (80 pts), bridge destruction (500 pts + checkpoint advance + explosion flash), and player crash/respawn at the last cleared bridge.
-4. **Verification (`tests/nes_gameplay.mjs`):**
-   - Automated Mesen MCP test scripts verifying steering, speed changes, shooting enemies/bridges, refueling, crash/respawn, and score increments via `.noi` symbols.
+4. **Frame-time architecture (done, 2026-10-30):**
+   - The NES has ~29,780 CPU cycles per NTSC frame and GBDK's faked LCD split spends ~5.4k of them, so the work is split: `river_update()` (scroll, row generation, tile uploads) runs every frame; the player group (jet, shot, hit tests, collision, sound) and the HUD + entity group run at 30 Hz on alternate frames; `entities_follow()` keeps the entity sprites locked to the 60 Hz scroll.
+   - Hot paths are hand-written 6502 (row conversion/fill, tile-job duplicate search, entity draw, jet hit test); repeat river rows (33% of all rows) skip the renderer.
+   - `hud.c`, `entities.c`, `entity_gfx.c`, `player.c` live in switchable bank 1; see `PROGRESS.md` for the measured results and the remaining limits (fast flight is at the CPU limit).
+5. **Verification:**
+   - Done: `tests/nes_entity_hits.mjs` (20 hit-box boundary cases), `tests/nes_sprite_lock.mjs`, ROM-diff scripts (`tests/compare_*.mjs`), profilers (`tests/perf_*.mjs`).
+   - Still to write (`tests/nes_gameplay.mjs`): automated Mesen MCP test scripts verifying steering, speed changes, shooting enemies/bridges, refueling, crash/respawn, and score increments via `.noi` symbols.
 
 ---
 

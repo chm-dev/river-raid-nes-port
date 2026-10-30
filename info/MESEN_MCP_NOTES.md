@@ -361,6 +361,14 @@ Memory notes:
 
 > Profiling recipe (used for the river frame-time work): Lua `io`/`os` are disabled, and a non-persistent script is removed after `waitMs`, so use `persistent:true` and report results through spare NES RAM (`emu.write`), read back with `mesen_read_memory`. Exec callbacks (`emu.addMemoryCallback(cb, emu.callbackType.exec, addr)`) plus `emu.getState()["cpu.cycleCount"]` give per-function cycle counts; a range callback over `$8000-$FFFF` works but slows emulation ~100x, so profile ~60 frames at a time.
 
+> Lessons from the river performance work (`tests/perf_*.mjs` are working examples):
+> - A per-instruction exec callback (`emu.addMemoryCallback(cb, emu.callbackType.exec, 0x8000, 0xFFFF)`) is fine **while paused and frame-stepping** (`mesen_step ... PpuFrame`; 300 frames take a minute or two); the ~100x slowdown only matters at real-time speed. In the callback the second argument is the opcode, so a 256-entry cycle table gives per-function cycle estimates without `emu.getState()` (which is slow per call).
+> - Publish results with `emu.write(0x1F00 + i, v, emu.memType.nesChrRam)` from an `emu.eventType.endFrame` callback and read them back with `mesen_read_memory memoryType:'NesChrRam'`; check which CHR tiles the game really uses before picking a mailbox.
+> - **Persistent scripts survive `mesen_load_rom`** (and keep writing to the mailbox): restart the Mesen process between profiling runs; do not rely on `mesen_remove_lua_script`.
+> - Read symbol addresses from the `.noi` on every run; they move whenever the RAM layout changes. Static variables of fixed-bank files have symbols, statics of banked files and static functions of banked files do not.
+> - `mesen_load_rom` needs an absolute path; `mesen_take_screenshot {outputFile}` writes a PNG you can open.
+> - To compare two ROMs, load each in turn, run the same input script frame by frame, and diff what you read (OAM, tile pixels): `tests/compare_oam.mjs`, `tests/compare_tile_rows.mjs`.
+
 `mesen_run_lua_script` runs a script inside Mesen and returns its log output.
 Use **`emu.log(...)`**, not Lua `print`: `print` output was not returned by the
 MCP call in probing, while `emu.log` lines were.

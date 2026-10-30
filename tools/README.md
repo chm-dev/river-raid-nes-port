@@ -45,6 +45,8 @@ The AltirraBridge SDK lives at `F:\Emu\Atari800\Altirra\AlitrraBridge\sdk\python
 | `river_validate.py` | Compares the model state/rows against an Altirra trace. |
 | `atari_river_trace.py` | Captures per-row Altirra state at `$AB80`. |
 | `gen_river_golden.py` | Emits `tests/data/river_golden.json` for `tests/nes_river.mjs`. |
+| `river_repeat_rows.py` | Replays the model: how many rows repeat the previous one, how many the `river_step_state` skip rule finds, false positives (must be 0). |
+| `object_model.py`, `object_validate.py`, `object_host_check.py` | Python model of the object spawner, its check against Altirra traces, and the host build of `entities_row()` against the model (`python tools/object_host_check.py build/object_trace*.jsonl`). |
 | `compare_river_edges.py` | Exact Atari vs. old-atlas edge/pixel comparison (baseline). |
 | `patch_nes_header.py` | Rewrites GBDK's iNES byte 6 to vertical mirroring (HUD `$2000`, playfield `$2400`). Called by `build.ps1` and the Makefile. |
 
