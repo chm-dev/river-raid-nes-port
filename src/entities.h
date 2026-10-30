@@ -89,7 +89,14 @@ void entities_add_score(uint8_t bcd_tens) BANKED;
 /* Remove everything (new life / new game). */
 void entities_clear(void) BANKED;
 
+/* Scanlines of empty river kept above the jet where it starts (the Atari's
+ * closest object stops 45-53 px short of its jet). */
+#define ENT_START_CLEARANCE     48u
+void entities_clear_near(uint8_t jet_y) BANKED;
+
 /* 1 while a new game's river scrolls in: entities stand still (see entities.c). */
 extern uint8_t ent_hold;
+extern uint16_t ent_scrolled;           /* rows scrolled since the game start, while held */
+#define ENT_WAIT_ROWS           222u    /* rows the start scroll-in lasts (measured: 219) */
 
 #endif /* ENTITIES_H */

@@ -53,6 +53,7 @@ static uint8_t ent_anim;
 
 /* Non-zero from the start of a game until the player first moves or fires: the river\n * scrolls in but the world (patrols, tanks, shells, wake-ups) stands still. */
 uint8_t ent_hold;
+uint16_t ent_scrolled;                  /* rows scrolled since the game start (while held) */
 static uint8_t ent_oam_used;
 
 /* File-scope scratch (SDCC aliases block locals across calls). */
@@ -524,6 +525,25 @@ static uint8_t ent_shell_hits(void) {
            (uint8_t)(e_y + 14u) > (uint8_t)(ent_y[e_i] + shell_box[(uint8_t)(e_slot + 2u)]);
 }
 
+/* The jet appears on the river and the river stops: clear every enemy and
+ * depot that would be closer than ENT_START_CLEARANCE scanlines above it.  The
+ * Atari never has one there - its start scrolls only ~80 rows, so the first
+ * objects stop 45+ px short of the jet - but this port scrolls the whole taller
+ * window in, which carries the first objects right down to the jet.  Bridges,
+ * tanks and shells are left alone (they belong to the road at the start). */
+void entities_clear_near(uint8_t jet_y) BANKED {
+    for (e_i = 0; e_i < MAX_ENTITIES; e_i++) {
+        e_type = ent_type[e_i];
+        if (e_type < ENT_AUX_JET || e_type == ENT_AUX_BRIDGE || e_type >= ENT_AUX_TANK) {
+            continue;
+        }
+        if ((int16_t)ent_y[e_i] + ent_gfx_rows[e_type] + ENT_START_CLEARANCE > (int16_t)jet_y) {
+            ent_type[e_i] = ENTITY_NONE;
+            entity_count--;
+        }
+    }
+}
+
 /* Called by the river generator after every raw row ($AB80). */
 void entities_row(void) BANKED {
     if (player_disable) {
@@ -620,6 +640,17 @@ void entities_row(void) BANKED {
                      river_scrolled;      /* no call between here and the store */
 
         ent_y[e_i] = (dy < 0) ? 0u : (uint8_t)dy;
+    }
+    /* Game start: the river is still scrolling in and will stop after
+     * ENT_WAIT_ROWS rows.  An object that would end up inside the clearance
+     * zone above the jet is never created, so it cannot be seen sliding there
+     * and vanishing when the jet appears (entities_clear_near is only the
+     * safety net for a misjudged prediction). */
+    if (ent_hold && ent_scrolled < ENT_WAIT_ROWS &&
+        (uint16_t)ent_y[e_i] + (ENT_WAIT_ROWS - ent_scrolled) + e_rows + ENT_START_CLEARANCE >
+        (uint16_t)PLAYER_START_Y) {
+        ent_type[e_i] = ENTITY_NONE;
+        return;
     }
     ent_flags[e_i] = (uint8_t)(ENT_F_LATCH | (sp_left ? ENT_F_LEFT : 0u));
     ent_aux[e_i] = 0;
@@ -1341,7 +1372,10 @@ void entities_update(void) BANKED {
     }
 
     ent_frame = (uint8_t)(ent_frame + game_ticks);
-    river_scrolled = 0;                     /* consumed: every entity moved by it above */
+    if (ent_hold) {
+        ent_scrolled += river_scrolled;
+    }
+    river_scrolled = 0;                    /* consumed: every entity moved by it above */
 
     /* Hide sprites freed since the last frame. */
     while (ent_oam_used > e_oam) {

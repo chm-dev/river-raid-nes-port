@@ -365,6 +365,7 @@ static void player_respawn(uint8_t new_game) {
     river_speed = 1u;
     river_vel = RIVER_VEL_CRUISE;
     ent_hold = 1u;                      /* the world waits for the jet */
+    ent_scrolled = 0;
     player_state = PLAYER_STATE_WAIT;
 }
 
@@ -419,6 +420,7 @@ void player_update(void) BANKED {
         }
         river_freeze = 1u;
         player_center();
+        entities_clear_near(player.y);  /* nothing spawns on top of the jet */
         player_state = PLAYER_STATE_READY;
     }
 

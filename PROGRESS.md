@@ -1807,3 +1807,20 @@ gates the wake-ups, tank/shell ticks and `ent_move()` next to `river_freeze`.  A
 (the Atari's attract world moves).  Note level 1 is static in the original (`ent_move` returns for
 `rg_level < 2`), so movement only shows from bridge 2 / start levels 5+.  `tests/nes_hold.mjs`
 (5 checks, with a negative control: hold forced off -> the ship moves 120 -> 160).  RAM 99 free.
+
+### 2026-10-30 - No enemies near the jet at game start (user report, level 50)
+
+**Disassembly answer:** the Atari's spawn block has one start-related rule, `$AC3F`: the slot is
+a blank when `rg_countdown + section_timer >= $12` (game-start defaults sum to exactly `$12`);
+already ported in `sp_choose()`.  The Atari does not need more: its start scroll-in is only
+~80 rows (`$76` counts `$7F -> $2F`), so the first objects stop 45-53 px above the jet
+(probed on all four start levels).  This port scrolls the whole taller window in (**219 rows**,
+measured), which carried the first objects down onto the jet (level 50: a helicopter 20 px away).
+
+Fix: `entities_row()` predicts where an object spawned during the scroll-in would end up
+(`ent_scrolled` counts rows while `ent_hold`; `ENT_WAIT_ROWS` = 222) and does not create it if its
+bottom would be within `ENT_START_CLEARANCE` (48 px) of the jet (`PLAYER_START_Y` 218), so nothing
+is ever seen sliding there and vanishing.  `entities_clear_near()` (called when the jet appears)
+stays as a safety net.  Bridges, tanks and shells are exempt.  `tests/nes_start_clear.mjs` watches
+every other frame of the scroll-in on all four start levels.  RAM 96 bytes free.
+Re-measure `ENT_WAIT_ROWS` (read `ent_scrolled` at READY) if the playfield height or start scroll changes.
