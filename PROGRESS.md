@@ -368,8 +368,8 @@ These are documented in full in `docs/ATARI_RE_SPEC.md`; don't re-derive them.
    (~1.4k + ~1.7k cycles per generated row) is what bounds fast.  MMC3 + cc65 was
    assessed (the `MMC3Template` repo) and rejected as too expensive; it would
    recover the ~5.4k-cycle NMI split spin and add 8 KB WRAM.
-1c. **Player, shot, hit tests and the HUD run at 30 Hz** (steering is 2 px per
-   step, the shot moves 12 px per pass); the 20-case hit-box test guards the
+1c. **Player, shot, hit tests and the HUD run at 30 Hz** (steering runs the
+   Atari's 60 Hz ramp twice per pass, see 2026-10-30 "Narrow gaps"; the shot moves 12 px per pass); the 20-case hit-box test guards the
    boundaries, but a fast shot could in principle skip a very small target.
 1d. **CHR cache overflow at high levels (compact HUD).**  The 250-slot cache must
    hold the uploads of every visible tile row plus the one being uploaded.  From
@@ -1406,6 +1406,31 @@ es_scroll_hud (split 30/31, HUD rows sampled at y 7/13/21,
   lives sprites at y 18) and 
 es_ring_integrity.mjs (default split now 30; 0 of
   18,828 visible-row checks changed) pass.  ROM is 65,552 bytes.
+
+### 2026-10-30 - Narrow gaps (level 50) were impassable (branch main)
+
+Two causes, both found in the Atari code:
+
+- **Steering is a ramp** (`$A455-$A493`): while Left/Right is held `$2B` grows by 8
+  per frame (saturating at 248) and is added to the 8-bit fraction `$58`; every
+  carry/borrow moves the jet 1 px.  From rest: 1 px on frame 1, ~1 px per 8 frames,
+  full 1 px/frame after 31 frames; releasing clears both.  Right also steps on
+  its first frame via `$B9` (previous stick, bit 7 = right not held).  Verified
+  frame by frame against `assets/atari/runtime/play_left` (`$57` 124 -> 111 in 28
+  frames, `$2B`/`$58` identical).  `player_steer_tick()` runs it once per elapsed
+  60 Hz tick.  The port used to move 1 px/frame at once.
+- **The hit box was the 8x14 cell.**  The Atari tests the sprite's lit pixels
+  (P2PF): the straight jet (shape 9) is columns 1..7, both banked jets (7/8)
+  columns 2..6, so a banked jet is 5 px wide.  `player_hits_terrain()` now ORs the
+  shape rows that fall in each 8-row tile row (all 2-3 of them; the old code only
+  probed the first and last row) and tests the min/max lit column.
+- **Tests:** new `nes_steer.mjs` (matches the Atari ramp: dx -13 after 28 frames, tap =
+  1 px, full speed 1 px/frame) and `nes_jet_hitbox.mjs` (survives / crashes at
+  the exact pixel); `nes_gameplay.mjs` re-centres the jet before the crash-sensitive
+  parts.  RAM 83 bytes free (was 96).
+- **Not done:** the ring still samples the river bounds at raw row 3 of each tile row
+  (Known issue 3), so the edge can be off by a few px against the true per-scanline
+  edge.  If a gap is still tight, store per-scanline bounds or sample the jet's rows.
 
 ### 2026-10-30 - Hitboxes lagged the sprites (branch main)
 

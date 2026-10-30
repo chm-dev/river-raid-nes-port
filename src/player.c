@@ -162,29 +162,116 @@ void player_init_graphics(void) BANKED {
  * under its nose and tail.  Rows whose bounds are 0/0 are the empty black
  * world at game start and never collide.
  */
+/* Does the lit part of the current jet shape (rows pl_first..pl_last, ORed into
+ * pl_bits) overlap land on the tile row `pl_slot`?  The Atari tests the sprite's
+ * own pixels (P2PF), not its 8-px cell: the straight jet is columns 1..7 and
+ * both banked jets columns 2..6, so a gap that fits the banked jet is passable. */
+static uint8_t pl_bits;
+static uint8_t pl_cmin;
+static uint8_t pl_cmax;
+static uint8_t pl_shape;
+
+static uint8_t player_slot_hit(uint8_t px) {
+    if (pl_bits == 0u) {
+        return 0;
+    }
+    pl_cmin = 0;
+    while (!(pl_bits & (0x80u >> pl_cmin))) {
+        pl_cmin++;
+    }
+    pl_cmax = 7u;
+    while (!(pl_bits & (0x80u >> pl_cmax))) {
+        pl_cmax--;
+    }
+    /* pl_cmax is the column of the right-most lit pixel; the box is exclusive. */
+    pl_l = (uint8_t)(px + pl_cmin);
+    pl_r = (uint8_t)(px + pl_cmax + 1u);
+    if (river_right_x[pl_slot] == 0u) {
+        return 0;
+    }
+    if (pl_l < river_left_x[pl_slot] || pl_r > river_right_x[pl_slot]) {
+        return 1;
+    }
+    return (river_flags[pl_slot] & RIVER_FLAG_ISLAND) &&
+           river_island_left_x[pl_slot] < river_island_right_x[pl_slot] &&
+           pl_l < river_island_right_x[pl_slot] &&
+           pl_r > river_island_left_x[pl_slot];
+}
+
+/*
+ * Non-zero when the jet's lit pixels overlap land or an island.  Every tile row
+ * the 14 sprite rows touch is tested, each with the union of the shape rows that
+ * fall in it.  Rows whose bounds are 0/0 are the empty black world at game start
+ * and never collide.
+ */
 static uint8_t player_hits_terrain(void) {
     uint8_t px = (uint8_t)(player.x - SOURCE_X_OFFSET);
+    const uint8_t *shape;
 
-    for (pl_probe = 0; pl_probe < 2u; pl_probe++) {
-        pl_row = (pl_probe == 0u) ? player.y
-                                  : (uint8_t)(player.y + PLAYER_HEIGHT - 1u);
-        pl_slot = river_slot_at_scanline(pl_row);
-        pl_l = river_left_x[pl_slot];
-        pl_r = river_right_x[pl_slot];
-        if (pl_r == 0u) {
-            continue;
+    pl_shape = (player.bank == 1) ? 7u : (player.bank == 2) ? 8u : 9u;
+    shape = atari_player_shape + (uint16_t)pl_shape * ATARI_PLAYER_SHAPE_LEN;
+    pl_bits = 0;
+    pl_slot = river_slot_at_scanline(player.y);
+    for (pl_probe = 0; pl_probe < PLAYER_HEIGHT; pl_probe++) {
+        if (pl_probe != 0u &&
+            !(((uint8_t)playfield_scroll_y + player.y + pl_probe - PLAYFIELD_SCANLINE) & 7u)) {
+            /* The previous tile row ends here. */
+            if (player_slot_hit(px)) {
+                return 1;
+            }
+            pl_bits = 0;
+            pl_slot = river_slot_at_scanline((uint8_t)(player.y + pl_probe));
         }
-        if (px < pl_l || (uint8_t)(px + PLAYER_WIDTH) > pl_r) {
-            return 1;
-        }
-        if ((river_flags[pl_slot] & RIVER_FLAG_ISLAND) &&
-            river_island_left_x[pl_slot] < river_island_right_x[pl_slot] &&
-            px < river_island_right_x[pl_slot] &&
-            (uint8_t)(px + PLAYER_WIDTH) > river_island_left_x[pl_slot]) {
-            return 1;
+        pl_bits |= shape[pl_probe];
+    }
+    return player_slot_hit(px);
+}
+
+/*
+ * One 60 Hz step of the Atari's steering ($A455-$A493).  Holding a direction
+ * ramps a speed (pl_steer_acc, +8 per frame, $2B) that is added to an 8-bit
+ * fraction (pl_steer_frac, $58); each carry/borrow moves the jet 1 px.  From rest
+ * that is 1 px on the first frame, then one per ~8 frames, reaching 1 px/frame
+ * after 31 frames - so a short tap nudges it by a pixel or two.  Right gets its
+ * first-frame step from the "previous stick had no right" test ($B9 bit 7).
+ * Releasing the stick clears the ramp.  Both directions: right wins ($A473).
+ */
+static uint8_t pl_steer_acc;
+static uint8_t pl_steer_frac;
+static uint8_t pl_prev_right;
+static uint8_t pl_step_px;
+static uint16_t pl_steer_sum;
+
+static void player_steer_tick(void) {
+    if (!(pl_pad & (J_LEFT | J_RIGHT))) {
+        pl_steer_acc = 0;
+        pl_steer_frac = 0;
+        return;
+    }
+    if (pl_steer_acc >= 248u) {
+        pl_step_px = 1u;
+    } else {
+        pl_steer_acc = (uint8_t)(pl_steer_acc + 8u);
+        if (pl_pad & J_RIGHT) {
+            pl_steer_sum = (uint16_t)(pl_prev_right ? pl_steer_frac : 0xFFu) +
+                           pl_steer_acc;
+            pl_steer_frac = (uint8_t)pl_steer_sum;
+            pl_step_px = (uint8_t)(pl_steer_sum >> 8);
+        } else {
+            pl_step_px = (pl_steer_frac < pl_steer_acc);
+            pl_steer_frac = (uint8_t)(pl_steer_frac - pl_steer_acc);
         }
     }
-    return 0;
+    if (!pl_step_px) {
+        return;
+    }
+    if (pl_pad & J_RIGHT) {
+        if (player.x < PLAYER_X_MAX) {
+            player.x++;
+        }
+    } else if (player.x > PLAYER_X_MIN) {
+        player.x--;
+    }
 }
 
 static void player_show(uint8_t tile) {
@@ -366,6 +453,8 @@ static void player_respawn(uint8_t new_game) {
     river_vel = RIVER_VEL_CRUISE;
     ent_hold = 1u;                      /* the world waits for the jet */
     ent_scrolled = 0;
+    pl_steer_acc = 0;
+    pl_steer_frac = 0;
     player_state = PLAYER_STATE_WAIT;
 }
 
@@ -463,18 +552,15 @@ void player_update(void) BANKED {
 
     /* Steering and banking. */
     player.bank = PLAYER_BANK_NONE;
-    if (pl_pad & J_LEFT) {
-        if (player.x > PLAYER_X_MIN) {
-            player.x = (player.x - PLAYER_X_MIN > pl_ticks)
-                ? (uint8_t)(player.x - pl_ticks) : PLAYER_X_MIN;
-        }
-        player.bank = 1;
-    } else if (pl_pad & J_RIGHT) {
-        if (player.x < PLAYER_X_MAX) {
-            player.x = (PLAYER_X_MAX - player.x > pl_ticks)
-                ? (uint8_t)(player.x + pl_ticks) : PLAYER_X_MAX;
-        }
+    if (pl_pad & J_RIGHT) {
         player.bank = 2;
+    } else if (pl_pad & J_LEFT) {
+        player.bank = 1;
+    }
+    pl_prev_right = (uint8_t)(player_prev_pad & J_RIGHT);
+    for (pl_i = 0; pl_i < pl_ticks; pl_i++) {
+        player_steer_tick();
+        pl_prev_right = (uint8_t)(pl_pad & J_RIGHT);
     }
 
     /* Throttle: down = slow, up = fast, otherwise cruise. */

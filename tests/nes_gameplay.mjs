@@ -74,6 +74,20 @@ try {
 
     // Refuel: a depot on the jet adds 2 units per frame (original $A40A).
     await step(6);
+    // Steering is slow (the Atari ramp), so where the jet ends up depends on the
+    // river: put it mid-water before the real crash test is switched on.
+    {
+        const y = (await jet()).y;
+        const sc = (await readBytes(S('playfield_scroll_y'), 1))[0];
+        const L = await readBytes(S('river_left_x'), 30);
+        const R = await readBytes(S('river_right_x'), 30);
+        let lo = 0, hi = 255;
+        for (const yy of [y, y + 13]) {
+            const slot = (((sc + yy - 30) % 240) >> 3);
+            lo = Math.max(lo, L[slot]); hi = Math.min(hi, R[slot]);
+        }
+        await writeBytes(S('player'), [32 + ((lo + hi) >> 1) - 4]);
+    }
     await setU8('player_invuln', 0);
     await clearEntities();
     const j = await jet();
