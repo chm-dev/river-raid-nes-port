@@ -41,6 +41,7 @@ uint8_t player_invuln;
 #define PLAYER_STATE_OVER       2u
 #define PLAYER_STATE_WAIT       3u      /* game start: river still scrolling in */
 #define PLAYER_STATE_READY      4u      /* jet shown, river stopped until input */
+#define PLAYER_STATE_ATTRACT    5u      /* no jet; the river scrolls, the menu is live */
 #define PLAYER_START_INPUT      (J_A | J_LEFT | J_RIGHT | J_UP | J_DOWN)
 
 #define PLAYER_SHOT_SLOT        47u
@@ -74,6 +75,20 @@ static uint8_t player_fuel_tick;
 static uint8_t player_prev_pad;
 static uint8_t pl_step;
 
+/* Game selection and the two-player state.  Like the Atari ($09 / $77, and the
+ * $6B-$75 mirror swapped by $B247) the idle player's state is kept aside and
+ * exchanged after every death.  pl_other: score[3], lives, bridge, then
+ * river_swap_checkpoint()'s level + 4 seeds. */
+static uint8_t pl_two;                  /* 1 = two players alternating */
+static uint8_t pl_cur;                  /* active player (joypad index) */
+static uint8_t pl_other[10];
+static uint8_t pl_hi[4][3];             /* hi-score per start level */
+static uint8_t pl_hi_idx;               /* start level hud_hi_bcd belongs to */
+static joypads_t pl_pads;
+static uint8_t pl_new;
+static uint8_t pl_i;
+static uint8_t pl_t;
+
 /* File-scope scratch (SDCC aliases block locals across calls). */
 static uint8_t pl_ticks;
 static uint8_t pl_pad;
@@ -96,12 +111,19 @@ void player_init(void) BANKED {
     player.fuel_lo = 0xFF;
     /* Like the Atari, the jet only appears once the river has scrolled in
      * to the bottom of the screen; then everything waits for input. */
-    player_state = PLAYER_STATE_WAIT;
+    player_state = PLAYER_STATE_ATTRACT;
+    player.alive = 0;
     player_timer = 0;
     player_fuel_tick = 0;
-    player_prev_pad = 0;
+    player_prev_pad = 0xFFu;            /* a button held at boot is not a press */
     river_speed = 1u;
     river_vel = RIVER_VEL_CRUISE;
+    joypad_init(2u, &pl_pads);
+    pl_two = 0;
+    pl_cur = 0;
+    pl_hi_idx = river_variant;
+    hud_game = 1u;
+    hud_lives = 0;
 }
 
 static void player_load_shape(uint8_t first_tile, uint8_t shape) {
@@ -250,7 +272,62 @@ static void player_crash(void) {
         hud_lives--;
     }
     player_timer = PLAYER_DEAD_FRAMES;
-    player_state = (hud_lives == 0u) ? PLAYER_STATE_OVER : PLAYER_STATE_DEAD;
+    player_state = (hud_lives == 0u && !(pl_two && pl_other[3] != 0u))
+        ? PLAYER_STATE_OVER : PLAYER_STATE_DEAD;
+}
+
+/* $B247: exchange the active player's score/lives/bridge/checkpoint with the
+ * idle player's. */
+static void player_swap_players(void) {
+    for (pl_i = 0; pl_i < 3u; pl_i++) {
+        pl_t = hud_score_bcd[pl_i];
+        hud_score_bcd[pl_i] = pl_other[pl_i];
+        pl_other[pl_i] = pl_t;
+    }
+    pl_t = hud_lives;
+    hud_lives = pl_other[3];
+    pl_other[3] = pl_t;
+    pl_t = hud_bridge;
+    hud_bridge = pl_other[4];
+    pl_other[4] = pl_t;
+    river_swap_checkpoint(&pl_other[5]);
+    pl_cur ^= 1u;
+}
+
+static void player_show_game(void) {
+    hud_game = (uint8_t)(1u + (river_variant << 1) + pl_two);
+}
+
+/* Back to the attract screen on start level `variant`: a fresh river with no
+ * jet, a blank scoreboard and the hi-score of that level.  The jet is gone and
+ * the menu (Up/Down = start level, SELECT = 1P/2P, START) is live. */
+static void player_attract(uint8_t variant) {
+    pl_hi[pl_hi_idx][0] = hud_hi_bcd[0];
+    pl_hi[pl_hi_idx][1] = hud_hi_bcd[1];
+    pl_hi[pl_hi_idx][2] = hud_hi_bcd[2];
+    player_kill_shot();
+    entities_clear();
+    hide_sprite(PLAYER_SPRITE_TOP);
+    hide_sprite(PLAYER_SPRITE_BOTTOM);
+    sound_set_engine(SOUND_ENGINE_OFF);
+    DISPLAY_OFF;
+    hud_bridge = river_init(variant);
+    DISPLAY_ON;
+    pl_hi_idx = river_variant;
+    hud_hi_bcd[0] = pl_hi[pl_hi_idx][0];
+    hud_hi_bcd[1] = pl_hi[pl_hi_idx][1];
+    hud_hi_bcd[2] = pl_hi[pl_hi_idx][2];
+    hud_score_bcd[0] = 0;
+    hud_score_bcd[1] = 0;
+    hud_score_bcd[2] = 0;
+    hud_lives = 0;
+    hud_fuel = 255u;
+    pl_cur = 0;
+    player.alive = 0;
+    river_speed = 1u;
+    river_vel = RIVER_VEL_CRUISE;
+    player_show_game();
+    player_state = PLAYER_STATE_ATTRACT;
 }
 
 /* Put the jet at the centre of the river under it. */
@@ -276,8 +353,7 @@ static void player_respawn(uint8_t new_game) {
     player_kill_shot();
     DISPLAY_OFF;
     if (new_game) {
-        hud_bridge = 1u;
-        river_init();
+        hud_bridge = river_init(river_variant);
     } else {
         river_restart(hud_bridge);
     }
@@ -305,6 +381,37 @@ void player_update(void) BANKED {
         return;
     }
 
+    if (player_state == PLAYER_STATE_ATTRACT) {
+        pl_pad = joypad();
+        pl_new = (uint8_t)(pl_pad & ~player_prev_pad);
+        player_prev_pad = pl_pad;
+        if (pl_new & J_START) {
+            /* New game: the other player (if any) starts on the same level. */
+            hud_lives = 3u;
+            pl_cur = 0;
+            pl_other[0] = 0;
+            pl_other[1] = 0;
+            pl_other[2] = 0;
+            pl_other[3] = 3u;
+            pl_other[4] = atari_level_descriptors[river_variant * 6u + 4u];
+            pl_other[5] = pl_other[4];                  /* level */
+            pl_other[6] = atari_level_descriptors[river_variant * 6u + 0u];
+            pl_other[7] = atari_level_descriptors[river_variant * 6u + 1u];
+            pl_other[8] = atari_level_descriptors[river_variant * 6u + 2u];
+            pl_other[9] = atari_level_descriptors[river_variant * 6u + 3u];
+            sound_play_blip();
+            player_respawn(1);
+        } else if (pl_new & (J_UP | J_DOWN)) {
+            player_attract((uint8_t)(river_variant + ((pl_new & J_UP) ? 1u : 3u)) & 3u);
+            sound_play_blip();
+        } else if (pl_new & J_SELECT) {
+            pl_two ^= 1u;
+            player_show_game();
+            sound_play_blip();
+        }
+        return;
+    }
+
     if (player_state == PLAYER_STATE_WAIT) {
         if (river_right_x[river_slot_at_scanline(239u)] == 0u) {
             return;
@@ -315,7 +422,12 @@ void player_update(void) BANKED {
     }
 
     pl_ticks = game_ticks;
-    pl_pad = joypad();
+    if (pl_two) {
+        joypad_ex(&pl_pads);
+        pl_pad = pl_pads.joypads[pl_cur];
+    } else {
+        pl_pad = joypad();
+    }
 
     if (player_state == PLAYER_STATE_READY) {
         /* Stopped on the river: the game starts when the player fires or
@@ -334,14 +446,12 @@ void player_update(void) BANKED {
             player_death_anim();
             player_timer = (player_timer > pl_ticks) ? (uint8_t)(player_timer - pl_ticks) : 0u;
         } else if (player_state == PLAYER_STATE_DEAD) {
+            if (pl_two && pl_other[3] != 0u) {
+                player_swap_players();      /* the other player's turn */
+            }
             player_respawn(0);
-        } else if ((pl_pad & J_START) && !(player_prev_pad & J_START)) {
-            hud_lives = 3u;
-            hud_score_bcd[0] = 0;
-            hud_score_bcd[1] = 0;
-            hud_score_bcd[2] = 0;
-            sound_play_blip();
-            player_respawn(1);
+        } else {
+            player_attract(river_variant);  /* game over */
         }
         player_prev_pad = pl_pad;
         return;

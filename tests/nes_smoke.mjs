@@ -26,8 +26,7 @@ import {
     readU16,
     symbolsFromNoi,
     requireSymbol,
-    sleep,
-} from './mcp_client.mjs';
+    sleep, startGame } from './mcp_client.mjs';
 import { readPng, countRow } from './png.mjs';
 
 const ROM = path.resolve('roms/river_raid.nes');
@@ -318,6 +317,11 @@ async function main() {
     await sleep(5000);
 
     // The split is stable; a frozen scroll makes the 1-pixel check exact.
+    // The cart boots into attract mode (no lives); the lives icons need a game.
+    await callTool('mesen_playback', { action: 'pause' });
+    await startGame();
+    await callTool('mesen_playback', { action: 'resume' });
+    await sleep(8000);                  // the new game's river scrolls in again
     await callTool('mesen_playback', { action: 'pause' });
     await sleep(150);
     await callTool('mesen_step', { cpuType: 'Nes', count: 1, stepType: 'PpuFrame' });

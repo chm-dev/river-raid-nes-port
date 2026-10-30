@@ -15,7 +15,7 @@
  * MesenCE-MCP between runs or old scripts keep overwriting the mailbox.
  */
 import path from 'node:path';
-import { init, callTool, readBytes, writeBytes, sleep, symbolsFromNoi, requireSymbol } from './mcp_client.mjs';
+import { init, callTool, readBytes, writeBytes, sleep, symbolsFromNoi, requireSymbol, startGame } from './mcp_client.mjs';
 
 const ROM = path.resolve('roms/river_raid.nes');
 const SYM = symbolsFromNoi(path.resolve('roms/river_raid.noi'));
@@ -100,6 +100,7 @@ async function scenario(name, buttons) {
     await callTool('mesen_load_rom', { filepath: ROM });
     await sleep(1500);
     await callTool('mesen_playback', { action: 'pause' });
+    await startGame();
     await writeBytes(S('player_invuln'), [1]);
     await step(420);
     await callTool('mesen_input_override', { action: 'set', port: 0, buttons: 'A' });

@@ -69,7 +69,7 @@ Full reference: `info/ALTIRRA_BRIDGE_NOTES.md`.
 Full reference: `info/MESEN_MCP_NOTES.md`.
 - **Executable:** `./MesenCE-MCP/MesenCE-MCP-Windows.exe`.
 - **Standard Launch Flags:**
-  `--mcp --mcp-port=9100 --enableStdout --doNotSaveSettings --preferences.pauseWhenInBackground=false --preferences.pauseWhenInMenusAndConfig=false --preferences.disableOsd=true --video.videoFilter=None --nes.region=Ntsc`
+  `--mcp --mcp-port=9100 --enableStdout --doNotSaveSettings --preferences.pauseWhenInBackground=false --preferences.pauseWhenInMenusAndConfig=false --preferences.disableOsd=true --video.videoFilter=None --nes.region=Ntsc --nes.port2.type=NesController` (the last flag only matters for the two-player test, `tests/nes_menu.mjs`)
 - **Critical Rules:**
   - **Handshake:** Send `initialize` (`protocolVersion: "2024-11-05"`) *without* `Mcp-Session-Id`, capture the `Mcp-Session-Id` response header for all subsequent requests, send `notifications/initialized`, and always include `Accept: application/json, text/event-stream`.
   - **Reset Window:** Wait `900–1200 ms` (until `frame=` advances in `mesen_get_status`) after `mesen_load_rom` or `mesen_reset` before calling breakpoints, save-states, or debugger tools.

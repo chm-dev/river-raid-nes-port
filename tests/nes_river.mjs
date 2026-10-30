@@ -24,8 +24,7 @@ import {
     writeBytes,
     symbolsFromNoi,
     requireSymbol,
-    sleep,
-} from './mcp_client.mjs';
+    sleep, startGame } from './mcp_client.mjs';
 
 const ROM = path.resolve('roms/river_raid.nes');
 const NOI = path.resolve('roms/river_raid.noi');
@@ -78,6 +77,7 @@ async function main() {
     await writeBytes(requireSymbol(sym, 'player_disable'), [1]);
     await sleep(1280);
     await callTool('mesen_playback', { action: 'pause' });
+    await startGame();
     await sleep(100);
 
     const scrollAddr = symAddr('playfield_scroll_y');

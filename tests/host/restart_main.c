@@ -23,7 +23,7 @@ int main(void) {
     while (scanf("%u %u %u %u", &level, &f23, &c4c, &e2) == 4) {
         const uint8_t life_bridges = 3;      /* bridge counter when the life started */
 
-        river_init();
+        river_init(0);
         rg_level = (uint8_t)level;
         rg_flags23 = (uint8_t)f23;
         /* $4C bit 2 is the level parity at life start; rg_life keeps it in bit 7. */

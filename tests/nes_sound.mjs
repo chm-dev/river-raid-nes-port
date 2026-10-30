@@ -21,7 +21,7 @@
  * Run:  node tests/nes_sound.mjs [rom] [noi]
  */
 import path from 'node:path';
-import { init, callTool, readBytes, writeBytes, sleep, symbolsFromNoi, requireSymbol } from './mcp_client.mjs';
+import { init, callTool, readBytes, writeBytes, sleep, symbolsFromNoi, requireSymbol, startGame } from './mcp_client.mjs';
 
 const rom = path.resolve(process.argv[2] || 'roms/river_raid.nes');
 const noi = path.resolve(process.argv[3] || 'roms/river_raid.noi');
@@ -86,6 +86,7 @@ try {
     await callTool('mesen_load_rom', { filepath: rom });
     await sleep(1500);
     await callTool('mesen_playback', { action: 'pause' });
+    await startGame();
     await step(5);
     await callTool('mesen_run_lua_script', { code: lua, waitMs: 500, persistent: true });
     await step(415);                    // river scrolled in, jet waiting

@@ -8,7 +8,7 @@
  */
 import path from 'node:path';
 import fs from 'node:fs';
-import { init, callTool, readBytes, readU16, writeBytes, symbolsFromNoi, requireSymbol, sleep } from './mcp_client.mjs';
+import { init, callTool, readBytes, readU16, writeBytes, symbolsFromNoi, requireSymbol, sleep, startGame } from './mcp_client.mjs';
 
 const out = process.argv[2];
 const FRAMES = Number(process.argv[3] || 800);
@@ -20,6 +20,7 @@ await init();
 await callTool('mesen_load_rom', { filepath: path.resolve('roms/river_raid.nes') });
 await sleep(900);
 await callTool('mesen_playback', { action: 'pause' });
+await startGame();
 await sleep(100);
 
 const rows = {};

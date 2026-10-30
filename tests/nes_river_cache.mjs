@@ -22,8 +22,7 @@ import {
     writeBytes,
     symbolsFromNoi,
     requireSymbol,
-    sleep,
-} from './mcp_client.mjs';
+    sleep, startGame } from './mcp_client.mjs';
 
 const ROM = path.resolve('roms/river_raid.nes');
 const NOI = path.resolve('roms/river_raid.noi');
@@ -57,6 +56,7 @@ async function main() {
     await callTool('mesen_load_rom', { filepath: ROM });
     await sleep(900);
     await callTool('mesen_playback', { action: 'pause' });
+    await startGame();
     await sleep(100);
 
     let checkedRows = 0;

@@ -504,10 +504,13 @@ These are documented in full in `docs/ATARI_RE_SPEC.md`; don't re-derive them.
      table (`$B4C0`) *is* ported - it turned out to be the enemy shell, driven by
      the tank, not an enemy shot path gated by `$41` (verified live: firing the
      player's gun sets `$7D` only, never `$50`).
-2. **Game states (open):** title/attract, SELECT game variations.  START / game-over / respawn
+2. **Game states (DONE 2026-10-30, see the last Session log entry):** attract + start-level select + 1P/2P.  Old text: START / game-over / respawn
    already work in `player_update()` (WAIT -> READY -> PLAY -> DEAD/OVER; START after game over
    restarts), but there is no title screen, no attract mode and no game selection.
    `sound_play_blip()` is ready for the menu.
+   **Atari ground truth for this item (2026-10-30, see the last Session log entry):** no title
+   screen and no autopilot; attract is the river scrolling with objects, no jet, HUD with
+   `P1 0`, `HI`, `BRIDGE 1`, `GAME n`; SELECT steps `$09` 0..7 (game 1..8); START plays.
 3. **Budget:** internal RAM has **140 bytes free** (2026-10-30: the HUD/player boot-time tile buffers
    now alias `river_tile_pat`, see `river.h`; do not call `hud_init_graphics`/`player_init_graphics`
    after `river_init()` without that in mind), the fixed bank ~2.9 KB, bank 1 ~3 KB.
@@ -1713,3 +1716,84 @@ tank note repeats at 223 (499 Hz) and 111 when full and stops after leaving, the
 shell chirp covers the whole `$B4C0` table, the fireball adds noise at volume 12,
 and the engine walks 13 -> 12 -> 11 while gliding.  Smoke, gameplay, entity-hits
 pass.  RAM 140 bytes free, ROM 65,552 bytes.
+
+### 2026-10-30 - Phase 6: attract / SELECT / START read off the Atari (no code yet)
+
+Disassembly (`$A15D-$A1F5`, `$A675-$A6DC`) plus a live Altirra probe (clean boot, no
+input, then SELECT x3, SELECT held, START):
+
+- **There is no title screen and no demo autopilot.**  The joystick `$19` is always read
+  from PORTA (`$A31A`).  Boot goes straight to attract: `$29` bit 7 = 1, `$76 = $FF`
+  (throttle stopped), the river scrolls with objects, **no player jet**, lives `$6A = 4`
+  shown as planes, HUD `P1 0 / HI 0 / BRIDGE 1 / GAME 1`.  The low bits of `$29` count up
+  slowly (`$81 -> $86` in ~1200 frames, `$B3DF`) and `$78` blanks the screen after a
+  long idle (`$B3F6`, GRACTL/DMACTL off: the screen-saver).
+- **SELECT** (`CONSOL` bit 1 low): `$25` is a repeat delay.  Press -> `$09 = ($09+1)&7`,
+  `$102B` shows digit `$D1+$09`, **score/lives/bridge cleared** (`$6A = 0` shows no
+  planes), `$29 = 0`, `$C6 = 2` blip; the first repeat is `$1E` frames, then `$25` reloads.
+  Probe: `$09` 0 -> 1 -> 2 -> 3, held for 100 frames reached 7 and wrapped.
+- **START** (bit 0 low, `$A675`): `$C6 = 2` blip, `$29 = 0`, `$2A = 0`, `$77 = $09 & 1`
+  (odd game numbers = the second controller/P2 variant: HUD shows `P2`, `PORTA >> 4`),
+  then restarts via `$A15D` (lives `$6A = 4` reloaded, so 3 spare, score cleared, throttle
+  ramps `$76 = $5B..`).  Game `$09 >> 1` picks the level-descriptor pair (spec line 67).
+- Screenshots of the two states are in the session scratchpad only; `GAME 8` showed `P2`,
+  bridge 50 (`$09 = 7` starts at a later bridge/skill).
+
+Plan: add `GAME_ATTRACT` state to `player.c` (jet hidden, `river_freeze = 0`, scroll at
+cruise, entities live), a `game_select` byte (0..7) with a 30-frame repeat, HUD game digit
+from it, START -> `player_respawn(1)`; boot straight to attract.  Still to read off the
+Atari: what `$09 >> 1` changes in the river/object tables, and what the `P2` game does.
+
+### 2026-10-30 - Phase 6: game variants and two-player rules (decoded, user decision recorded)
+
+Correction to the entry above: displayed GAME n = `$09 + 1`.  **Even `$09` (GAME 1/3/5/7) is
+one player; odd `$09` (GAME 2/4/6/8) is two players alternating** (`$77 = $09 & 1`).
+
+- `$09 >> 1` picks a 6-byte row of `atari_level_descriptors` (`$B494..$B4A8`): LFSR seed
+  `$66-$68`, `rg_left` seed `$69` (`$20`/`$21`), start level `$60` = **1 / 5 / 20 / 50**
+  (binary) and the BCD bridge number `$62`.  `river_start(0)` currently always uses row 0
+  and `river_defaults[5]` for `rg_left` - it must index the row and take byte 3 from it.
+- Hi-scores are per variant pair (`$80 + 4*($09>>1)`, compared at `$B261`).
+- 2P: `$B247` swaps the 11 bytes `$60-$6A` (level, bridge, score, seeds, lives) with
+  `$6B-$75` and toggles `$77` (selects stick/trigger 2).  **Probe (GAME 2):** P1 flies
+  first with lives 3 / other 4; on each death the blocks swap and the other player
+  continues with their own lives/river; the HUD label at `$100B` changes (`$4F` shows the
+  second player), and `$59` is `$80` in attract for variants < 4 and `$FE` otherwise.
+- **User decision:** *starting level change is mapped to D-pad Up/Down in attract and
+  pre-game mode* (cycles the four start levels 1/5/20/50).  SELECT toggles 1P/2P.
+  START begins.
+- Risks noted: games 3-8 start at level 5/20/50, so the CHR-cache overflow (Known issue
+  1d) is reachable from the first screen - re-run `nes_ring_integrity` and `host_river`
+  from those seeds.  Booting into attract changes every test's setup (they must press
+  START first); keep variant 0's river identical to today's boot so `nes_river` holds.
+
+### 2026-10-30 - Phase 6: attract mode, start-level select, two players (implemented)
+
+- **Boot goes to attract** (`PLAYER_STATE_ATTRACT`): river scrolls, entities live, no jet, no
+  lives, HUD `GAME 1`.  **D-pad Up/Down = start level** (user request): wraps through
+  bridge 1 / 5 / 20 / 50 (`river_variant` 0..3, a row of `atari_level_descriptors`: LFSR
+  seed, `rg_left`, level), re-initialising the river each press.  **SELECT = 1P/2P**
+  (`GAME n = 1 + 2*variant + two`).  **START** begins with 3 lives and `hud_bridge` = the start
+  bridge.  `river_init(variant)` now returns the start bridge and takes `rg_left` from the row
+  (the old code used `river_defaults[5]` = `$20`, wrong for variants 1/3 = `$21`).
+- **Game over returns to attract** (was: wait for START); START there starts a new game.
+- **Hi-score per start level** (`pl_hi[4][3]`, saved/loaded on every change of variant).
+- **Two players alternate** like `$B247`: `pl_other[10]` holds the idle player's score/lives/
+  bridge plus `river_swap_checkpoint()`'s level and 4 seeds; every death swaps, a player with
+  no lives is skipped, the game ends when both are out.  **Player 2 flies on controller 2**
+  (`joypad_ex`), as the Atari's `$77` selects stick/trigger 2.
+- RAM 100 bytes free (was 140: `pl_other` 10, `pl_hi` 12, `pl_pads` 5, scratch), ROM 65,552,
+  `_XINIT` ends `$FB03`.
+- **Tests:** `tests/nes_menu.mjs` (new, 15 checks: boot state, Up/Down/SELECT, START, 2P swap,
+  port-1 input).  Every other suite now calls `startGame()` (`mcp_client.mjs`: START on port 0)
+  after pausing, because the cart no longer boots into play; `nes_smoke` starts a game before
+  the screenshot (lives icons).  **Launch Mesen with `--nes.port2.type=NesController`** or port
+  1 input is ignored (2P test).  All of `nes_smoke`, `nes_scroll_hud`, `nes_gameplay`,
+  `nes_entity_hits` (20/20), `nes_sound`, `nes_respawn`, `nes_river` (383/383),
+  `nes_river_cache`, `nes_sprite_lock`, `nes_menu` pass; `host_river` (19,999 rows) and
+  `host_restart` (16/16) pass.
+- **Not done / open:** the HUD still says `P1` while player 2 flies (the Atari shows the
+  second player's label via `$4F`); the idle player's score is not shown in the HI field in 2P;
+  the attract screen-saver blank (`$78`) and the `$59` attract speed are not ported; levels 5/20/50
+  starts were not checked against the model or `nes_ring_integrity` (CHR-cache overflow, Known
+  issue 1d, is reachable from the first screen there).

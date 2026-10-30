@@ -28,6 +28,7 @@ import {
     symbolsFromNoi,
     requireSymbol,
     sleep,
+    startGame,
 } from './mcp_client.mjs';
 import { readPng } from './png.mjs';
 
@@ -181,6 +182,7 @@ async function main() {
     // 3. Exact 1-pixel shift: freeze the scroll, capture 100 and 101
     // ---------------------------------------------------------------------
     await callTool('mesen_playback', { action: 'pause' });
+    await startGame();
     await sleep(150);
     await writeBytes(freezeAddr, [1]);
 

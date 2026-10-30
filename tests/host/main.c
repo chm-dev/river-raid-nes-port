@@ -14,7 +14,7 @@ extern uint8_t river_raw_row[49];
 extern volatile uint8_t river_debug_state[16];
 int main(int argc,char**argv){
   int rows = argc>1? atoi(argv[1]) : 1000;
-  river_init();
+  river_init(0);
   uint16_t last = river_distance;
   int guard=0;
   while ((int)river_distance < rows && guard < rows*9+100) {

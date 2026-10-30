@@ -10,7 +10,7 @@
  *       (defaults: roms/river_raid.nes and its .noi, cruise)
  */
 import path from 'node:path';
-import { init, callTool, readBytes, writeBytes, sleep, symbolsFromNoi, requireSymbol } from './mcp_client.mjs';
+import { init, callTool, readBytes, writeBytes, sleep, symbolsFromNoi, requireSymbol, startGame } from './mcp_client.mjs';
 
 const rom = path.resolve(process.argv[2] || 'roms/river_raid.nes');
 const noi = path.resolve(process.argv[3] || 'roms/river_raid.noi');
@@ -25,6 +25,7 @@ await init();
 await callTool('mesen_load_rom', { filepath: rom });
 await sleep(1500);
 await callTool('mesen_playback', { action: 'pause' });
+await startGame();
 await writeBytes(S('player_invuln'), [1]);
 await step(420);
 await callTool('mesen_input_override', { action: 'set', port: 0, buttons: 'A' });

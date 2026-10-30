@@ -67,6 +67,7 @@ uint8_t rg_island_width;          /* $5F */
 uint8_t rg_margin;                /* $2C */
 uint8_t rg_margin_flag;           /* $052D */
 uint8_t rg_level;                 /* $60 */
+uint8_t river_variant;            /* start-level row of atari_level_descriptors (0..3) */
 uint8_t rg_flags23;               /* $23 */
 uint8_t rg_lfsr_a;                /* $AA */
 uint8_t rg_lfsr_b;                /* $AB */
@@ -1726,10 +1727,15 @@ static void river_start(uint8_t restart, uint8_t bridges) {
         rg_lfsr_c = rg_seeds[2];
         rg_left = rg_seeds[3];
     } else {
-        rg_lfsr_a = atari_level_descriptors[0];
-        rg_lfsr_b = atari_level_descriptors[1];
-        rg_lfsr_c = atari_level_descriptors[2];
-        rg_level = atari_level_descriptors[4];
+        /* One 6-byte row per start level ($B494..$B4A8): LFSR seed, rg_left,
+         * level.  Row 0 is the level-1 start the generator was validated on. */
+        const uint8_t *row = atari_level_descriptors + (uint8_t)(river_variant * 6u);
+
+        rg_lfsr_a = row[0];
+        rg_lfsr_b = row[1];
+        rg_lfsr_c = row[2];
+        rg_left = row[3];
+        rg_level = row[4];
         rg_seeds[0] = rg_lfsr_a;
         rg_seeds[1] = rg_lfsr_b;
         rg_seeds[2] = rg_lfsr_c;
@@ -1817,8 +1823,26 @@ static void river_start(uint8_t restart, uint8_t bridges) {
 #endif
 }
 
-void river_init(void) {
-    river_start(0, 1u);
+/* variant: 0..3 = start level 1/5/20/50.  Returns the start bridge number. */
+uint8_t river_init(uint8_t variant) {
+    river_variant = variant & 3u;
+    river_start(0, atari_level_descriptors[river_variant * 6u + 4u]);
+    return atari_level_descriptors[river_variant * 6u + 4u];
+}
+
+/* Two-player games: exchange the generator's per-player part of $60-$69
+ * (level and the LFSR/left checkpoint) with blk[0..4] ($B247). */
+void river_swap_checkpoint(uint8_t *blk) {
+    uint8_t t = rg_level;
+    uint8_t i;
+
+    rg_level = blk[0];
+    blk[0] = t;
+    for (i = 0; i < 4u; i++) {   /* no calls inside: nothing to alias */
+        t = rg_seeds[i];
+        rg_seeds[i] = blk[1u + i];
+        blk[1u + i] = t;
+    }
 }
 
 /* The jet was lost: pick the checkpoint like $B1C0 and restart the river

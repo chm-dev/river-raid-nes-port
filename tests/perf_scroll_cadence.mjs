@@ -10,7 +10,7 @@
  * Run:  node tests/perf_scroll_cadence.mjs     (MesenCE-MCP already running)
  */
 import path from 'node:path';
-import { init, callTool, readBytes, writeBytes, sleep, symbolsFromNoi, requireSymbol } from './mcp_client.mjs';
+import { init, callTool, readBytes, writeBytes, sleep, symbolsFromNoi, requireSymbol, startGame } from './mcp_client.mjs';
 
 const ROM = path.resolve('roms/river_raid.nes');
 const BASE = 0x300, LEN = 0x500;
@@ -36,6 +36,7 @@ async function scenario(name, buttons, n) {
     await callTool('mesen_load_rom', { filepath: ROM });
     await sleep(1500);
     await callTool('mesen_playback', { action: 'pause' });
+    await startGame();
     await writeBytes(S('player_invuln'), [1]);                 // player_invuln
     await frames(420, null);                      // river fills, jet READY
     await writeBytes(S('player_invuln'), [1]);

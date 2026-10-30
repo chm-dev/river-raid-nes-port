@@ -87,7 +87,7 @@ void main(void) {
     hud_init_graphics();
     player_init_graphics();
     entities_init_graphics();
-    river_init();
+    river_init(0);
 
     player_init();
     entities_init();

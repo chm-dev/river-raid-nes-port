@@ -139,3 +139,14 @@ export function requireSymbol(symbols, name) {
     }
     return value;
 }
+
+/* The cart boots into attract mode (no jet, no lives).  Tests that need a game
+ * call this right after pausing: it presses START on port 0 and releases it. */
+export async function startGame() {
+    const step = async n => { for (let i = 0; i < n; i++) await callTool('mesen_step', { cpuType: 'Nes', count: 1, stepType: 'PpuFrame' }); };
+    await step(60);
+    await callTool('mesen_input_override', { action: 'set', port: 0, buttons: 'Start' });
+    await step(8);
+    await callTool('mesen_input_override', { action: 'set', port: 0, buttons: '' });
+    await step(2);
+}

@@ -90,7 +90,13 @@ extern uint8_t game_ticks;
  * (36..239). */
 uint8_t river_slot_at_scanline(uint8_t scanline);
 
-void river_init(void);
+/* Start the river for a new game at start level variant (0..3 = bridge
+ * 1/5/20/50, a row of atari_level_descriptors); returns the start bridge. */
+uint8_t river_init(uint8_t variant);
+extern uint8_t river_variant;
+
+/* 2P: swap rg_level + the 4 checkpoint seeds with blk[0..4]. */
+void river_swap_checkpoint(uint8_t *blk);
 
 /* The jet was lost: restart the river at the last cleared bridge (the
  * generator checkpoint, see river.c).  bridges is the HUD bridge counter. */
