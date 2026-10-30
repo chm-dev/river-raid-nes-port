@@ -1379,3 +1379,20 @@ river from a checkpoint; the port now does the same.
   (no flip), after shooting one and while crashing into one (`$A3F4` also counts a
   crash into a bridge as cleared).  The port's spawner uses its own RNG, not the
   generator LFSR, so objects after a restart differ from the Atari's.
+
+### 2026-10-30 - Fuel rates checked against the disassembly (branch main)
+
+Open item "fuel rate / 16-bit gauge" traced from `$A3E9-$A453` (no Altirra run).
+
+- **Gauge:** 16-bit `$5B:$5C`, start `$FFFF`; the marker is `HPOSM1 = $5C + ($5B >> 3)` (`$B527`).
+- **Consumption:** every normal frame `$A43F` does `$5C -= $20`, borrow into `$5B`, so one
+  high-byte unit per 8 frames.  Empty (`$5B == 0`, `$A44A`) crashes via `$B1C0`.  The port's
+  `PLAYER_FUEL_FRAMES = 8` already matched.
+- **Refuel:** on a type >= `$0F` hit `$A40A` runs `lda $5B / adc #1` with carry set by the
+  preceding `cmp #$0E`, i.e. **+2 per frame**, saturating at `$FFFF` (`$A412`).  The port added
+  3 per 30 Hz pass (1.5/frame); it is now `PLAYER_REFUEL_RATE (2) * pl_ticks`.  The low byte
+  is not refilled until saturation, as in the original.
+- **Assumption, untraced:** that `$A3E9` runs once per game frame.  Confirm with an Altirra
+  breakpoint on `$A43F` if the fuel pace ever feels off.  PAL `$BF` only moves the bar's PMG
+  rows on the Atari, so it has no NES counterpart.
+- ROM 65,552 bytes, RAM now 0 bytes free.  Not run: Mesen suites (no test covers refuelling).

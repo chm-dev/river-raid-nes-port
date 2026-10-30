@@ -45,7 +45,7 @@ uint8_t player_invuln;
 #define PLAYER_SHOT_SLOT        47u
 #define PLAYER_SHOT_SPEED       6u
 #define PLAYER_SHOT_WIDTH       2u
-#define PLAYER_REFUEL_RATE      3u      /* fuel units per frame on a depot */
+#define PLAYER_REFUEL_RATE      2u      /* fuel units per frame on a depot ($A40A: $5B += 2) */
 #define PLAYER_DEATH_STEPS      5u      /* debris shapes 6..2, 8 frames each */
 /* Shapes 2..6, 2 tiles each, right after the entity tiles (entities.c puts
  * them at SPRITE_TILE_BASE + 24). */
@@ -380,8 +380,9 @@ void player_update(void) BANKED {
 
     pl_hit = entities_check_player(player.x, player.y);
     if (pl_hit == ENT_HIT_FUEL) {
-        hud_fuel = (hud_fuel > (uint8_t)(255u - PLAYER_REFUEL_RATE))
-            ? 255u : (uint8_t)(hud_fuel + PLAYER_REFUEL_RATE);
+        /* The pass covers pl_ticks frames; the Atari adds per frame. */
+        hud_fuel = (hud_fuel > (uint8_t)(255u - PLAYER_REFUEL_RATE * pl_ticks))
+            ? 255u : (uint8_t)(hud_fuel + PLAYER_REFUEL_RATE * pl_ticks);
     }
 
     if (player_invuln) {
