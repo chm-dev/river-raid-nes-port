@@ -39,6 +39,7 @@
 #include "config.h"
 #include "atari_data.h"
 #include "hud.h"
+#include "river.h"
 
 volatile uint8_t playfield_scroll_y;
 
@@ -94,12 +95,11 @@ static const uint8_t fuel_bar_x[16] = {
     111, 115, 120, 124, 129, 133, 137, 142
 };
 
-/* Scratch tile buffer for doubled glyphs (2 tiles) and gauge sprites. */
-static uint8_t wide_tile_buf[2 * 16];
-static uint8_t gauge_sprite_buf[4 * 16];
-
-/* Scratch row shared by text and dynamic field drawing.  BSS, not the stack. */
-static uint8_t hud_row_buf[SCREEN_TILES_W];
+/* Scratch tile buffers for doubled glyphs (2 tiles) and gauge sprites.  They
+ * are only used while the graphics are loaded at boot, before river_init(),
+ * so they borrow the river's pattern scratch instead of costing RAM. */
+#define wide_tile_buf       (river_tile_pat)
+#define gauge_sprite_buf    (river_tile_pat + 2 * 16)
 
 /* Cached values; hud_update() writes a field only when it differs. */
 static uint8_t shown_score[6];

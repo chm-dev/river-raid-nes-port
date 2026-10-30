@@ -23,6 +23,11 @@
 #define RIVER_TILE_COLS         24u
 #define RIVER_LEFT_COL          4u
 
+/* Pattern scratch of the pending tile row.  Before river_init() the HUD,
+ * player and entity code borrow it to expand their CHR tiles (boot-time only;
+ * the river owns it from river_init() on). */
+extern uint8_t river_tile_pat[RIVER_TILE_COLS * 16];
+
 #define RIVER_FLAG_BRIDGE       0x01u
 #define RIVER_FLAG_ISLAND       0x02u
 #define RIVER_FLAG_FEATURE      0x04u

@@ -65,7 +65,7 @@ static const palette_color_t player_palette[4] = {
 
 /* Two 8x8 sprite tiles in GBDK's interleaved 2bpp format; the 14-row
  * Atari shapes become two stacked tiles. */
-static uint8_t player_tile_buf[32];
+#define player_tile_buf     (river_tile_pat)   /* boot-time scratch, see river.h */
 
 static uint8_t player_state;
 static uint8_t player_timer;

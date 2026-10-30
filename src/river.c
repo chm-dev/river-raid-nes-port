@@ -34,7 +34,7 @@
 uint8_t river_raw_row[49];
 
 /* Interleaved 2bpp patterns for the 20 tiles of the pending tile row. */
-static uint8_t river_tile_pat[RIVER_TILE_COLS * 16];
+uint8_t river_tile_pat[RIVER_TILE_COLS * 16];
 
 /* Chosen tile ID for each column of the pending row (dedupe scratch). */
 static uint8_t river_row_ids[RIVER_TILE_COLS];
