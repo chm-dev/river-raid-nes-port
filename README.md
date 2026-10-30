@@ -1,6 +1,6 @@
 # River Raid Atari 8bit to NES port
 
-No source code. Reverse engineered from xex binary and ported to nes with gbdk by DeepSeek v4.1 FLASH
+No source code. Reverse engineered from xex binary and ported to nes with gbdk by DeepSeek v4.1 FLASH and Sonnet 5.5
 
 WIP.
 
