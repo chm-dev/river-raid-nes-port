@@ -1255,7 +1255,7 @@ static uint8_t river_put(void) { return 1u; }
  * scroll keeps moving meanwhile because the generator runs ahead of the
  * display (see river_owed).
  */
-#define RIVER_JOB_COLS  12u   /* columns classified per pass, at most */
+#define RIVER_JOB_COLS  24u   /* columns classified per pass, at most */
 
 static uint8_t river_black_rows;      /* ring slots still holding black */
 
