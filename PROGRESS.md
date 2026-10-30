@@ -1,7 +1,7 @@
 # Project Progress & Session Handoff
 
 **Last updated:** 2026-10-30
-**Current phase:** Phase 5 COMPLETE (2026-10-30) — jet, shot, entities, scoring, fuel, bridge/road/tank, respawn-at-bridge (checkpoint rule verified against the real game) and the 30 Hz/60 Hz frame work are done and covered by `nes_gameplay`, `nes_respawn`, `nes_river_cache`, `host_restart.ps1`; Phase 6 in progress: RAM freed (145 B), APU sound re-derived from the Atari and verified (2026-10-30); title/attract and game selection remain
+**Current phase:** Phase 5 COMPLETE (2026-10-30) — jet, shot, entities, scoring, fuel, bridge/road/tank, respawn-at-bridge (checkpoint rule verified against the real game) and the 30 Hz/60 Hz frame work are done and covered by `nes_gameplay`, `nes_respawn`, `nes_river_cache`, `host_restart.ps1`; Phase 6 in progress: APU sound re-derived from the Atari and verified; attract mode, start-level select (Up/Down), 1P/2P alternating play, per-level hi-scores, entity freeze until the player starts and the start clearance around the jet are done (2026-10-30, see the last Session log entries); open: P2 HUD label, high-start-level checks, attract screen-saver (see Next step)
 **Branch note:** all work is on `main`; `experiment/30fps`, `experiment/river60-logic30` and `feature/hud-compact` are fully merged (safe to delete).
 **Phase 1:** COMPLETE (reverse engineering + asset extraction)
 **Phase 2:** COMPLETE (scaffolding, build pipeline, boot ROM, Mesen smoke test)
@@ -61,7 +61,7 @@
 - **Memory layout (fixed bank / bank 1 / RAM):** ROM is 4 x 16 KiB (mapper 30).
   The **fixed bank has ~2.9 KB free** and **bank 1 ~3 KB free** (`hud.c`,
   `entities.c`, `entity_gfx.c`, `player.c` are built with `-Wf-bo1`; their public
-  functions are `BANKED`).  **Internal RAM: 140 bytes free** (2026-10-30 after the
+  functions are `BANKED`).  **Internal RAM: 96 bytes free** (2026-10-30 after the menu/2P state and spawn clearance; 140 after the
   sound rewrite; `build.ps1` throws if `_BSS` passes `$07FF`).  The linker does *not*
   fail when the fixed bank overflows into the vectors at `$FFFA`: the ROM silently
   grows to 128 KiB - always check the `ROM` line of `build.ps1` (must be 65,552).
@@ -511,7 +511,12 @@ These are documented in full in `docs/ATARI_RE_SPEC.md`; don't re-derive them.
    **Atari ground truth for this item (2026-10-30, see the last Session log entry):** no title
    screen and no autopilot; attract is the river scrolling with objects, no jet, HUD with
    `P1 0`, `HI`, `BRIDGE 1`, `GAME n`; SELECT steps `$09` 0..7 (game 1..8); START plays.
-3. **Budget:** internal RAM has **140 bytes free** (2026-10-30: the HUD/player boot-time tile buffers
+   **Still open from this item (priority order):** (a) check start levels 5/20/50 against the
+   model and `nes_ring_integrity` (CHR-cache overflow, Known issue 1d, is reachable from the first
+   screen); (b) HUD label `P2` (Atari `$4F`) while player 2 flies, and the idle player's score in the HI
+   field in 2P; (c) attract screen-saver blank (`$78`) and the attract scroll speed (`$59`);
+   (d) re-measure `ENT_WAIT_ROWS` if the playfield or start scroll changes.
+3. **Budget:** internal RAM has **96 bytes free** (was 140 before the menu/2P state) (2026-10-30: the HUD/player boot-time tile buffers
    now alias `river_tile_pat`, see `river.h`; do not call `hud_init_graphics`/`player_init_graphics`
    after `river_init()` without that in mind), the fixed bank ~2.9 KB, bank 1 ~3 KB.
 4. Open fidelity items (small): road is 16 scanlines (Atari 20); balloon basket colour
@@ -539,6 +544,10 @@ python tools/sound_trace_show.py build/sound_trace.jsonl | Select-String 'v= [1-
 node tests/nes_entity_hits.mjs          # 20 hit-box boundary cases
 node tests/nes_sound.mjs                # live 2A03 pitch/volume/repeat checks (34)
 node tests/nes_gameplay.mjs            # steering, throttle, fuel, refuel, shot score
+node tests/nes_menu.mjs                # attract, Up/Down start level, SELECT 1P/2P, START, 2P turn swap (needs --nes.port2.type=NesController)
+node tests/nes_hold.mjs                # entities stand still until the player starts (with a negative control)
+node tests/nes_start_clear.mjs         # no object within 48 px above the jet at the start, on all four start levels
+# every Mesen test calls startGame() (tests/mcp_client.mjs): the cart boots into attract, not into play
 ./tests/host_restart.ps1                 # river_restart() vs the Atari $B1C0 truth table (build/checkpoint_trace.jsonl)
 node tests/nes_sprite_lock.mjs          # entity sprites locked to the scroll
 node tests/perf_scroll_cadence.mjs      # slow / cruise / fast scroll cadence
