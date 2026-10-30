@@ -50,6 +50,9 @@ static uint8_t sp_slot;         /* entity slot of the object being built */
 static uint8_t bridge_x;        /* X of the bar of a scheduled road (0 = none): the bar is created later */
 static uint8_t bridge_flash;    /* Atari $31: frames of water flash left after a bridge hit */
 static uint8_t ent_anim;
+
+/* Non-zero from the start of a game until the player first moves or fires: the river\n * scrolls in but the world (patrols, tanks, shells, wake-ups) stands still. */
+uint8_t ent_hold;
 static uint8_t ent_oam_used;
 
 /* File-scope scratch (SDCC aliases block locals across calls). */
@@ -1249,7 +1252,7 @@ void entities_update(void) BANKED {
     if (bridge_flash) {
         ent_flash_tick();
     }
-    if (!river_freeze) {
+    if (!river_freeze && !ent_hold) {
         ent_wake_acc = (uint8_t)(ent_wake_acc + game_ticks);
         while (ent_wake_acc >= 16u) {
             ent_wake_acc = (uint8_t)(ent_wake_acc - 16u);
@@ -1293,7 +1296,7 @@ void entities_update(void) BANKED {
         }
         e_type = ent_type[e_i];
         if (e_type >= ENT_AUX_TANK) {
-            if (!river_freeze) {
+            if (!river_freeze && !ent_hold) {
                 for (e_n = 0; e_n < game_ticks; e_n++) {
                     ent_cur = (uint8_t)(ent_frame + e_n);
                     if (e_type == ENT_AUX_TANK) {
@@ -1322,7 +1325,7 @@ void entities_update(void) BANKED {
         } else {
             /* Patrol speed is per frame and independent of the scroll
              * speed; the world stands still while the river is frozen. */
-            if (!river_freeze) {
+            if (!river_freeze && !ent_hold) {
                 for (e_n = 0; e_n < game_ticks; e_n++) {
                     ent_cur = (uint8_t)(ent_frame + e_n);
                     ent_move();

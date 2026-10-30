@@ -89,4 +89,7 @@ void entities_add_score(uint8_t bcd_tens) BANKED;
 /* Remove everything (new life / new game). */
 void entities_clear(void) BANKED;
 
+/* 1 while a new game's river scrolls in: entities stand still (see entities.c). */
+extern uint8_t ent_hold;
+
 #endif /* ENTITIES_H */

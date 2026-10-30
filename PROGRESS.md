@@ -1797,3 +1797,13 @@ one player; odd `$09` (GAME 2/4/6/8) is two players alternating** (`$77 = $09 & 
   the attract screen-saver blank (`$78`) and the `$59` attract speed are not ported; levels 5/20/50
   starts were not checked against the model or `nes_ring_integrity` (CHR-cache overflow, Known
   issue 1d, is reachable from the first screen there).
+
+### 2026-10-30 - Entities moved while the river scrolled in (user report)
+
+After a game start the river scrolls in (WAIT) and the jet then waits (READY) - but only READY set
+`river_freeze`, so during WAIT patrols, tanks, shells and `ent_wake()` ran.  New `ent_hold`
+(`entities.c`): set by `player_respawn()`, cleared when the player first acts (READY -> PLAY); it
+gates the wake-ups, tank/shell ticks and `ent_move()` next to `river_freeze`.  Attract is not held
+(the Atari's attract world moves).  Note level 1 is static in the original (`ent_move` returns for
+`rg_level < 2`), so movement only shows from bridge 2 / start levels 5+.  `tests/nes_hold.mjs`
+(5 checks, with a negative control: hold forced off -> the ship moves 120 -> 160).  RAM 99 free.

@@ -364,6 +364,7 @@ static void player_respawn(uint8_t new_game) {
     player_fuel_tick = 0;
     river_speed = 1u;
     river_vel = RIVER_VEL_CRUISE;
+    ent_hold = 1u;                      /* the world waits for the jet */
     player_state = PLAYER_STATE_WAIT;
 }
 
@@ -438,6 +439,7 @@ void player_update(void) BANKED {
             return;
         }
         river_freeze = 0;
+        ent_hold = 0;
         player_state = PLAYER_STATE_PLAY;
     }
 
