@@ -1,7 +1,7 @@
 # Project Progress & Session Handoff
 
 **Last updated:** 2026-10-30
-**Current phase:** Phase 5 IN PROGRESS — jet, shot, entities, throttle ramp, bridge/tank/flash done; **frame-time work done (30 Hz game logic + 60 Hz river, see the 2026-10-29/30 performance entry)**; respawn-at-bridge done (2026-10-30, checkpoint rule untraced); sound, fuel parity, entity fidelity next
+**Current phase:** Phase 5 functionally COMPLETE (2026-10-30) — jet, shot, entities, scoring, fuel, bridge/tank, respawn-at-bridge and the 30 Hz/60 Hz frame work are done and covered by `nes_gameplay`; open: the untraced `$B1C0` checkpoint branch, road/bridge visuals, then Phase 6 (sound)
 **Branch note:** the performance work lives on `experiment/river60-logic30` (cut from `experiment/30fps`); play-tested on a MiSTer and accepted, to be merged to `main`.
 **Phase 1:** COMPLETE (reverse engineering + asset extraction)
 **Phase 2:** COMPLETE (scaffolding, build pipeline, boot ROM, Mesen smoke test)
@@ -361,8 +361,7 @@ These are documented in full in `docs/ATARI_RE_SPEC.md`; don't re-derive them.
    tiles in the bottom row for a moment, at level 10+ only.  Not observed in the
    tests (levels 1-3).  Options if it is ever seen: a HUD of 28 px (remove only
    the top 8 px), or stall the upload job instead of overwriting visible slots.
-2. **Fuel/bridge scores (Phase 5):** confirm the 80/500 candidates and how
-   `$BB0B` is indexed for those objects.
+2. **Fuel/bridge scores:** DONE - `atari_score_tens[]` (30/60/100/150/80/500/750 by type) is the original table, applied in `entities_hit_shot()`.
 3. **Collision ring is per tile row:** bounds are sampled at raw row 3 of
    each 8-row block.  Phase 5 should interpolate or sample the jet's exact
    scanline within the block.
@@ -1396,3 +1395,17 @@ Open item "fuel rate / 16-bit gauge" traced from `$A3E9-$A453` (no Altirra run).
   breakpoint on `$A43F` if the fuel pace ever feels off.  PAL `$BF` only moves the bar's PMG
   rows on the Atari, so it has no NES counterpart.
 - ROM 65,552 bytes, RAM now 0 bytes free.  Not run: Mesen suites (no test covers refuelling).
+
+
+### 2026-10-30 - Phase 5 closed out: gameplay test (branch main)
+
+- **New `tests/nes_gameplay.mjs`** (8 checks, all pass): steering + banking, throttle
+  (`river_speed` 0/1/2), depot refuel (+7 in 4 frames, the +2/frame rule), fuel burn
+  (8 units in 64 frames), and a planted ship killed by a shot for exactly 30 points.  It plants
+  entities straight into `ent_*` and uses `player_invuln` where fuel must not be forced to full.
+- **Scores:** the table already matched the original (ship 30, helicopters 60, jets 100/150, fuel 80,
+  bridge 500, tank bonus 750), so the "candidate" note in the spec is resolved.
+- Re-ran `nes_respawn`, `nes_entity_hits` (20/20) and `nes_scroll_hud`: pass.
+- **Still open from Phase 5:** (1) the `$B1C0` checkpoint advance/rewind branch is derived from
+  the disassembly, not traced (needs deaths before / after / into a bridge in Altirra);
+  (2) bridge/road visuals (Next step 0); (3) `nes_river_cache.mjs` is stale.
