@@ -2,12 +2,12 @@
 
 Short, current, rewritten every session. Rules are in `AGENTS.md`; the plan is `GBC_PORT_PLAN.md`; history is `PROGRESS.md` (grep it, do not read whole).
 
-**Last updated:** 2026-10-31 · **Branch:** `gbc-port` · **Phase:** milestone 2 built (`roms/m2_hud.gb`), waiting for the user playtest; not yet run by anyone
+**Last updated:** 2026-10-31 · **Branch:** `gbc-port` · **Phase:** milestone 2 built (`roms/river_raid.gb`), waiting for the user playtest; not yet run by anyone
 
 ## Where we are
 
 - The port is GBC-only. The C prototype comes first, then a playtest go/no-go after milestone 2.
-- **Build:** `.\build_gbc.ps1 -Name m2_hud -RequireSymbols _frame_counter,_gbc_logic_oam -Sources src/gbc/main.c,src/gbc/stubs_m1.c,src/gbc/hud_gbc.c,src/atari_data.c,src/collision.c,src/river.c,src/entities.c,src/entity_gfx.c,src/player.c` → `roms/m2_hud.gb`. It checks the header (`-Wm-yC` confirmed: `$0143=$C0`, MBC5, 4 banks, checksum), every `.map` area against its bank window, and `.noi` symbols. Failure paths are tested only for a missing symbol.
+- **Build:** `.\build_gbc.ps1` (default sources and symbols) → `roms/river_raid.gb`, the only GB ROM; delete old trial ROMs rather than keeping versions. It checks the header (`-Wm-yC` confirmed: `$0143=$C0`, MBC5, 4 banks, checksum), every `.map` area against its bank window, and `.noi` symbols. Failure paths are tested only for a missing symbol.
 - **Banks:** player.c is in bank 2 (-Wf-bo2, set in uild_gbc.ps1), entities in bank 1. Bank 0 code ends at $3102 (~3.8 KB free). Bank 3 is empty; put the next banked module (HUD, sound) in 2 or 3 and keep BANKED on its public API.
 - **GBC code lives in `src/gbc/`** (`main.c`, `config_gbc.h`, `stubs_m1.c`). Shared files carry `#ifdef __SDCC_sm83` branches next to the NES code, never replacements, so the milestone 5 merge stays cheap. `build.ps1` is still the NES build.
 - **How it draws:** river ring is 32 rows in BG map 0 (`$9800`); the river scroll value is also `SCY` (256 px wrap), no split interrupt. `river_live` stays 0 on GBC so uploads take the direct `set_bkg_data` / `set_vram_byte` path (`river_put()` is a no-op on C paths).
@@ -19,7 +19,7 @@ Short, current, rewritten every session. Rules are in `AGENTS.md`; the plan is `
 
 ## Next steps
 
-1. **Playtest `roms/m2_hud.gb`** (user): shot visible; enemy and fuel colours; fuel gauge drains/refills; lives and score update; crash, respawn and game over return to the attract menu; pause menu (sprite letters, never checked). Known unfinished: bridge flash colour (`ent_water_color` is a no-op), HI score and blink not shown, per-row river colours (milestone 3).
+1. **Playtest `roms/river_raid.gb`** (user): shot visible; enemy and fuel colours; fuel gauge drains/refills; lives and score update; crash, respawn and game over return to the attract menu; pause menu (sprite letters, never checked). Known unfinished: bridge flash colour (`ent_water_color` is a no-op), HI score and blink not shown, per-row river colours (milestone 3).
 2. Move the jet lower (`GBC_VIEW_TOP_SCANLINE`, `config_gbc.h`); the user found the playfield too short ahead of it. This also decides reaction time, the plan's main risk.
 3. Split `river_run_job` across frames (fast-speed stutter is acceptable for now); measure first. Check the glitching hills and trees with `tests/host_river.ps1` before guessing.
 4. Measure player, HUD and uploads once they exist.
@@ -73,5 +73,6 @@ Add-Content -Path PROGRESS.md -Encoding utf8 -Value @'
 ```
 
 3. Do not edit `AGENTS.md` for status.
+
 
 

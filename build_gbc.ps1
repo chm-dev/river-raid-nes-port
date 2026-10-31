@@ -13,11 +13,11 @@
 #   - the .noi exists and holds the symbols tests read.
 param(
     [string[]]$Sources = @(
-        'src/main.c', 'src/atari_data.c', 'src/collision.c', 'src/river.c',
-        'src/entities.c', 'src/entity_gfx.c', 'src/player.c', 'src/hud.c', 'src/sound.c'),
-    [string]$Name = 'river_raid_gbc',
+        'src/gbc/main.c', 'src/gbc/stubs_m1.c', 'src/gbc/hud_gbc.c', 'src/atari_data.c',
+        'src/collision.c', 'src/river.c', 'src/entities.c', 'src/entity_gfx.c', 'src/player.c'),
+    [string]$Name = 'river_raid',
     [int]$Banks = 4,
-    [string[]]$RequireSymbols = @('_game_ticks'),
+    [string[]]$RequireSymbols = @('_frame_counter', '_gbc_logic_oam'),
     [switch]$ProfExport
 )
 
@@ -132,3 +132,4 @@ if ($failures.Count -gt 0) {
     exit 1
 }
 Write-Host "Built $rom" -ForegroundColor Green
+
