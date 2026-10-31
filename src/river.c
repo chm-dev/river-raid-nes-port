@@ -1901,6 +1901,12 @@ static uint8_t river_emit_extra(void) {
         }
         river_road_stage = 2u;
     }
+#ifdef __SDCC_sm83
+    /* No attribute table on GBC: colour is the BG attribute map (VRAM bank 1). */
+    if (river_road_stage == 2u) {
+        river_road_stage = 3u;
+    }
+#else
     if (river_road_stage == 2u) {
         if (river_pending_slot & 1u) {
             rj_c = (uint8_t)(river_job_pal * 5u);
@@ -1934,6 +1940,7 @@ static uint8_t river_emit_extra(void) {
         }
         river_road_stage = 3u;
     }
+#endif
     return 1u;
 }
 
@@ -2353,10 +2360,12 @@ static void river_start(uint8_t restart, uint8_t bridges) {
     river_obj_x[0] = 0;
     river_obj_flags[0] = 0;
 
+#ifndef __SDCC_sm83
     /* Playfield attributes: palette 2 (all four 16x16 blocks in each byte). */
     for (i = 0; i < 64u; i++) {
         set_vram_byte((uint8_t *)(PPU_NT1_ATTR + i), 0xAAu);
     }
+#endif
 
     /* Start with an empty (black) world, like the Atari: the river scrolls
      * into view from the top and everything below it is black.  The

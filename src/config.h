@@ -202,6 +202,9 @@
 /* Playfield nametable                                                       */
 /* ------------------------------------------------------------------------- */
 
+#ifdef __SDCC_sm83
+#include "gbc/config_gbc.h"
+#else
 #define PPU_NT0_BASE            0x2000u
 #define PPU_NT0_ATTR            0x23C0u
 #define PPU_NT1_BASE            0x2400u
@@ -216,6 +219,7 @@
 #define RIVER_RING_ROWS         30u
 #define RIVER_VIEW_TOP_ROW      3u      /* ring row at scroll 0 */
 #define RIVER_SCROLL_HEIGHT     240u
+#endif
 
 /* ------------------------------------------------------------------------- */
 /* Extracted Atari character codes (see docs/ATARI_RE_SPEC.md section 8)     */

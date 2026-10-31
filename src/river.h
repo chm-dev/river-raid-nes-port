@@ -13,7 +13,11 @@
 
 #include <stdint.h>
 
+#ifdef __SDCC_sm83
+#define RIVER_ROWS              32u     /* ring rows: SCY wraps at 256 px */
+#else
 #define RIVER_ROWS              30u
+#endif
 #define RIVER_COLS              32u
 
 /* The whole 48-byte Atari row is shown: 24 tiles of river area (nametable
@@ -21,7 +25,11 @@
  * reach bytes 3..46 at high levels, outside the 40-byte window of the
  * original TV picture. */
 #define RIVER_TILE_COLS         24u
+#ifdef __SDCC_sm83
+#define RIVER_LEFT_COL          0u      /* no land margin columns on GBC */
+#else
 #define RIVER_LEFT_COL          4u
+#endif
 
 /* Pattern scratch of the pending tile row.  Before river_init() the HUD,
  * player and entity code borrow it to expand their CHR tiles (boot-time only;
