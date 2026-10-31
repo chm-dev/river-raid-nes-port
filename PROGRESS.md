@@ -8,9 +8,8 @@
 **Phase 3:** COMPLETE (HUD, deferred LCD split, playfield ring, 1-px scroll test)
 **Phase 4:** COMPLETE (validated generator, collision ring, exact per-tile cache, Atari orientation; all tests pass)
 
-> **New session:** read this file first, then `PORTING_PLAN.md` and
-> `docs/ATARI_RE_SPEC.md`. Keep **Current status** and **Next step** current;
-> append dated entries under **Session log** instead of rewriting history.
+> **Archive.** `HANDOFF.md` is the current state. "Current status" and "Next step" below are
+> frozen snapshots as of 2026-10-31 and may be stale.
 
 ---
 

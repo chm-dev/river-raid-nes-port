@@ -1,9 +1,10 @@
 # AGENTS.md — Workspace Guidelines & Reference
 
 ## Project Status
-- **Read `PROGRESS.md` first.** It is the live session handoff: current phase, completed work, open issues, next step, and command reminders.
-- **Phase 1 (reverse engineering + asset extraction), Phase 2 (scaffolding/build), Phase 3 (HUD/split/ring) and Phase 4 (generator, collision ring, exact tile cache, orientation) are complete. Phase 5 (player, shot, entities, scoring, fuel, bridge/road/tank, respawn at the last bridge, 30 Hz logic + 60 Hz river) is complete and tested. Phase 6 is in progress: the APU sound driver (`src/sound.c`) was re-derived from the Atari and is verified (`tests/nes_sound.mjs`); attract mode, start-level select (D-pad Up/Down = bridge 1/5/20/50), SELECT = 1P/2P alternating play, per-level hi-scores, "world frozen until the player starts" (`ent_hold`) and the start clearance around the jet are done and tested (`tests/nes_menu.mjs`, `nes_hold.mjs`, `nes_start_clear.mjs`). The cart boots into attract, so tests call `startGame()` from `tests/mcp_client.mjs`. Internal RAM: only 13 bytes free (2026-10-31), reclaim before adding state. HUD first line is raised 2 px with "top" tiles 248..255 and runtime-uploaded digit tiles (see `PROGRESS.md` 2026-10-31); attract Up/Down only freezes the world and re-arms the Atari's 296-frame timer before the picked level's river is built (`tests/nes_hud_blink.mjs`, `nes_menu.mjs`). Open items are in `PROGRESS.md` -> "Next step".**
-- `PORTING_PLAN.md` is the roadmap; `PROGRESS.md` is the status log. Update `PROGRESS.md`, not this file, as work progresses.
+- **Read `HANDOFF.md` first.** It is short and current: phase status, next steps, open bugs, budgets, decisions not to reopen, and a "where to look" table.
+- **Do not read `PROGRESS.md` whole** (2,000+ lines, ~35k tokens). It is the append-only history and rationale log. Grep it for a keyword and read only the matching `### date - title` entry.
+- Phases 1-5 are complete; Phase 6 (sound, attract/menus, 2P, HUD polish) is in progress. The cart boots into attract, so tests call `startGame()` from `tests/mcp_client.mjs`.
+- `PORTING_PLAN.md` is the roadmap. This file holds stable rules only: update `HANDOFF.md` (rewrite) and `PROGRESS.md` (append, without reading it) as work progresses; the end-of-session steps are at the bottom of `HANDOFF.md`.
 
 ## Project Overview
 Port of Atari 8-bit **River Raid** (`xex/River Raid (1983)(Activision)(US)[a3].xex`) to the **NES** in C using **GBDK-2020 v4.5.0** (`./gbdk`).

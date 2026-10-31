@@ -1,0 +1,114 @@
+# HANDOFF — read this first
+
+Short, current, rewritten every session. History and rationale live in `PROGRESS.md`
+(2,000+ lines): **do not read it whole.** Grep it (`Select-String -Path PROGRESS.md -Pattern 'keyword'`)
+and read only the matching `### date - title` entry. `AGENTS.md` has the toolchain rules.
+
+**Last updated:** 2026-10-31 · **Branch:** `main` · **Phase:** 6 (title/menu/sound/HUD polish) in progress
+
+## Where we are
+
+| Phase | State |
+|---|---|
+| 1 Reverse engineering + asset extraction | done |
+| 2 Scaffolding, build, boot ROM | done |
+| 3 HUD, deferred LCD split, playfield ring | done |
+| 4 River generator, collision ring, exact tile cache, orientation | done (model matches 2,600-row Atari trace) |
+| 5 Jet, shot, entities, scoring, fuel, bridge/road/tank, respawn at last bridge, 30 Hz logic + 60 Hz river | done |
+| 6 Sound, attract, menus, 2P, HUD polish | in progress |
+
+Phase 6 already done and tested: APU sound re-derived from the Atari (`tests/nes_sound.mjs`),
+attract mode, start-level select (Up/Down = bridge 1/5/20/50), SELECT = 1P/2P alternating play,
+per-level hi-scores, world frozen until the player starts (`ent_hold`), start clearance around the jet,
+HUD start blink, white P2 score field, first HUD line raised 2 px, Atari-style game select
+(freezes the river, 296-frame timer).
+
+The cart **boots into attract**; every Mesen test calls `startGame()` from `tests/mcp_client.mjs`.
+
+## Next steps (priority order)
+
+1. **Check start levels 5/20/50** against the river model and `tests/nes_ring_integrity.mjs`.
+   CHR-cache overflow (more visible 8x8 blocks than the 250 cache slots) is reachable from the first
+   screen at high levels. Entry: PROGRESS.md "Known issues" 1d.
+2. **P2 HUD colours:** while P2 flies, the Atari also turns BRIDGE, the bridge number and the lives
+   white. Needs ~8 more BG tiles and a white life sprite. Internal RAM is nearly out (see Budgets).
+3. **Attract extras:** the Atari's idle screen-saver blank (`$78`) and attract scroll speed (`$59`).
+4. Re-measure `ENT_WAIT_ROWS` if the playfield height or start scroll changes.
+5. Small fidelity items: road is 16 scanlines (Atari 20); PAL `$BF` has no NES counterpart; the
+   spawner uses its own RNG, so objects after a restart differ from the Atari's.
+
+## Open bugs (`BUGS&FEATS.md` is the source)
+
+- Balloon basket colour should be brown.
+- White striped helicopters do not shoot.
+- No tanks shooting from the side of the river.
+- Grass colour: level 1 dark green, level 2 light green; dying on level 2 restarts it dark green.
+- Pause menu unreachable until the jet starts moving.
+- Level 50 tight bottleneck is practically unbeatable on NES (beatable on Atari). Related fix history:
+  PROGRESS.md "Narrow gaps (level 50)".
+
+## Budgets (check, do not trust these numbers)
+
+- Run `./build.ps1`. It must print `ROM  65552 bytes`; also confirm `_XINIT` in `roms/river_raid.map`
+  ends below `$FFFA`. The linker does **not** fail on fixed-bank overflow, the ROM silently becomes 128 KiB.
+- Internal RAM was **13 bytes free** at the last build (2026-10-31); `digit_buf` (16 B) can alias a shared
+  scratch if more is needed. `build.ps1` prints the live figure and throws if `_BSS` passes `$07FF`.
+- Bank layout: fixed bank = everything else; bank 1 = `entities`, `entity_gfx`, `player`; bank 2 = `hud`
+  (`$bankedSources` / `$bank2Sources` in `build.ps1`). Check `_CODE_1` / `_CODE_2` in the map for headroom.
+
+## Decisions not to reopen
+
+- **Fast flight stays at 1.5 px/frame.** 2.0 was play-tested and felt worse; aim perf work at a steadier 1.5.
+- **Loop shape:** `river_update()` + `sound_update()` at 60 Hz; player/collision and HUD/entities at 30 Hz on
+  alternating frames. MMC3 + cc65 was assessed and rejected as too expensive.
+- **Exact 207-slot CHR river cache**, no edge/tree atlas. River 24 tile columns at nametable cols 4..27.
+- **HUD art comes from `charset.bin`**; do not redraw it. Digits stay 8 px wide (width compromise).
+- **Sound** values come from live Atari captures, not estimates. Verify Atari behaviour by sampling over
+  time, not static reads (see memory note on the attract freeze misread).
+- What-if code changes go on a new git branch, not a scratch copy.
+
+## Where to look (grep PROGRESS.md for the quoted title)
+
+| Topic | Entry / file |
+|---|---|
+| River generator, repeat-row skip, tile cache | "Atari river/tree layout + exact tile cache", `tools/river_model.py` |
+| Frame loop, 30/60 Hz split, perf numbers | "Performance: 30 Hz game logic", "Late frames", "Row render and pacing" |
+| Sound, channel map, POKEY->2A03 conversion | "sound re-derived from the Atari", "Fuel tank sound", `src/sound.c` |
+| Attract / SELECT / 2P rules | "attract / SELECT / START read off the Atari", "game variants and two-player rules" |
+| HUD geometry, blink, white P2, raised line | "Compact HUD", "HUD: start blink", "HUD: first line raised" |
+| Bridge, road, tank, respawn checkpoint | "Bridge and road", "Bridge tank and its shell", "Respawn at the last cleared bridge" |
+| Atari reverse-engineering spec | `docs/ATARI_RE_SPEC.md` (disassembly in `docs/atari_disasm_*.txt`; `docs/do_not_read_unless_asked` is exactly that) |
+| Roadmap | `PORTING_PLAN.md` |
+| Mesen / Altirra tooling | `info/MESEN_MCP_NOTES.md`, `info/ALTIRRA_BRIDGE_NOTES.md` (only when driving the emulators) |
+
+## Core commands
+
+```powershell
+./build.ps1                          # build + RAM asserts; expect ROM 65552
+./tests/host_river.ps1               # C generator vs Python model (needs zig); run after touching river.c
+# Mesen suites need MesenCE-MCP running (launch flags in AGENTS.md)
+node tests/nes_smoke.mjs; node tests/nes_scroll_hud.mjs; node tests/nes_river_cache.mjs
+node tests/nes_gameplay.mjs; node tests/nes_menu.mjs; node tests/nes_hud_blink.mjs
+node tests/nes_hold.mjs; node tests/nes_start_clear.mjs; node tests/nes_sound.mjs
+node tests/nes_entity_hits.mjs; node tests/nes_sprite_lock.mjs
+```
+
+The full command list (profilers, Atari trace tools, asset regeneration) is under "Handy commands" in `PROGRESS.md`.
+
+## End of session (keep this cheap)
+
+1. **Rewrite this file**: update the date, move finished items out of "Next steps", add new bugs,
+   correct the budgets. Keep it under ~130 lines; delete what is no longer true instead of annotating it.
+2. **Append one entry to `PROGRESS.md` without reading it** (a Read of that file costs ~35k tokens).
+   The closing `'@` must stay at column 0:
+
+```powershell
+Add-Content -Path PROGRESS.md -Encoding utf8 -Value @'
+
+### YYYY-MM-DD - Short title (branch `name`)
+
+- What changed and why; ground truth used; build line (ROM size, RAM free); tests run and results.
+'@
+```
+
+3. Do not edit `AGENTS.md` for status; it holds stable rules only.
