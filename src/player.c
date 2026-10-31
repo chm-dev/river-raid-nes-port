@@ -371,25 +371,9 @@ static void player_kill_shot(void) {
     hide_sprite(PLAYER_SHOT_SLOT);
 }
 
-/* Fire, fly and test the single player shot. */
-static void player_update_shot(void) {
-    if (!player.shot_active) {
-        if (!(pl_pad & J_A)) {
-            return;
-        }
-        player.shot_x = (uint8_t)(player.x + 3u);
-        player.shot_y = (uint8_t)(player.y - 6u);
-        player.shot_active = 1;
-        sound_play_shot();
-    } else {
-        pl_row = (uint8_t)(PLAYER_SHOT_SPEED * pl_ticks);
-        if (player.shot_y < (uint8_t)(HUD_SPLIT_SCANLINE + pl_row + 6u)) {
-            player_kill_shot();
-            return;
-        }
-        player.shot_y = (uint8_t)(player.shot_y - pl_row);
-    }
-
+/* Test the shot at its current position against the river banks and the
+ * entities.  Returns 1 when it ended (the shot is already killed). */
+static uint8_t player_test_shot(void) {
     pl_slot = river_slot_at_scanline(player.shot_y);
     pl_l = river_left_x[pl_slot];
     pl_r = river_right_x[pl_slot];
@@ -400,12 +384,55 @@ static void player_update_shot(void) {
           pl_row < river_island_right_x[pl_slot] &&
           (uint8_t)(pl_row + PLAYER_SHOT_WIDTH) > river_island_left_x[pl_slot]))) {
         player_kill_shot();
-        return;
+        return 1;
     }
     if (entities_hit_shot(player.shot_x, player.shot_y)) {
         sound_play_explosion();
         player_kill_shot();
-        return;
+        return 1;
+    }
+    return 0;
+}
+
+/* Fire, fly and test the single player shot. */
+static void player_update_shot(void) {
+    if (!player.shot_active) {
+        if (!(pl_pad & J_A)) {
+            return;
+        }
+        player.shot_x = (uint8_t)(player.x + 3u);
+        player.shot_y = (uint8_t)(player.y - 6u);
+        player.shot_active = 1;
+        sound_play_shot();
+        if (player_test_shot()) {
+            return;
+        }
+    } else {
+#ifdef __SDCC_sm83
+        /* 30 Hz logic: step and test once per elapsed frame, as the Atari's
+         * per-frame missile does.  One 12 px jump tested only at its end
+         * detects an enemy up to 6 px late. */
+        for (pl_t = pl_ticks; pl_t != 0u; pl_t--) {
+            if (player.shot_y < (uint8_t)(HUD_SPLIT_SCANLINE + PLAYER_SHOT_SPEED + 6u)) {
+                player_kill_shot();
+                return;
+            }
+            player.shot_y = (uint8_t)(player.shot_y - PLAYER_SHOT_SPEED);
+            if (player_test_shot()) {
+                return;
+            }
+        }
+#else
+        pl_row = (uint8_t)(PLAYER_SHOT_SPEED * pl_ticks);
+        if (player.shot_y < (uint8_t)(HUD_SPLIT_SCANLINE + pl_row + 6u)) {
+            player_kill_shot();
+            return;
+        }
+        player.shot_y = (uint8_t)(player.shot_y - pl_row);
+        if (player_test_shot()) {
+            return;
+        }
+#endif
     }
     /* The bar sits at columns 3..4 of its tile; shot_x is the box's left edge. */
     move_sprite(PLAYER_SHOT_SLOT, (uint8_t)(player.shot_x - 3u), player.shot_y);

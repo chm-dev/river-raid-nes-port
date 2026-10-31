@@ -20,7 +20,7 @@ Short, current, rewritten every session. Rules are in `AGENTS.md`; the plan is `
 ## Next steps
 
 1. **Finish the m2 playtest** (user): fuel gauge, lives and score, crash/respawn/game over back to attract, pause menu (sprite letters, never checked). Known unfinished: bridge flash colour (`ent_water_color` is a no-op), HI score and blink not shown, per-row river colours (milestone 3).
-2. **Shots hit enemies late** (new bug, `BUGS&FEATS.md`): suspect 30 Hz logic vs 60 Hz draw. Fix before the go/no-go playtest, since it spoils the reaction-time judgement.
+2. **Shots hit enemies late** (`[~]` in `BUGS&FEATS.md`): fixed in `player.c` by per-frame 6 px sub-steps with a hit test each (SM83 only). User to confirm in play; it matters for the go/no-go reaction-time judgement.
 3. **Later, separate tasks:** HUD rework, remove 2-player mode (both in `BUGS&FEATS.md`).
 4. Move the jet lower (`GBC_VIEW_TOP_SCANLINE`, `config_gbc.h`); the user found the playfield too short ahead of it. This also decides reaction time, the plan's main risk.
 5. Split `river_run_job` across frames (fast-speed stutter is acceptable for now); measure first. Check the glitching hills and trees with `tests/host_river.ps1` before guessing.

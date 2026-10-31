@@ -26,3 +26,8 @@ The NES history is in `archive/nes/PROGRESS.md`.
 - Found `PLAYER_SHOT_SLOT = 47` and `ENT_OAM_LAST = 43` against a 40-entry `gbc_logic_oam`: the shot was invisible and logic wrote past the array. Now 48 logic slots packed into 40 hardware sprites in `oam_camera()`.
 - Sprite palettes set as RGB in `gbc/main.c`; new `src/gbc/hud_gbc.c` (Window HUD, bank 1 tiles 0..23). HUD state moved out of `stubs_m1.c`.
 - Build `-Name m2_hud` with `src/gbc/hud_gbc.c` added to the milestone 1 list: all checks pass, bank 0 code ends at $357A. Not run in an emulator; the user playtests.
+
+### 2026-10-31 - Late shot hits: sub-stepped shot (branch `gbc-port`)
+
+- Cause: at 30 Hz logic the shot jumped 12 px per pass and was tested only at the end, so hits registered up to 6 px late. `player_update_shot` now steps 6 px per elapsed tick and runs `player_test_shot` (river banks + `entities_hit_shot`) at each step; NES path unchanged.
+- Build: `.\build_gbc.ps1` ok, all checks pass. Not play-tested (user to confirm).
