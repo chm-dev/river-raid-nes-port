@@ -119,6 +119,7 @@ static uint16_t pl_wait_end;            /* sys_time at which the picked level's 
 static uint8_t pl_nocol;                /* debug start (SELECT): the jet cannot crash */
 static uint8_t pl_rep;                  /* attract: frames until Up/Down repeats */
 static uint8_t pause_sel;               /* 0 = RESUME, 1 = EXIT */
+static uint8_t pause_from;              /* state to return to: PLAY, or READY (jet not yet moving) */
 static joypads_t pl_pads;
 static uint8_t pl_new;
 static uint8_t pl_i;
@@ -475,6 +476,7 @@ static void player_pause_enter(void) {
         }
     }
     pause_sel = 0;
+    pause_from = player_state;
     player_pause_draw();
     player_state = PLAYER_STATE_PAUSE;
 }
@@ -534,9 +536,10 @@ static void player_pause_update(void) {
             player_attract(river_variant);
         } else {
             player_pause_hide();
-            river_freeze = 0;
+            /* Paused before the first input: the world still waits for the jet. */
+            river_freeze = (pause_from == PLAYER_STATE_READY);
             ent_paused = 0;
-            player_state = PLAYER_STATE_PLAY;
+            player_state = pause_from;
         }
     }
 }
@@ -709,6 +712,11 @@ void player_update(void) BANKED {
         /* Stopped on the river: the game starts when the player fires or
          * moves. */
         player_show(PLAYER_TILE_STRAIGHT);
+        if ((pl_pad & ~player_prev_pad) & J_START) {
+            player_pause_enter();
+            player_prev_pad = pl_pad;
+            return;
+        }
         if (!(pl_pad & PLAYER_START_INPUT)) {
             player_prev_pad = pl_pad;
             return;

@@ -4,7 +4,7 @@
 - [x] White striped helicopters do not shoot (fixed and play-tested 2026-10-31: the fast helicopter, types $0A/$0B at level 13+, fires an M0 missile, a 4x1 px line at 2 px/frame that dies on a bank or island outline and kills the jet; noise-channel zap, silent in attract)
 - [x] There are no tanks shooting from side of the river (fixed and play-tested 2026-10-31: `ent_side_tank_spawn`, a tank on a bank or island that walks to the outline and fires, level 7+)
 - [x] Starting game. Level 1 is dark green grass. Get to level 2 - light green grass -> die -> Level 2 has now dark green grass. (fixed and play-tested 2026-10-31: `river_start` derives land colour from the bridge counter parity) 
-- [ ] Can't get to pause menu until plane starts moving
+- [~] Can't get to pause menu until plane starts moving (fixed 2026-10-31, awaiting playtest: START was only read in PLAY; the READY state now enters the pause menu too and RESUME returns to READY with the world still held)
 - [ ] Lives logic. Life (1 plane on the hud) is substracted only after river scrolls down fully and plane appears.y
 - [ ] Level 50 tight bottle neck is practically unbeatable on NES. It is beatable on Atari. I think colisionbox is smaller for atari plane. I feel like wings or parts of it are not included in the hitbox.
 - [ ] Level 20 has some weird glitch on the right side of the fork, near the ballon. The biggest clue is the fact that it is straight vertical portion of the river edge on atari but looks  glitced in our case. It does not collide with the player, however. You can fly past it even though it looks like land. It is only visual. It is most likely some kind of river generator problem or bug becaue it can be observed in other levels too.

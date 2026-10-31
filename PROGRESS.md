@@ -2168,3 +2168,7 @@ entity loop and the split-wait work are not needed for now; RAM 72 bytes free.
 - Lives icons moved from sprites to BG tiles (`TILE_LIFE` 62, nametable row 3, cols 20..27). Sprite slots 56..60 were wrong twice over: the gauge already uses 8 sprites on those scanlines (hardware drops sprites past 8/scanline, wherever they sit in x; the MiSTer only looked fine with its sprite limit turned off), and `pause_slot` uses OAM 56..63. Sprite tile 15 stays for the pause cursor. The row is written via `digit_buf` as scratch (RAM was 4 bytes over with a dedicated array). Build: ROM 65552, RAM 5 free. `nes_scroll_hud.mjs` still checks OAM slots 44..46 for the icons and needs updating. Test ROM: `roms/river_raid_9lives.nes` (start lives 9; patch both `hud_lives` and `pl_other[3]` in `player_start_game`).
 
 - Closed: plane tile now uses the gray HUD band (INK_PLANE0/1 like the yellow digits); play-tested by the user with a 9-lives ROM (removed, source back to 3 lives). `tests/nes_scroll_hud.mjs` lives check now reads nametable row 3 cols 20..27 (tile 62) instead of OAM slots 44..46; not re-run (user asked to skip Mesen tests).
+
+### 2026-10-31 - Pause from the READY state
+
+- START was only handled in `PLAYER_STATE_PLAY`, so the menu was unreachable while the jet waited for first input. `player_update` now enters the pause menu from READY too; `pause_from` remembers the state and RESUME restores it (`river_freeze` stays 1 for READY). Build ROM 65552, 4 bytes RAM free. Not Mesen-tested; awaiting user playtest.
