@@ -16,7 +16,7 @@
  * "Exact per-tile river cache").  The generator runs one tile row ahead of
  * the display so the pattern uploads can be spread over several frames.
  */
-#include <nes/nes.h>
+#include <gb/gb.h>
 #include <stdint.h>
 #include <string.h>
 
@@ -148,7 +148,7 @@ uint8_t river_owed;
 /* Test hooks: last generated 48-byte row and the state after it.  These are
  * exported through the .noi file so Mesen tests can compare the C port with
  * tools/river_model.py. */
-#ifdef __SDCC
+#ifdef __SDCC_mos6502
 #define RIVER_DEBUG_FIELDS  12u         /* what tests/nes_river.mjs reads; RAM is tight */
 #else
 #define RIVER_DEBUG_FIELDS  16u         /* the host check also compares the feature fields */
@@ -164,7 +164,7 @@ uint8_t river_block_index;
 /* ------------------------------------------------------------------------- */
 
 static void river_lfsr_step(void) {
-#ifdef __SDCC
+#ifdef __SDCC_mos6502
     /* $B183, as on the Atari: bit 7 of (b << 5) ^ b feeds a -> c -> b. */
     __asm
         lda     _rg_lfsr_b
@@ -440,7 +440,7 @@ static void river_clamp_decision(void) {
 
 static uint8_t rf_val, rf_cnt;
 
-#ifdef __SDCC
+#ifdef __SDCC_mos6502
 /* Asm kept in its own function so the compiler cannot cache registers across it. */
 static void river_fill_core(void) {
     __asm
@@ -522,7 +522,7 @@ static void river_fill(uint8_t y, uint8_t value) {
     }
     rf_val = value;
     rf_cnt = (uint8_t)(y + 1u);
-#ifdef __SDCC
+#ifdef __SDCC_mos6502
     /* the row clear already wrote land and the fills only move forward */
     if (value != 0x55u) {
         river_fill_core();
@@ -563,7 +563,7 @@ static const uint8_t river_black_lut[256] = {
 static const uint8_t *rt_src;
 static uint8_t *rt_dst;
 
-#ifdef __SDCC
+#ifdef __SDCC_mos6502
 /* The copy loop, through zero-page pointers $FE (source) and $FC (destination),
  * set from rt_src and rt_dst by river_copy_template().  Those bytes are free:
  * the linker places SDCC's zero page at $20-$CE (see the .noi).  Asm kept in
@@ -649,7 +649,7 @@ static void river_pattern(uint8_t index) {
     rg_row_pos = (uint8_t)(rg_row_pos + 2u);
 }
 
-#ifdef __SDCC
+#ifdef __SDCC_mos6502
 /* river_render_row() for the commonest rendered row, no island and no feature:
  * land, left edge, water, right edge, land.  The land is the row clear's.  The
  * two y tests are river_fill()'s: a "negative" length writes nothing and does
@@ -717,7 +717,7 @@ static void river_render_plain(void) {
 }
 #endif
 
-#ifdef __SDCC
+#ifdef __SDCC_mos6502
 static uint8_t isl_x;               /* x of the current edge (island and feature rows) */
 static uint8_t rn_f;                /* row flags: 1 feature row, 2 island, 4 left feature, 8 right feature */
 
@@ -1003,7 +1003,7 @@ static void river_render_row(void) {
     uint8_t x, y, a, b7;
 
     rg_row_pos = 0;
-#ifdef __SDCC
+#ifdef __SDCC_mos6502
     river_clear_row();
 #else
     memset(river_raw_row, 0x55, 48);
@@ -1225,7 +1225,7 @@ static void river_step_state(void) {
                rs_phase == rg_phase && rs_width == rg_width) {
         rg_same = 1u;
     } else {
-#ifdef __SDCC
+#ifdef __SDCC_mos6502
         if (rg_island_flags & 0x80u) {
             river_render_row();
         } else {
@@ -1298,7 +1298,7 @@ static void river_cache_init(void) {
 /* Convert the 40 visible mode-E bytes of the current raw row into one
  * scanline (two plane bytes) of each of the 20 pending 8x8 tiles.  Each
  * source byte is 4 pixels, so a nibble LUT per plane replaces the bit loop. */
-#ifndef __SDCC
+#ifndef __SDCC_mos6502
 /* Reference C version of river_convert_row, used by the host harness. */
 static void river_convert_row_c(uint8_t line) {
     uint8_t *dst = &river_tile_pat[line * 2u];
@@ -1345,7 +1345,7 @@ static uint8_t rc_off, rc_sx, rc_cc, rc_t0, rc_t1;
  * and writes nothing.  When one stops being solid the lines already done are filled
  * in (lines run 7 down to 0).  X = source byte index, Y = column in the fast path. */
 static void river_convert_row(uint8_t line) {
-#ifdef __SDCC
+#ifdef __SDCC_mos6502
     rc_off = (uint8_t)(line << 1);
     __asm
         ldx     #0
@@ -1488,7 +1488,7 @@ static void river_convert_row(uint8_t line) {
  * into line + 1 of the same tile row: copy that scanline of the mixed columns (a
  * solid column has no bytes and stays solid).  line <= 6. */
 static void river_copy_line(uint8_t line) {
-#ifdef __SDCC
+#ifdef __SDCC_mos6502
     rc_off = (uint8_t)(line << 1);
     __asm
         ldy     _rc_off
@@ -1535,7 +1535,7 @@ static void river_copy_line(uint8_t line) {
 #endif
 }
 
-#ifndef __SDCC
+#ifndef __SDCC_mos6502
 static uint8_t river_pat_equal(const uint8_t *a, const uint8_t *b) {
     uint8_t i;
 
@@ -1571,7 +1571,7 @@ static uint8_t river_pat_equal(const uint8_t *a, const uint8_t *b) {
  * caller retries on a later pass.  Only valid while the display is on; with
  * rendering off the library writes the PPU directly (see river_live).
  */
-#ifdef __SDCC
+#ifdef __SDCC_mos6502
 extern volatile uint8_t _vram_transfer_buffer_valid;
 extern volatile uint8_t _vram_transfer_buffer_num_cycles_x8;
 extern volatile uint8_t _vram_transfer_buffer_pos_w;
@@ -1826,7 +1826,7 @@ static uint8_t river_job_margin;      /* margins already written for this row */
 static uint8_t river_live;            /* display on: use the fast buffer path */
 static uint8_t rj_c, rj_k, rj_id, rj_n;
 static uint16_t rj_addr;
-#ifndef __SDCC
+#ifndef __SDCC_mos6502
 static const uint8_t *rj_pc, *rj_pk;
 #endif
 
@@ -1978,7 +1978,7 @@ static uint8_t river_emit_stripe(void) {
  * Its own function, as inline asm must be; vp_k is river_put's scratch and is
  * free here. */
 static void river_find_dup(void) {
-#ifndef __SDCC
+#ifndef __SDCC_mos6502
     rj_id = 0xFFu;
     rj_pc = &river_tile_pat[(uint16_t)rj_c * 16u];
     for (rj_k = 0; rj_k < rj_c; rj_k++) {
@@ -2070,7 +2070,7 @@ static void river_find_dup(void) {
 }
 
 static void river_reset_kinds(void) {
-#ifdef __SDCC
+#ifdef __SDCC_mos6502
     __asm
         lda     #3
         ldx     #23
@@ -2088,7 +2088,7 @@ static void river_reset_kinds(void) {
  * TILE_WATER (1), i.e. the tile is kind - 1. */
 typedef char river_solid_tiles_assert[(TILE_LAND == 0u && TILE_WATER == 1u) ? 1 : -1];
 static void river_job_solids(void) {
-#ifdef __SDCC
+#ifdef __SDCC_mos6502
     __asm
         ldx     _river_job_col
     1$:
@@ -2244,7 +2244,7 @@ static void river_generate_raw_row(void) {
         river_debug_state[9] = rg_lfsr_c;
         river_debug_state[10] = rg_countdown;
         river_debug_state[11] = rg_flags23;
-#ifndef __SDCC
+#ifndef __SDCC_mos6502
         river_debug_state[12] = rg_bd;
         river_debug_state[13] = rg_bc;
         river_debug_state[14] = rg_be;
@@ -2524,7 +2524,7 @@ void river_update(void) {
     /* Behind schedule: spend more now, a clamped scroll is worse than a late
      * frame.  A budget of 1 marks the heavy entity pass, which leaves the tile
      * job to the next pass unless the generator has fallen behind. */
-#ifdef __SDCC
+#ifdef __SDCC_mos6502
     if (river_gen_budget == 1u && river_owed >= 2u && entity_count < RIVER_ENT_BUMP_MAX) {
 #else
     /* the host harness does not link the entities; pacing does not change rows */

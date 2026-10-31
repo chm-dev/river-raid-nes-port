@@ -8,7 +8,7 @@
 #ifndef PLAYER_H
 #define PLAYER_H
 
-#include <nes/nes.h>
+#include <gb/gb.h>
 #include <stdint.h>
 
 #define PLAYER_START_X          120u

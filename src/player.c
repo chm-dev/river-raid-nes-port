@@ -7,7 +7,7 @@
  * short delay the river restarts at the last cleared bridge (river_restart)
  * and the jet waits on it for input.
  */
-#include <nes/nes.h>
+#include <gb/gb.h>
 #include <stdint.h>
 
 #include "config.h"

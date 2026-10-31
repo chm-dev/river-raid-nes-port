@@ -11,7 +11,7 @@
 #ifndef ENTITIES_H
 #define ENTITIES_H
 
-#include <nes/nes.h>
+#include <gb/gb.h>
 #include <stdint.h>
 
 #define MAX_ENTITIES            11u     /* the Atari has 11 object slots */

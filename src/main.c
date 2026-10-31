@@ -16,7 +16,7 @@
  *   cannot be delayed by main-loop work (river row streaming).  The visible
  *   split lands on scanline 30/31.
  */
-#include <nes/nes.h>
+#include <gb/gb.h>
 #include <stdint.h>
 
 #include "config.h"

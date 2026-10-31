@@ -7,7 +7,12 @@
  * frames and turn at the banks.  Types, shapes and scores come from the
  * extracted Atari tables.
  */
-#include <nes/nes.h>
+#include <gb/gb.h>
+#define palette_color_t uint16_t
+#undef set_bkg_palette_entry
+#define set_bkg_palette_entry(p,i,c)
+#undef set_sprite_palette
+#define set_sprite_palette(a,b,c)
 #include <stdint.h>
 
 #include "config.h"
@@ -839,7 +844,7 @@ uint8_t entities_hit_shot(uint8_t sx, uint8_t sy) BANKED {
  * version ~4k cycles per call (2.0k/frame in the profile).  Its own function,
  * as inline asm must be. */
 static void ent_scan_player(void) {
-#ifndef __SDCC
+#ifndef __SDCC_mos6502
     for (; e_i < MAX_ENTITIES; e_i++) {
         e_type = ent_type[e_i];
         if (e_type == ENT_AUX_SHELL) {
@@ -1195,12 +1200,12 @@ static uint8_t e_dx;
  * offset e_off, stopping at the entity sprite budget.  Hand-written: the C
  * version took ~190 cycles per sprite, this ~45. */
 static void ent_emit_row(void) {
-#ifndef __SDCC
+#ifndef __SDCC_mos6502
     /* Host build (tests/host/spawn_main.c): same thing in C. */
     for (e_n = e_cols; e_n != 0u && e_off < 176u; e_n--, e_off = (uint8_t)(e_off + 4u)) {
         shadow_OAM[e_off >> 2].y = e_y;
         shadow_OAM[e_off >> 2].tile = e_tile++;
-        shadow_OAM[e_off >> 2].attr = e_prop;
+        shadow_OAM[e_off >> 2].prop = e_prop;
         shadow_OAM[e_off >> 2].x = e_px;
         e_px = (uint8_t)(e_px + e_dx);
     }
@@ -1257,7 +1262,7 @@ static void ent_draw_bridge_debris(void) {
     }
 }
 
-#ifdef __SDCC
+#ifdef __SDCC_mos6502
 /* Constants hard-coded in ent_draw_reg(); keep them in step with the C side. */
 typedef char ent_asm_tile_base[(ENT_TILE_BASE == 88u) ? 1 : -1];
 typedef char ent_asm_flipx[(S_FLIPX == 0x40u) ? 1 : -1];
@@ -1399,7 +1404,7 @@ static void ent_draw_reg(void) {
 
 static void ent_draw(void) {
     e_type = ent_type[e_i];
-#ifdef __SDCC
+#ifdef __SDCC_mos6502
     if (e_type > ENT_AUX_EXPLODE_LAST && e_type < ENT_AUX_TANK) {
         ent_draw_reg();
         return;
@@ -1469,7 +1474,7 @@ void entities_follow(void) BANKED {
     if (river_rows_last == 0u) {
         return;
     }
-#ifndef __SDCC
+#ifndef __SDCC_mos6502
     for (e_t = ENT_OAM_TANK; e_t < ent_oam_used; e_t++) {
         if (shadow_OAM[e_t].y >= 232u) {
             continue;

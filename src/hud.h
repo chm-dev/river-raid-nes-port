@@ -12,7 +12,7 @@
 #ifndef HUD_H
 #define HUD_H
 
-#include <nes/nes.h>
+#include <gb/gb.h>
 #include <stdint.h>
 
 /* True vertical scroll of the playfield, in pixels (0..239). */
