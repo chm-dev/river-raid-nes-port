@@ -60,8 +60,9 @@
  *                 buzz.  A DFT of its 465-tick pattern puts the strongest line
  *                 near tick/4.9 (620 Hz for AUDF2 = 20, 250 Hz for 52) with the
  *                 energy spread like noise at the divider rate, so the port
- *                 plays it on the 2A03 noise channel in short mode at the same
- *                 bit rate (1789773 / period_cycles of Altirra's decoder).
+ *                 plays it on the 2A03 noise channel (normal mode, not the
+ *                 tonal short mode) at the same bit rate (1789773 /
+ *                 period_cycles of Altirra's decoder).
  *
  *   (The old note here, "$7F is the shot passing a helicopter", was wrong: $7F
  *   is this missile's sound counter.)
@@ -173,9 +174,9 @@ static const uint8_t engine_idx[3] = { NOISE_SLOW, NOISE_CRUISE, NOISE_FAST };
 /* Helicopter missile zap: n = 9..1 frames left -> noise period index for POKEY
  * AUDF2 = 20,16,28,24,36,32,44,40,52 (divider period 588, 476, 812, 700, 1036,
  * 924, 1260, 1148, 1484 CPU cycles -> nearest of 508/762/1016/2034), indexed
- * by n - 1; volume is n + 6; short (93-step) mode for the buzz. */
+ * by n - 1; volume is n + 6.  Normal (long LFSR) mode: the short 93-step mode
+ * played as a high pulse-like tone, the original is noise. */
 #define MISSILE_FRAMES  9u
-#define NOISE_SHORT     0x80u
 static const uint8_t missile_noise[MISSILE_FRAMES] = {
     14u, 13u, 13u, 13u, 13u, 12u, 12u, 11u, 11u
 };
@@ -394,7 +395,7 @@ void sound_update(void) {
         snd_msl = snd_tick(snd_msl);
         if (snd_msl != 0u) {
             vol = (uint8_t)(snd_msl + 6u);
-            idx = (uint8_t)(missile_noise[(uint8_t)(snd_msl - 1u)] | NOISE_SHORT);
+            idx = missile_noise[(uint8_t)(snd_msl - 1u)];
         }
     }
     if (vol == 0u && snd_shell > SHELL_CHIRP) {
@@ -470,7 +471,7 @@ void sound_play_shell(void) {
 void sound_play_missile(void) {
     /* Called when the fast helicopter fires: the frame $7F = 9 is written now. */
     snd_msl = MISSILE_FRAMES;
-    snd_noise_idx = (uint8_t)(missile_noise[MISSILE_FRAMES - 1u] | NOISE_SHORT);
+    snd_noise_idx = missile_noise[MISSILE_FRAMES - 1u];
     snd_noise_vol = 15u;
     APU_NOISE_LO = snd_noise_idx;
     APU_NOISE_CTRL = (uint8_t)(CONST_VOL | 15u);

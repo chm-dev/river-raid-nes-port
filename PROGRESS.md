@@ -2133,3 +2133,9 @@ entity loop and the split-wait work are not needed for now; RAM 72 bytes free.
   `player_state` is now exported from `player.c`, the define moved to `player.h`). The Atari gates `$7F` by `$29` bit 7.
 - Build: ROM 65552, RAM 5 bytes free, `_XINIT` ends `$FC6C`. Not run in Mesen. Pitch/timbre is a model: judge by ear;
   tweak `missile_noise[]` / `NOISE_SHORT` in `src/sound.c` (try long mode by dropping `NOISE_SHORT` if it is too tonal).
+
+### 2026-10-31 - Helicopter missile sound: long-mode noise (branch `main`)
+
+- Playtest: the short-mode (93-step) noise version still sounded like a high pulse; the original is noise. Dropped `NOISE_SHORT`:
+  the missile zap is now normal-mode noise at the same indices (14,13,13,13,13,12,12,11,11 by n-1), volume n+6. Same family
+  as the engine hiss (idx 11..13). Build: ROM 65552, RAM 5 free, `_XINIT` ends `$FC68`. Not run in Mesen.
