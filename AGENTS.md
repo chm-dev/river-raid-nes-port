@@ -41,7 +41,7 @@ Gearboy is the GB/GBC emulator with an MCP server. The folder is gitignored and 
 - **Starts paused:** call `debug_continue`.
 - **Protocol:** requests after `initialize` need the header `MCP-Protocol-Version: 2025-11-25`.
 - **Memory:** `read_memory` area 6 is WRAM, with offsets from `$C000`.
-- **Profiler:** reports clocks (70,224 per frame). Divide by 4 for M-cycles.
+- **Profiler:** reports units of 70,224 per frame at any CPU speed. M-cycles = units / 4 in single speed, units / 2 in double speed (the ROM runs double). Recipe: `tests/gb/profile_play.mjs`.
 - **Speed:** fast-forward did not speed up headless runs, so keep benchmarks short.
 - **Shutdown:** stop the emulator process when finished.
 - **Client:** `tests/gb/gearboy_client.mjs`. Benchmarks are in `tests/gb/bench/`.

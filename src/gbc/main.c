@@ -117,18 +117,25 @@ static void apply_camera(void) {
  * camera, add the +16/+8 hardware offsets and hide whatever is outside the
  * view.  Sprite tiles live in VRAM bank 1 (OAM attribute bit 3). */
 static void oam_camera(void) {
-    uint8_t i, n = 0;
-    int16_t vy, vx;
+    uint8_t i, n = 0, y, x, xbase;
 
+    /* All 8-bit: y < 232 spans fewer than 256 values and x spans exactly 256,
+     * so "-8 < v < limit" becomes one unsigned compare of v + 8 - 1 (the sum
+     * wraps for everything off-view). */
+    xbase = (uint8_t)(SOURCE_X_OFFSET + camera_x - 8u);
     for (i = 0; i < LOGIC_OAM_SLOTS && n < 40u; i++) {
-        vy = (int16_t)gbc_logic_oam[i].y - (int16_t)GBC_VIEW_TOP_SCANLINE;
-        vx = (int16_t)gbc_logic_oam[i].x - (int16_t)SOURCE_X_OFFSET - (int16_t)camera_x;
-        if (gbc_logic_oam[i].y >= 232u || vy <= -8 || vy >= (int16_t)GBC_VIEW_LINES ||
-            vx <= -8 || vx >= 160) {
+        y = gbc_logic_oam[i].y;
+        if (y >= 232u) {
             continue;
         }
-        shadow_OAM[n].y = (uint8_t)(vy + 16);
-        shadow_OAM[n].x = (uint8_t)(vx + 8);
+        y = (uint8_t)(y - (GBC_VIEW_TOP_SCANLINE - 8u));        /* vy + 8 */
+        x = (uint8_t)(gbc_logic_oam[i].x - xbase);              /* vx + 8 */
+        if ((uint8_t)(y - 1u) >= (uint8_t)(GBC_VIEW_LINES + 7u) ||
+            (uint8_t)(x - 1u) >= 167u) {
+            continue;
+        }
+        shadow_OAM[n].y = (uint8_t)(y + 8u);
+        shadow_OAM[n].x = x;
         shadow_OAM[n].tile = gbc_logic_oam[i].tile;
         shadow_OAM[n].prop = (uint8_t)(gbc_logic_oam[i].prop | S_BANK);
         n++;

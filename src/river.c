@@ -2119,12 +2119,30 @@ static void river_job_solids(void) {
 #endif
 }
 
+/* Non-solid columns one river_update() may classify before the job yields to
+ * the next pass (find_dup ~1.7k + upload ~1.4k units each, the stripe ~5.5k, so
+ * a whole job peaked at 58k of a 70k frame).  The job resumes where it stopped,
+ * as when the buffer is full.  The 6502 keeps its unlimited job. */
+#ifndef RIVER_JOB_COLS
+#ifdef __SDCC_sm83
+#define RIVER_JOB_COLS      6u
+#else
+#define RIVER_JOB_COLS      255u
+#endif
+#endif
+#define RIVER_STRIPE_COLS   3u          /* budget the stripe write is worth */
+static uint8_t river_job_left;
+
 static void river_run_job(void) {
     for (;;) {
         river_job_solids();
         if (river_job_col >= RIVER_TILE_COLS) {
             break;
         }
+        if (!river_job_left) {
+            return;                     /* budget spent: resume next pass */
+        }
+        river_job_left--;
         rj_c = river_job_col;
         river_find_dup();
         if (rj_id == 0xFFu) {
@@ -2140,6 +2158,10 @@ static void river_run_job(void) {
         river_row_ids[rj_c] = rj_id;
         river_job_col++;
     }
+    if (river_job_left < RIVER_STRIPE_COLS) {
+        return;
+    }
+    river_job_left -= RIVER_STRIPE_COLS;
     if (!river_emit_stripe()) {
         return;
     }
@@ -2411,6 +2433,7 @@ static void river_start(uint8_t restart, uint8_t bridges) {
         river_generate_raw_row();
     }
     river_finish_tile_row();
+    river_job_left = 255u;              /* the display is off: no per-pass limit */
     while (river_job) {
         river_run_job();
     }
@@ -2545,6 +2568,7 @@ void river_update(void) {
 #endif
         river_gen_budget = 2u;
     }
+    river_job_left = RIVER_JOB_COLS;
     if (river_job && river_gen_budget != 1u) {
         river_run_job();
     }

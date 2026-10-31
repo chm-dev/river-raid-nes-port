@@ -46,3 +46,11 @@ The NES history is in `archive/nes/PROGRESS.md`.
 
 - The "some side hills and trees glitch" bug no longer reproduces; an earlier change must have fixed it (cause never found). Marked done in `BUGS&FEATS.md`, removed from `HANDOFF.md` next steps.
 - `tests/host_river.ps1` no longer built (river.c includes `<gb/gb.h>`, stub existed only as `nes/nes.h`). Added `tests/host/gb/gb.h` forwarding to it. Result: all 19999 rows match `tools/river_model.py` for all four start levels.
+
+### 2026-11-01 - Fast-speed pacing: measure, oam_camera, job split (branch `gbc-port`)
+
+- First profile of the real ROM in play (Gearboy, double speed, units of 70,224 per frame; `tests/gb/profile_play.mjs`). Fast speed ran 305 passes in 598 frames (0.51 per frame). `SUB_00_0324` = `oam_camera`, 31k units per pass.
+- `oam_camera`: 8-bit early-out on hidden slots plus wrap-compare range tests; exhaustive host check over every y/x/camera (0 mismatches). 31k to 7-12k per pass; bank 0 code shrank about 130 bytes.
+- `river_run_job`: budget of 6 non-solid columns per `river_update` (stripe worth 3), resumes via `river_job_col`; `river_start` runs it unlimited. Peak 58k to 26k. `tests/host_river.ps1 -JobCols 6` and 3: all rows match the model for the four start levels.
+- Result: fast 0.51 to 0.74 passes per frame, cruise 1.00. Player-pass generation budget 3 to 2 was tried and reverted (river_update peak 81k to 66k, pass rate unchanged).
+- Build: `.\build_gbc.ps1` passes all checks. Corrected the profiler unit note in AGENTS.md and the plan.

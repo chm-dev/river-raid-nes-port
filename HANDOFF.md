@@ -2,7 +2,7 @@
 
 Short, current, rewritten every session. Rules are in `AGENTS.md`; the plan is `GBC_PORT_PLAN.md`; history is `PROGRESS.md` (grep it, do not read whole).
 
-**Last updated:** 2026-10-31 · **Branch:** `gbc-port` · **Phase:** milestone 2 built and mostly playtested; remaining checks, then the go/no-go gate
+**Last updated:** 2026-11-01 · **Branch:** `gbc-port` · **Phase:** milestone 2 built and mostly playtested; remaining checks, then the go/no-go gate
 
 ## Where we are
 
@@ -16,13 +16,13 @@ Short, current, rewritten every session. Rules are in `AGENTS.md`; the plan is `
 - **Shot:** on SM83 it steps 6 px per elapsed tick and hit-tests each step (`player_test_shot`); one 12 px jump tested only at its end registered hits late.
 - **HUD:** `gbc/hud_gbc.c`, Window at WY=128, 20x2 cells, tiles in VRAM bank 1 ids 0..23, updated right after `vsync()`. Only sound is still stubbed (`stubs_m1.c`).
 - **Logic X stays the Atari HPOS**: `SOURCE_X_OFFSET` is 32 on GBC too; only the camera subtracts it.
-- Benchmarks (`GBC_PORT_PLAN.md` → Measurements): river and entity passes fit the double-speed budget. Player, HUD, uploads, sound still **not measured**.
+- Benchmarks (`GBC_PORT_PLAN.md` → Measurements): the DMG bench said river and entity passes fit the budget; the real ROM at fast speed does not (see next steps). Profiler units: 70,224 per frame, M = units / 2 at double speed. `tests/gb/profile_play.mjs` is the recipe (it finds `_player_invuln` in the `.noi`; build with `-ProfExport`).
 - `main` is NES-only. The NES project and its docs are in `archive/nes/`.
 
 ## Next steps
 
-1. **Split `river_run_job` across frames** (fast-speed stutter is acceptable for now); measure first.
-2. Measure player, HUD and uploads once they exist.
+1. **Fast speed still runs at ~0.74 passes per frame** (cruise 1.00). Done this session: `oam_camera` in 8-bit math (31k to 7-12k units per pass) and `river_run_job` split (`RIVER_JOB_COLS` 6). Remaining overruns are the player/entity groups at level 1 plus 13.5k per generated row, not the job. Levers, in order: profile the entity and player passes by name (`tests/gb/profile_play.mjs fast 40`); `oam_camera` is still 7-12k; the player-pass generation budget (3 to 2 cut the `river_update` peak 81k to 66k, no pass-rate gain, reverted); `LOGIC_FRAMES` 3.
+2. Measure HUD and uploads (the profile now covers play with HUD, not sound).
 3. **Later, separate tasks:** HUD rework, remove 2-player mode (both in `BUGS&FEATS.md`); sound port.
 4. Known unfinished drawing: bridge flash colour (`ent_water_color` is a no-op), HI score and blink not shown, per-row river colours (milestone 3).
 5. **Finish the m2 playtest** (user): fuel gauge, lives and score, crash/respawn/game over back to attract, pause menu (sprite letters, never checked), the late-shot fix, and the jet now 4 px lower (`PLAYER_START_Y` 222 on GBC, the sprite-cull limit; all `[~]` in `BUGS&FEATS.md`). If 4 px does not fix reaction time, the next lever is a thinner HUD Window (`HUD_WY`, +8 px view).

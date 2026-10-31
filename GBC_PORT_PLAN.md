@@ -91,7 +91,8 @@ If only reaction time fails, try a lower jet position (already 222, the sprite-c
   - It starts paused, so call `debug_continue`.
   - Requests after `initialize` need the header `MCP-Protocol-Version: 2025-11-25`.
   - `read_memory` area 6 is WRAM, with offsets from `$C000`.
-  - The profiler reports clocks (70,224 per frame); divide by 4 for M-cycles.
+  - The profiler reports units of 70,224 per frame at any CPU speed: divide by 4 for M-cycles in single speed, by 2 in double speed. Passes per frame (`_wait_vbl_done` calls / frames) is the headline pacing number: 1.0 = 60 Hz, 0.5 = locked at 30 Hz. Recipe and run script: `tests/gb/profile_play.mjs` (build with `-ProfExport`).
+  - **First real-ROM profile (2026-11-01, fast speed, 10 s, units):** `oam_camera` cost 31k per pass (int16 math on all 48 slots), now 7-12k. Row generation is ~13.5k per raw row (`river_convert_row` 12.5k). `river_run_job` peaked at 58k, now 26k with a 6-column budget. Passes per frame at fast: 0.51 before, 0.74 after; cruise 1.00. The rest is the player and entity groups (see HANDOFF).
   - Fast-forward didn't speed up headless runs, so keep benchmarks short.
   - `gearboy/` is gitignored and local to this machine.
 - **Stop emulator processes** when finished.
