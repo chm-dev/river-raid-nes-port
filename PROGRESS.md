@@ -2209,3 +2209,7 @@ entity loop and the split-wait work are not needed for now; RAM 72 bytes free.
 - Cause: the Atari jet crash test is `lda P2PF; lsr; bcc` (`$B651`), bit 0 only = playfield colour 1 = land (`$55`). The bank outline is `$AA` (colour 2) and water `$FF` (colour 3), neither crashes. `river_pattern` puts a 4-px outline between water and land (left land ends at x-4, right land starts at x+4, island likewise), while `river_left_x/right_x` are the water edges, so the port crashed 4 px early on each side (gaps 8 px narrower).
 - Fix: `player_slot_hit` (src/player.c) adds `PLAYER_EDGE_BAND` = 4 to both bank bounds and shrinks the island span by 4 per side; island tips (width < 16, phase 6/7 drawn as outline only) have no land. Shot (M0 tests PF0|PF1) and entity checks keep the outline bounds. `nes_jet_hitbox.mjs` updated (survives at lo-5 / hi-4, crashes at lo-6 / hi-3).
 - Build: ROM 65552, RAM 4 free. Tests: nes_jet_hitbox, nes_gameplay pass. Awaiting user playtest at level 50.
+
+### 2026-10-31 - Level 50 bottleneck fix play-tested
+
+- User confirmed the 4-px outline fix feels right at level 50; `BUGS&FEATS.md` entry marked `[x]`.
