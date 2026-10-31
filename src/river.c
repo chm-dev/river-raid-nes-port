@@ -2529,7 +2529,11 @@ uint8_t river_gen_budget = RIVER_GEN_PER_PASS;  /* rows this pass may generate (
 #define RIVER_ENT_BUMP_MAX  9u
 
 void river_update(void) {
+#ifndef __SDCC_sm83
+    /* GBC keeps the direct set_bkg_data / set_vram_byte path: river_put() is a
+     * no-op on the C paths, so the "live" buffer path would drop every upload. */
     river_live = 1u;
+#endif
     /* Behind schedule: spend more now, a clamped scroll is worse than a late
      * frame.  A budget of 1 marks the heavy entity pass, which leaves the tile
      * job to the next pass unless the generator has fallen behind. */
