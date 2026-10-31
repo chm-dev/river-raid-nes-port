@@ -3,7 +3,7 @@
 #   .\build_gbc.ps1                      # default module list
 #   .\build_gbc.ps1 -Sources a.c,b.c     # custom list (benchmarks, trial links)
 #
-# Banked modules (entities, entity_gfx) get -Wf-bo1.  The link is MBC5 with 4
+# Banked modules: entities, entity_gfx get -Wf-bo1; player gets -Wf-bo2.  The link is MBC5 with 4
 # banks.  After the link the script fails the build unless:
 #   - the header says CGB-only ($0143 = $C0), MBC5 ($0147 = $19), the right
 #     ROM size code ($0148) and a valid header checksum ($014D);
@@ -40,6 +40,7 @@ foreach ($src in $Sources) {
     $obj = Join-Path $objDir "$base.o"
     $a = @('-msm83:gb', '-Isrc')
     if ($base -in 'entities', 'entity_gfx') { $a += '-Wf-bo1' }
+    if ($base -eq 'player') { $a += '-Wf-bo2' }
     if ($ProfExport) { $a += '-DPROF_EXPORT_STATICS' }
     # Game logic writes sprites in NES coordinates into gbc_logic_oam; only
     # gbc/main.c sees the real shadow_OAM and translates (camera, +16/+8).

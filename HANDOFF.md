@@ -8,6 +8,7 @@ Short, current, rewritten every session. Rules are in `AGENTS.md`; the plan is `
 
 - The port is GBC-only. The C prototype comes first, then a playtest go/no-go after milestone 2.
 - **Build:** `.\build_gbc.ps1 -Name m1_jet -RequireSymbols _frame_counter,_gbc_logic_oam -Sources src/gbc/main.c,src/gbc/stubs_m1.c,src/atari_data.c,src/collision.c,src/river.c,src/entities.c,src/entity_gfx.c,src/player.c` → `roms/m1_jet.gb`. It checks the header (`-Wm-yC` confirmed: `$0143=$C0`, MBC5, 4 banks, checksum), every `.map` area against its bank window, and `.noi` symbols. Failure paths are tested only for a missing symbol.
+- **Banks:** player.c is in bank 2 (-Wf-bo2, set in uild_gbc.ps1), entities in bank 1. Bank 0 code ends at $3102 (~3.8 KB free). Bank 3 is empty; put the next banked module (HUD, sound) in 2 or 3 and keep BANKED on its public API.
 - **GBC code lives in `src/gbc/`** (`main.c`, `config_gbc.h`, `stubs_m1.c`). Shared files carry `#ifdef __SDCC_sm83` branches next to the NES code, never replacements, so the milestone 5 merge stays cheap. `build.ps1` is still the NES build.
 - **How it draws:** river ring is 32 rows in BG map 0 (`$9800`); the river scroll value is also `SCY` (256 px wrap), no split interrupt. `river_live` stays 0 on GBC so uploads take the direct `set_bkg_data` / `set_vram_byte` path (`river_put()` is a no-op on C paths).
 - **Sprites:** logic files compile with `-Dshadow_OAM=gbc_logic_oam` and keep NES coordinates; `oam_camera()` in `gbc/main.c` converts them (camera, +16/+8, hide off-view) and sets the VRAM bank 1 bit. Sprite tiles are uploaded with `VBK_REG = 1`.
@@ -18,13 +19,12 @@ Short, current, rewritten every session. Rules are in `AGENTS.md`; the plan is `
 
 ## Next steps
 
-1. **Before adding code: bank 0 is full.** Code ends at `$3F6B` of `$3FFF`. Move `player.c` or `river.c` to bank 2 or 3 (`-Wf-bo2`, and `-Wl-yo4` already gives 4 banks) before the HUD or sound ports.
-2. **Milestone 2:** shot visible, entity colours (`tools/gen_entity_gfx.py` GBC palettes), fuel, collisions, minimal HUD (Window layer, 16 px at the bottom), full game to game over, no sound. Open bugs are in `BUGS&FEATS.md`.
-3. Move the jet lower (`GBC_VIEW_TOP_SCANLINE`, `config_gbc.h`); the user found the playfield too short ahead of it. This also decides reaction time, the plan's main risk.
-4. Split `river_run_job` across frames (fast-speed stutter is acceptable for now); measure first. Check the glitching hills and trees with `tests/host_river.ps1` before guessing.
-5. Measure player, HUD and uploads once they exist.
+1. **Milestone 2:** shot visible, entity colours (`tools/gen_entity_gfx.py` GBC palettes), fuel, collisions, minimal HUD (Window layer, 16 px at the bottom), full game to game over, no sound. Open bugs are in `BUGS&FEATS.md`.
+2. Move the jet lower (`GBC_VIEW_TOP_SCANLINE`, `config_gbc.h`); the user found the playfield too short ahead of it. This also decides reaction time, the plan's main risk.
+3. Split `river_run_job` across frames (fast-speed stutter is acceptable for now); measure first. Check the glitching hills and trees with `tests/host_river.ps1` before guessing.
+4. Measure player, HUD and uploads once they exist.
 
-**Use the advisor for steps 3 and 4** (the glitching hills/trees and the `river_run_job` split). Call it before committing to a diagnosis or approach, again if a fix does not change the symptom, and once before declaring done. Measure first and pass it the evidence (map and tile rows, profiler numbers, what was ruled out): it only knows what is in the transcript. It is not needed for palettes, the HUD or the bank 0 move, and it does not replace the user's playtest or the build checks.
+**Use the advisor for steps 2 and 3** (the glitching hills/trees and the `river_run_job` split). Call it before committing to a diagnosis or approach, again if a fix does not change the symptom, and once before declaring done. Measure first and pass it the evidence (map and tile rows, profiler numbers, what was ruled out): it only knows what is in the transcript. It is not needed for palettes, the HUD or the bank 0 move, and it does not replace the user's playtest or the build checks.
 
 ## Decisions not to reopen
 
