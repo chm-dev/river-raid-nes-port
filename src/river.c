@@ -2515,12 +2515,16 @@ static uint8_t ru_rows;
 static uint8_t ru_gen;
 uint8_t river_gen_budget = RIVER_GEN_PER_PASS;  /* rows this pass may generate (main.c) */
 
+/* Entity count from which the heavy entity pass keeps its one-row budget even
+ * when behind: its two-row version ran late in about 4 of 10 passes at level 50. */
+#define RIVER_ENT_BUMP_MAX  9u
+
 void river_update(void) {
     river_live = 1u;
     /* Behind schedule: spend more now, a clamped scroll is worse than a late
      * frame.  A budget of 1 marks the heavy entity pass, which leaves the tile
      * job to the next pass unless the generator has fallen behind. */
-    if (river_gen_budget == 1u && river_owed >= 2u) {
+    if (river_gen_budget == 1u && river_owed >= 2u && entity_count < RIVER_ENT_BUMP_MAX) {
         river_gen_budget = 2u;
     }
     if (river_job && river_gen_budget != 1u) {
