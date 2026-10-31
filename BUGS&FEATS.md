@@ -3,9 +3,11 @@
 - [ ] baloon basket color - should be brown
 - [ ] White striped helicopters do not shoot
 - [ ] There are no tanks shooting from side of the river
-- [ ] Starting game. Level 1 is dark green grass. Get to level 2 - light green grass -> die -> Level 2 has now dark green grass. 
+- [~] (fix built 2026-10-31, not yet play-tested in Mesen: `river_start` derives land colour from level parity) Starting game. Level 1 is dark green grass. Get to level 2 - light green grass -> die -> Level 2 has now dark green grass. 
 - [ ] Can't get to pause menu until plane starts moving
+- [ ] Lives logic. Life (1 plane on the hud) is substracted only after river scrolls down fully and plane appears.y
 - [ ] Level 50 tight bottle neck is practically unbeatable on NES. It is beatable on Atari.
+- [ ] Level 20 has some weird glitch on the right side of the fork, near the ballon. It is straight river edge on atari but look like glitced in our case. It does not collide with the player, however. It is only visual. It might be some kind of river generator problem or bug.
 
 # FEATURES
 - [ ] Atari 2600 mode, which would disable river edge tiles (Would it grant significant performance?)
