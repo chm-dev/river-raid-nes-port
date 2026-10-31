@@ -6,11 +6,4 @@ A port of the Atari 8-bit *River Raid* (1983, Activision) to the Game Boy Color,
 
 The earlier NES port is archived in `archive/nes/` (its README explains what is there). The NES build is on `main` until the two ports merge.
 
-<img width="508" height="476" alt="NES build, for reference" src="https://github.com/user-attachments/assets/382baff0-3d52-4f3e-8823-18b9decd1e3b" />
-
-## Docs
-
-- `HANDOFF.md`: current status, next steps, decisions not to reopen.
-- `GBC_PORT_PLAN.md`: decisions, measurements, design, milestones, risks.
-- `AGENTS.md`: toolchain, coding rules, Gearboy emulator and tests.
-- `PROGRESS.md`: history log. `BUGS&FEATS.md`: bugs and feature ideas.
+<img width="636" height="574" alt="Recording 2026-11-01 004604" src="https://github.com/user-attachments/assets/29f0d582-9ef5-4f60-80fd-4999d9025ab5" />
