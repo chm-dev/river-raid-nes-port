@@ -90,9 +90,17 @@ static const uint8_t pause_tile[PAUSE_PARTS] = { 0, 1, 2, 3, 4, 1, 1, 5, 6, 7 };
 static const uint8_t pause_slot[PAUSE_PARTS] = { 56, 57, 58, 59, 60, 61, 62, 63, 3, 4 };
 static const uint8_t pause_x[PAUSE_PARTS] = { 104, 112, 120, 128, 136, 144, 112, 120, 128, 136 };
 
+#ifdef __SDCC_sm83
+#include <gb/cgb.h>
+/* Index 0 is transparent for sprites; yellow, white and red like NES $28/$30/$16. */
+static const palette_color_t player_palette[4] = {
+    RGB(0, 0, 0), RGB(28, 26, 6), RGB(31, 31, 31), RGB(28, 6, 4)
+};
+#else
 static const palette_color_t player_palette[4] = {
     0x0Fu, 0x28u, 0x30u, 0x16u
 };
+#endif
 
 /* Two 8x8 sprite tiles in GBDK's interleaved 2bpp format; the 14-row
  * Atari shapes become two stacked tiles. */

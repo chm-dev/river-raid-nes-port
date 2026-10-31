@@ -41,6 +41,9 @@ foreach ($src in $Sources) {
     $a = @('-msm83:gb', '-Isrc')
     if ($base -in 'entities', 'entity_gfx') { $a += '-Wf-bo1' }
     if ($ProfExport) { $a += '-DPROF_EXPORT_STATICS' }
+    # Game logic writes sprites in NES coordinates into gbc_logic_oam; only
+    # gbc/main.c sees the real shadow_OAM and translates (camera, +16/+8).
+    if ($src -notlike '*gbc/main.c') { $a += '-Dshadow_OAM=gbc_logic_oam' }
     $a += @('-c', '-o', $obj, $src)
     & $lcc @a
     if ($LASTEXITCODE -ne 0) { Write-Host "compile failed: $src" -ForegroundColor Red; exit 1 }

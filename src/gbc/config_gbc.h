@@ -12,9 +12,10 @@
 
 #define PPU_NT1_BASE            0x9800u
 
-/* 24 river tile columns sit in map columns 0..23, so a source pixel X is a
- * map pixel X. */
-#define RIVER_LEFT_COL_PX       0u
+/* The 24 river tile columns sit in map columns 0..23, but logic X stays the
+ * Atari HPOS, where river pixel 0 is at X = 32 (as on the NES).  The camera
+ * subtracts it when it draws sprites (see gbc/main.c). */
+#define RIVER_LEFT_COL_PX       32u
 #define SOURCE_X_OFFSET         (RIVER_LEFT_COL_PX)
 
 #define RIVER_RING_ROWS         32u
