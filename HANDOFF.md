@@ -31,7 +31,7 @@ PROGRESS.md "Plane replaced by random enemies").
 
 - Run `./build.ps1`. It must print `ROM  65552 bytes`; also confirm `_XINIT` in `roms/river_raid.map`
   ends below `$FFFA`. The linker does **not** fail on fixed-bank overflow, the ROM silently becomes 128 KiB.
-- Internal RAM was **5 bytes free** at the last build (2026-10-31); `digit_buf` (16 B) can alias a shared
+- Internal RAM was **4 bytes free** at the last build (2026-10-31); `digit_buf` (16 B) can alias a shared
   scratch if more is needed. `build.ps1` prints the live figure and throws if `_BSS` passes `$07FF`.
 - Bank layout: fixed bank = everything else; bank 1 = `entities`, `entity_gfx`, `player`; bank 2 = `hud`
   (`$bankedSources` / `$bank2Sources` in `build.ps1`). Check `_CODE_1` / `_CODE_2` in the map for headroom.

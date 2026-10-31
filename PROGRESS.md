@@ -2172,3 +2172,7 @@ entity loop and the split-wait work are not needed for now; RAM 72 bytes free.
 ### 2026-10-31 - Pause from the READY state
 
 - START was only handled in `PLAYER_STATE_PLAY`, so the menu was unreachable while the jet waited for first input. `player_update` now enters the pause menu from READY too; `pause_from` remembers the state and RESUME restores it (`river_freeze` stays 1 for READY). Build ROM 65552, 4 bytes RAM free. Not Mesen-tested; awaiting user playtest.
+
+### 2026-10-31 - Pause from READY play-tested
+
+- User confirmed the READY-state pause fix (RESUME returns to READY, EXIT goes to attract). Marked `[x]` in `BUGS&FEATS.md`; HANDOFF RAM figure corrected to 4 bytes free.
