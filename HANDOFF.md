@@ -18,9 +18,8 @@ The cart **boots into attract**; every Mesen test calls `startGame()` from `test
 
 ## Next steps (priority order)
 
-1. **Grass colour flash at the bridge transition:** when the next level's (different green) land first
-   scrolls in near the bridge, the very bottom line of grass flashes in the new colour. Not investigated yet;
-   see `BUGS&FEATS.md`. Likely palette/attribute timing against the scrolling ring and the CHR upload.
+1. **Playtest the grass-flash fix** (`[~]` in `BUGS&FEATS.md`): at a bridge the bottom sliver of grass should
+   no longer flash the new colour. If it persists, look at the attribute placeholder in `river_emit_extra`.
 
 (Start levels 5/20/50 and the level-20 model trace were judged stale: play-tested with no visible tile problems.)
 

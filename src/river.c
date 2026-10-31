@@ -1483,6 +1483,7 @@ static uint8_t river_road_slot;       /* first (odd) slot of the road, or 0xFF *
 static uint8_t river_road_stage;      /* margin/attribute writes done for the job */
 static uint8_t river_land_alt;        /* land colour: 0 = $D2, 1 = $D6 */
 static uint8_t river_job_pal;         /* BG palette of the pending tile row */
+static uint8_t river_flip_age;        /* tile rows since the land colour flipped (255 = long ago) */
 static uint8_t river_pending_slot;
 static uint8_t river_job;             /* tile row waiting for classification */
 static uint8_t river_job_col;
@@ -1569,7 +1570,13 @@ static uint8_t river_emit_extra(void) {
         if (river_pending_slot & 1u) {
             rj_c = (uint8_t)(river_job_pal * 5u);
             if ((river_pending_slot & 3u) == 3u) {
-                rj_c |= (uint8_t)(rj_c << 4);   /* lower pair; the upper half is a placeholder */
+                /* Lower pair; the upper half still holds the previous lap's
+                 * rows, which are on screen (the bottom sliver) for 27-28 rows.
+                 * Keep their palette: the road, or the land colour from before
+                 * a recent flip. */
+                rj_n = (river_road_slot == (uint8_t)(river_pending_slot - 2u)) ? ROAD_PALETTE :
+                       (river_land_alt ^ (river_flip_age < 28u)) ? PLAYFIELD_ALT_PALETTE : PLAYFIELD_PALETTE;
+                rj_c = (uint8_t)((rj_c << 4) | (uint8_t)(rj_n * 5u));
             } else {
                 /* The pair below was written just before: the road if it is
                  * the road slot, else the current land colour. */
@@ -1843,6 +1850,7 @@ static void river_road_paint(void) {
     }
     if (--river_road_left == 0u && rg_countdown == 1u) {
         river_land_alt ^= 1u;           /* the land changes colour at the bridge */
+        river_flip_age = 0u;
     }
 }
 
@@ -1917,6 +1925,9 @@ static void river_finish_tile_row(void) {
     river_job_pal = (river_job_margin == 2u) ? ROAD_PALETTE :
                     river_land_alt ? PLAYFIELD_ALT_PALETTE : PLAYFIELD_PALETTE;
     river_job_margin = 0u;
+    if (river_flip_age != 0xFFu) {
+        river_flip_age++;
+    }
     river_job = 1u;
     river_job_col = 0u;
     river_block_index = 0;
@@ -2030,6 +2041,7 @@ static void river_start(uint8_t restart, uint8_t bridges) {
     river_road_left = 0;
     river_road_slot = 0xFFu;
     river_road_stage = 0;
+    river_flip_age = 0xFFu;
     river_land_alt = (uint8_t)((bridges & 1u) ^ 1u);    /* odd bridge: dark $D2 */
     river_job_pal = river_land_alt ? PLAYFIELD_ALT_PALETTE : PLAYFIELD_PALETTE;
     river_step = 0;

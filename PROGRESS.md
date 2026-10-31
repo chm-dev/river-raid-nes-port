@@ -2220,3 +2220,9 @@ entity loop and the split-wait work are not needed for now; RAM 72 bytes free.
 - Tried 2 px for attract and for the scroll-in: attract was far too fast, and 2 px scroll-in cost too much performance. Both were reverted; the Atari's `$59` is `$80` (games 1-4) / `$FE` (5-8) but the port uses one speed, by decision.
 - Screen-saver blank (`$78`, $B3EB-$B402) not ported: increments every 2048 frames, bit 7 blanks after ~73 min, any stick/key input clears it ($A1BF).
 - Build: ROM 65552 bytes, RAM 4 bytes free. Play-tested by the user; no Mesen suites run.
+
+### 2026-10-31 - Grass flash at the bridge transition (branch `main`)
+
+- Cause (static analysis, not reproduced in Mesen): an attribute byte covers 4 tile rows. `river_emit_extra` on slot&3==3 wrote the new row's palette into both halves; the upper half still describes the previous lap's rows 27-28 tile rows old, which show as the bottom sliver of the 210 px window. After the land colour flipped, that sliver took the new colour for ~28 rows.
+- Fix: the upper-half placeholder now keeps the old palette (road if `river_road_slot` is that pair, else the pre-flip land colour while `river_flip_age` < 28). New 1-byte `river_flip_age`, reset to 255 in `river_start`, 0 at the flip, incremented per finished tile row.
+- Build ROM 65552, RAM 3 bytes free, `_XINIT` ends at $FCCE; `host_river.ps1` all rows match. Awaiting user playtest.
