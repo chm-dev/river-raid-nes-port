@@ -2524,7 +2524,12 @@ void river_update(void) {
     /* Behind schedule: spend more now, a clamped scroll is worse than a late
      * frame.  A budget of 1 marks the heavy entity pass, which leaves the tile
      * job to the next pass unless the generator has fallen behind. */
+#ifdef __SDCC
     if (river_gen_budget == 1u && river_owed >= 2u && entity_count < RIVER_ENT_BUMP_MAX) {
+#else
+    /* the host harness does not link the entities; pacing does not change rows */
+    if (river_gen_budget == 1u && river_owed >= 2u) {
+#endif
         river_gen_budget = 2u;
     }
     if (river_job && river_gen_budget != 1u) {
