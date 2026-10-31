@@ -41,3 +41,8 @@ The NES history is in `archive/nes/PROGRESS.md`.
 
 - `PLAYER_START_Y` is 222 on SM83 (218 on NES). The view is bottom-anchored, so only the jet's logic Y can move it; 222 is the limit because sprites at y >= 232 are culled. Handoff, `BUGS&FEATS.md` (`[~]`) and the plan's risk note updated.
 - `.\build_gbc.ps1` passes all checks; bank 0 code ends at `$35A2`. Not playtested yet.
+
+### 2026-11-01 - Hills/trees glitch closed; host river check revived (branch `gbc-port`)
+
+- The "some side hills and trees glitch" bug no longer reproduces; an earlier change must have fixed it (cause never found). Marked done in `BUGS&FEATS.md`, removed from `HANDOFF.md` next steps.
+- `tests/host_river.ps1` no longer built (river.c includes `<gb/gb.h>`, stub existed only as `nes/nes.h`). Added `tests/host/gb/gb.h` forwarding to it. Result: all 19999 rows match `tools/river_model.py` for all four start levels.

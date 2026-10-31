@@ -21,14 +21,13 @@ Short, current, rewritten every session. Rules are in `AGENTS.md`; the plan is `
 
 ## Next steps
 
-1. **Glitching hills and trees**: check with `tests/host_river.ps1` and `tests/compare_tile_rows.mjs` before guessing.
-2. **Split `river_run_job` across frames** (fast-speed stutter is acceptable for now); measure first.
-3. Measure player, HUD and uploads once they exist.
-4. **Later, separate tasks:** HUD rework, remove 2-player mode (both in `BUGS&FEATS.md`); sound port.
-5. Known unfinished drawing: bridge flash colour (`ent_water_color` is a no-op), HI score and blink not shown, per-row river colours (milestone 3).
-6. **Finish the m2 playtest** (user): fuel gauge, lives and score, crash/respawn/game over back to attract, pause menu (sprite letters, never checked), the late-shot fix, and the jet now 4 px lower (`PLAYER_START_Y` 222 on GBC, the sprite-cull limit; all `[~]` in `BUGS&FEATS.md`). If 4 px does not fix reaction time, the next lever is a thinner HUD Window (`HUD_WY`, +8 px view).
+1. **Split `river_run_job` across frames** (fast-speed stutter is acceptable for now); measure first.
+2. Measure player, HUD and uploads once they exist.
+3. **Later, separate tasks:** HUD rework, remove 2-player mode (both in `BUGS&FEATS.md`); sound port.
+4. Known unfinished drawing: bridge flash colour (`ent_water_color` is a no-op), HI score and blink not shown, per-row river colours (milestone 3).
+5. **Finish the m2 playtest** (user): fuel gauge, lives and score, crash/respawn/game over back to attract, pause menu (sprite letters, never checked), the late-shot fix, and the jet now 4 px lower (`PLAYER_START_Y` 222 on GBC, the sprite-cull limit; all `[~]` in `BUGS&FEATS.md`). If 4 px does not fix reaction time, the next lever is a thinner HUD Window (`HUD_WY`, +8 px view).
 
-**Use the advisor for steps 1 and 2.** Call it before committing to a diagnosis or approach, again if a fix does not change the symptom, and once before declaring done. Measure first and pass it the evidence (map and tile rows, profiler numbers, what was ruled out): it only knows what is in the transcript. It is not needed for palettes, the HUD or bank moves, and it does not replace the user's playtest or the build checks.
+**Use the advisor for step 1.** Call it before committing to a diagnosis or approach, again if a fix does not change the symptom, and once before declaring done. Measure first and pass it the evidence (map and tile rows, profiler numbers, what was ruled out): it only knows what is in the transcript. It is not needed for palettes, the HUD or bank moves, and it does not replace the user's playtest or the build checks.
 
 ## Decisions not to reopen
 
