@@ -2148,3 +2148,10 @@ entity loop and the split-wait work are not needed for now; RAM 72 bytes free.
   against the pre-session baseline (0 px): it read OAM slot 6, which is now the missile slot; the test reads slot 7 now
   (locked on 80/80 frames again).
 - Build: ROM 65552, RAM 5 bytes free, `_XINIT` ends `$FC68`.
+
+### 2026-10-31 - Plane replaced by random enemies: investigated, not reproducible (branch `main`)
+
+- Bug (BUGS&FEATS.md, now marked `[?]` stale): at high levels white planes (type 7) were reported as replaced by other enemies. User could not reproduce it later; no source changes made.
+- Checked in our code: `ent_type` is only written by the spawner, the explosion code (`ent_type` = 2..6, class in the flags high nibble) and the tank/shell code; the only type rewrite on live objects is the helicopter rotor swap (8<->9, 10<->11, `entities.c` ~1625), which excludes 7. Sprite tile ranges do not overlap: HUD/BG 1..64, entities `ENT_TILE_BASE` 88..228, pause glyphs 240..247, HUD top tiles 248..255.
+- Mesen probe at level 50 (poked `rg_level`=50 after `startGame()`, held Up, 1500 frames, `ent_type[11]` sampled every frame): only 8<->9 and 10<->11 transitions (~410 and ~108 each); one plane appeared (slot 1, frame 88) and stayed type 7. So no corruption after spawn.
+- Not done: Atari comparison. If it comes back, the open question is whether `sp_choose` (`entities.c` ~260, Atari `$AC00-$AC8A`) picks the same types at high levels: `tools/atari_object_trace.py --level 50 --rows 1500 --out build/object_trace50.jsonl`, then `tools/object_validate.py` on it (needs AltirraBridgeServer, see `info/ALTIRRA_BRIDGE_NOTES.md`). Planes come only from `atari_spawn_types[rg_lfsr_b & 7]` (1 in 8 draws), demoted to a ship below level 5. Also capture a screenshot of the wrong sprite and the level/bridge number.

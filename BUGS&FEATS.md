@@ -8,7 +8,7 @@
 - [ ] Lives logic. Life (1 plane on the hud) is substracted only after river scrolls down fully and plane appears.y
 - [ ] Level 50 tight bottle neck is practically unbeatable on NES. It is beatable on Atari.
 - [ ] Level 20 has some weird glitch on the right side of the fork, near the ballon. It is straight river edge on atari but look like glitced in our case. It does not collide with the player, however. It is only visual. It might be some kind of river generator problem or bug.
-- [ ] On heigher levels (ie 50 and up but maybe earlier too) it seems like white horizontal flying planes get replaced by random enemies. And ships and helicopters fly across the river horizontally.
+- [?] STALE, ignore unless seen again (2026-10-31, user cannot reproduce; no code path found, see PROGRESS.md "Plane replaced by random enemies"): On heigher levels (ie 50 and up but maybe earlier too) it seems like white horizontal flying planes get replaced by random enemies. And ships and helicopters fly across the river horizontally.
 - [ ] Extra life sfx is played every 1000 points or so, whereas it should be playing only on extra life. Check how much points gives extra life and verify if it is implemented correctly.
 
 # FEATURES

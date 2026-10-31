@@ -8,32 +8,15 @@ and read only the matching `### date - title` entry. `AGENTS.md` has the toolcha
 
 ## Where we are
 
-| Phase | State |
-|---|---|
-| 1 Reverse engineering + asset extraction | done |
-| 2 Scaffolding, build, boot ROM | done |
-| 3 HUD, deferred LCD split, playfield ring | done |
-| 4 River generator, collision ring, exact tile cache, orientation | done (model matches 2,600-row Atari trace) |
-| 5 Jet, shot, entities, scoring, fuel, bridge/road/tank, respawn at last bridge, 30 Hz logic + 60 Hz river | done |
-| 6 Sound, attract, menus, 2P, HUD polish | in progress |
-
-Phase 6 already done and tested: APU sound re-derived from the Atari (`tests/nes_sound.mjs`),
-attract mode, start-level select (Up/Down = bridge 1/5/20/50), SELECT = 1P/2P alternating play,
-per-level hi-scores, world frozen until the player starts (`ent_hold`), start clearance around the jet,
-HUD start blink, white P2 score field, first HUD line raised 2 px, Atari-style game select
-(freezes the river, 296-frame timer).
+Phases 1-5 are done (reverse engineering, build, HUD/split scroll, river generator and exact tile cache,
+jet/entities/scoring/bridge/tank/respawn, 30 Hz logic + 60 Hz river). **Phase 6** (sound, attract, menus, 2P,
+HUD polish) is in progress: sound, attract, start-level select, 1P/2P, per-level hi-scores, game select,
+`ent_hold` and the HUD polish are done and tested. Enemy shooters (side tank, fast-helicopter missile) are
+ported and play-tested; OAM layout: 2-3 tank, 4-5 shell, 6 missile, 7+ entities.
 
 The cart **boots into attract**; every Mesen test calls `startGame()` from `tests/mcp_client.mjs`.
 
 ## Next steps (priority order)
-
-0. **Enemy shooters are ported and play-tested by the user** (2026-10-31): the side tank (`ent_side_tank_spawn`,
-   `ent_tank_edge`, `ENT_F_SIDE`) and the fast helicopter's 4x1 px missile (`ent_missile_tick`, OAM slot 6,
-   noise-channel zap in `src/sound.c`). Details: PROGRESS.md "Side tank ported", "Fast helicopter missile",
-   "Helicopter missile sound". Traces: `tools/atari_shoot_trace.py <level> <frames>` (attract at level 50
-   shows shooters in seconds; **sounds must be captured in a real game**, attract mutes them). Tune only if
-   the user reports it. Next bug in the list: planes replaced by random enemies at higher levels
-   (`BUGS&FEATS.md` last bug); the OAM layout is 2-3 tank, 4-5 shell, 6 missile, 7+ entities.
 
 1. **Check start levels 5/20/50** against the river model and `tests/nes_ring_integrity.mjs`.
    CHR-cache overflow (more visible 8x8 blocks than the 250 cache slots) is reachable from the first
@@ -41,9 +24,8 @@ The cart **boots into attract**; every Mesen test calls `startGame()` from `test
 2. **Attract extras:** the Atari's idle screen-saver blank (`$78`) and attract scroll speed (`$59`).
 3. Re-measure `ENT_WAIT_ROWS` if the playfield height or start scroll changes.
 
-## Open bugs (`BUGS&FEATS.md` is the source)
-
-Consult the file.
+Open bugs: `BUGS&FEATS.md` is the source (the "planes replaced by random enemies" bug is stale, see
+PROGRESS.md "Plane replaced by random enemies").
 
 ## Budgets (check, do not trust these numbers)
 
