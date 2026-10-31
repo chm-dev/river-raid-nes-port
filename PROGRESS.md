@@ -2226,3 +2226,5 @@ entity loop and the split-wait work are not needed for now; RAM 72 bytes free.
 - Cause (static analysis, not reproduced in Mesen): an attribute byte covers 4 tile rows. `river_emit_extra` on slot&3==3 wrote the new row's palette into both halves; the upper half still describes the previous lap's rows 27-28 tile rows old, which show as the bottom sliver of the 210 px window. After the land colour flipped, that sliver took the new colour for ~28 rows.
 - Fix: the upper-half placeholder now keeps the old palette (road if `river_road_slot` is that pair, else the pre-flip land colour while `river_flip_age` < 28). New 1-byte `river_flip_age`, reset to 255 in `river_start`, 0 at the flip, incremented per finished tile row.
 - Build ROM 65552, RAM 3 bytes free, `_XINIT` ends at $FCCE; `host_river.ps1` all rows match. Awaiting user playtest.
+
+- Grass flash fix play-tested by the user 2026-10-31: confirmed fixed.

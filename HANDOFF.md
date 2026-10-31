@@ -18,8 +18,8 @@ The cart **boots into attract**; every Mesen test calls `startGame()` from `test
 
 ## Next steps (priority order)
 
-1. **Playtest the grass-flash fix** (`[~]` in `BUGS&FEATS.md`): at a bridge the bottom sliver of grass should
-   no longer flash the new colour. If it persists, look at the attribute placeholder in `river_emit_extra`.
+No known open bugs; the Phase 6 list is clear. Remaining work is the Phase 6 polish in `PORTING_PLAN.md` and
+the feature ideas in `BUGS&FEATS.md`.
 
 (Start levels 5/20/50 and the level-20 model trace were judged stale: play-tested with no visible tile problems.)
 
