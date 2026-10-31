@@ -2180,3 +2180,8 @@ entity loop and the split-wait work are not needed for now; RAM 72 bytes free.
 ### 2026-10-31 - Extra-life fix play-tested
 
 - User confirmed the extra life every 10,000 pts fix (ten-thousands nibble) and the BG-tile lives icons. Marked play-tested in `BUGS&FEATS.md`.
+
+### 2026-10-31 - Lives spent when the jet appears
+
+- Atari spends a life when the jet appears (`$6A` 4 -> 3 at WAIT->READY), not at the crash. `player_start_game` now sets `hud_lives` and `pl_other[3]` to 4; `hud_lives--` moved from `player_crash` to the WAIT->READY transition in `player_update`. Game over = crash with 0 in reserve (same test as before). Net effect: 4 planes per game (1 flying + 3 spare), was 3.
+- Build: ROM 65552, RAM 4 free. Play-tested by the user (1P and respawn flow); no Mesen run.

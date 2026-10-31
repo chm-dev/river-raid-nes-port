@@ -407,9 +407,8 @@ static void player_crash(void) {
     player.alive = 0;
     sound_play_crash();
     sound_set_engine(SOUND_ENGINE_OFF);
-    if (hud_lives != 0u) {
-        hud_lives--;
-    }
+    /* The life is spent when the next jet appears (WAIT -> READY), as on the
+     * Atari; with none left in reserve this crash ends the game. */
     player_timer = PLAYER_DEAD_FRAMES;
     player_state = (hud_lives == 0u && !(pl_two && pl_other[3] != 0u))
         ? PLAYER_STATE_OVER : PLAYER_STATE_DEAD;
@@ -581,13 +580,13 @@ static void player_respawn(uint8_t new_game);
 /* New game from the attract screen; the other player (if any) starts on the
  * same level. */
 static void player_start_game(void) {
-    hud_lives = 3u;
+    hud_lives = 4u;                     /* $6A = 4: one is spent when the jet appears */
     pl_cur = 0;
     pl_frozen = 0;
     pl_other[0] = 0;
     pl_other[1] = 0;
     pl_other[2] = 0;
-    pl_other[3] = 3u;
+    pl_other[3] = 4u;
     pl_other[4] = atari_level_descriptors[pl_sel * 6u + 4u];
     pl_other[5] = pl_other[4];                  /* level */
     pl_other[6] = atari_level_descriptors[pl_sel * 6u + 0u];
@@ -691,6 +690,9 @@ void player_update(void) BANKED {
         }
         river_freeze = 1u;
         player_center();
+        if (hud_lives != 0u) {
+            hud_lives--;                /* the jet appears: one plane leaves the HUD */
+        }
         entities_clear_near(player.y);  /* nothing spawns on top of the jet */
         player_state = PLAYER_STATE_READY;
     }
