@@ -4,22 +4,9 @@
  */
 #include <gb/gb.h>
 
-#include "hud.h"
 #include "sound.h"
 
-/* HUD state, read and written by player.c and entities.c.  The HUD itself is
- * rewritten for GBC in milestone 2/3. */
-uint8_t hud_score_bcd[3];
-uint8_t hud_hi_bcd[3];
-uint8_t hud_fuel;
-uint8_t hud_lives;
-uint8_t hud_game;
-uint8_t hud_bridge;
-uint8_t hud_two;
-uint8_t hud_cur;
-uint8_t hud_blink;
-static uint8_t stub_other_bcd[3];
-uint8_t *hud_other_bcd = stub_other_bcd;
+/* The HUD state and hud_update() now live in gbc/hud_gbc.c. */
 
 /* Sound is rewritten for the GB sound chip in milestone 3; the NES APU engine
  * in sound.c writes NES registers and must not be linked. */

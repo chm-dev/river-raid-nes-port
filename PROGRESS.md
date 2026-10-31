@@ -20,3 +20,9 @@ The NES history is in `archive/nes/PROGRESS.md`.
 - Build line: `.\build_gbc.ps1 -Name m1_jet -RequireSymbols _frame_counter,_gbc_logic_oam -Sources src/gbc/main.c,src/gbc/stubs_m1.c,src/atari_data.c,src/collision.c,src/river.c,src/entities.c,src/entity_gfx.c,src/player.c`. Bank 0 code ends at `$3F6B` (about 150 bytes free).
 - Playtest by the user: smooth scrolling, jet steers, camera pans, shooting destroys enemies. Open: invisible shot, black enemy sprites, some glitching hills/trees, jet too high on screen, occasional stutter at fast speed. All in `BUGS&FEATS.md`.
 - Not tested: build-check failure paths other than a missing symbol; the GBC-required screen on a plain Game Boy; the river job overrun measurement.
+
+### 2026-10-31 - Milestone 2 build: OAM slots, sprite palettes, Window HUD (branch `gbc-port`)
+
+- Found `PLAYER_SHOT_SLOT = 47` and `ENT_OAM_LAST = 43` against a 40-entry `gbc_logic_oam`: the shot was invisible and logic wrote past the array. Now 48 logic slots packed into 40 hardware sprites in `oam_camera()`.
+- Sprite palettes set as RGB in `gbc/main.c`; new `src/gbc/hud_gbc.c` (Window HUD, bank 1 tiles 0..23). HUD state moved out of `stubs_m1.c`.
+- Build `-Name m2_hud` with `src/gbc/hud_gbc.c` added to the milestone 1 list: all checks pass, bank 0 code ends at $357A. Not run in an emulator; the user playtests.

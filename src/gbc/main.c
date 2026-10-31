@@ -23,6 +23,7 @@
 #include <stdio.h>
 
 #include "config.h"
+#include "hud.h"
 #include "river.h"
 #include "player.h"
 #include "entities.h"
@@ -35,8 +36,13 @@
 /* Declared in hud.h for the NES build, where hud.c owns the split. */
 volatile uint8_t playfield_scroll_y;
 
-/* The logic sprites; this file is compiled without the shadow_OAM rename. */
-volatile struct OAM_item_t gbc_logic_oam[40];
+/* The logic sprites; this file is compiled without the shadow_OAM rename.  The
+ * NES code addresses 48 slots (the shot is slot 47, entities use up to 43), but
+ * the GBC has 40 hardware sprites: oam_camera() packs the visible ones. */
+#define LOGIC_OAM_SLOTS     48u
+volatile struct OAM_item_t gbc_logic_oam[LOGIC_OAM_SLOTS];
+
+void hud_gbc_init(void);
 
 /* Read by tests through the .noi. */
 volatile uint16_t frame_counter;
@@ -55,6 +61,16 @@ static uint8_t camera_x;
  * milestone 3. */
 static const palette_color_t bkg_palette[4] = {
     RGB(0, 0, 0), RGB(5, 17, 5), RGB(28, 26, 6), RGB(6, 12, 26)
+};
+
+/* Sprite palettes: 0 jet / fuel depot / shot, 1 bridge, 2 helicopters, 3 ships
+ * (the colours gen_entity_gfx.py picks on the NES, as RGB555).  Colour 0 is
+ * transparent. */
+static const palette_color_t spr_palette[4][4] = {
+    { RGB(0, 0, 0), RGB(31, 28, 6), RGB(31, 31, 31), RGB(30, 6, 4) },
+    { RGB(0, 0, 0), RGB(3, 14, 4), RGB(18, 11, 4), RGB(20, 20, 6) },
+    { RGB(0, 0, 0), RGB(0, 0, 0), RGB(31, 28, 6), RGB(4, 6, 18) },
+    { RGB(0, 0, 0), RGB(0, 0, 0), RGB(22, 4, 4), RGB(6, 28, 28) }
 };
 
 void hud_set_playfield_scroll(uint8_t y) {
@@ -100,21 +116,24 @@ static void apply_camera(void) {
  * camera, add the +16/+8 hardware offsets and hide whatever is outside the
  * view.  Sprite tiles live in VRAM bank 1 (OAM attribute bit 3). */
 static void oam_camera(void) {
-    uint8_t i;
+    uint8_t i, n = 0;
     int16_t vy, vx;
 
-    for (i = 0; i < 40u; i++) {
+    for (i = 0; i < LOGIC_OAM_SLOTS && n < 40u; i++) {
         vy = (int16_t)gbc_logic_oam[i].y - (int16_t)GBC_VIEW_TOP_SCANLINE;
         vx = (int16_t)gbc_logic_oam[i].x - (int16_t)SOURCE_X_OFFSET - (int16_t)camera_x;
         if (gbc_logic_oam[i].y >= 232u || vy <= -8 || vy >= (int16_t)GBC_VIEW_LINES ||
             vx <= -8 || vx >= 160) {
-            shadow_OAM[i].y = 0u;
             continue;
         }
-        shadow_OAM[i].y = (uint8_t)(vy + 16);
-        shadow_OAM[i].x = (uint8_t)(vx + 8);
-        shadow_OAM[i].tile = gbc_logic_oam[i].tile;
-        shadow_OAM[i].prop = (uint8_t)(gbc_logic_oam[i].prop | S_BANK);
+        shadow_OAM[n].y = (uint8_t)(vy + 16);
+        shadow_OAM[n].x = (uint8_t)(vx + 8);
+        shadow_OAM[n].tile = gbc_logic_oam[i].tile;
+        shadow_OAM[n].prop = (uint8_t)(gbc_logic_oam[i].prop | S_BANK);
+        n++;
+    }
+    while (n < 40u) {
+        shadow_OAM[n++].y = 0u;
     }
 }
 
@@ -128,7 +147,7 @@ void main(void) {
 
     DISPLAY_OFF;
     set_bkg_palette(0, 1, bkg_palette);
-    for (i = 0; i < 40u; i++) {
+    for (i = 0; i < LOGIC_OAM_SLOTS; i++) {
         gbc_logic_oam[i].y = 240u;
     }
 
@@ -138,6 +157,10 @@ void main(void) {
     player_init_graphics();
     entities_init_graphics();
     VBK_REG = 0;
+    /* The two modules above feed NES colour numbers to the palette call (a
+     * no-op in entities.c, garbage in player.c); set the real ones last. */
+    set_sprite_palette(0, 4, &spr_palette[0][0]);
+    hud_gbc_init();
 
     river_init(0);
     player_init();
@@ -163,6 +186,9 @@ void main(void) {
             game_ticks = 4u;
         }
         frame_counter++;
+        if ((uint8_t)(logic_acc + game_ticks) < LOGIC_FRAMES) {
+            hud_update();               /* VRAM writes, still in VBlank */
+        }
 
         /* Same schedule as the NES main: the river every frame, the player
          * group and the entity group on alternate frames. */
