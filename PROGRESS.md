@@ -2228,3 +2228,44 @@ entity loop and the split-wait work are not needed for now; RAM 72 bytes free.
 - Build ROM 65552, RAM 3 bytes free, `_XINIT` ends at $FCCE; `host_river.ps1` all rows match. Awaiting user playtest.
 
 - Grass flash fix play-tested by the user 2026-10-31: confirmed fixed.
+
+### 2026-10-31 - Asm river renderer and entity-pacing cap (branch `experiment/full-asm-pacing`, merged to `main`)
+
+- **Why:** stutter when shooting and at fast flight. Trace at level 50 (`perf_pass_trace`, fast, 400 frames):
+  the river renderer (convert, render, tile job) was the largest cost in late passes, and rendering was
+  mostly island and feature rows (`perf_pass_trace` row kinds: island 0.47, feature 0.09, plain 0.31, repeat 0.69 per pass).
+- **Island rows** (`1bd035f`): hand-written asm; the 0x55 land fills only advance the position (the row clear wrote land).
+- **Template copy** (`6499095`): `river_copy_asm()` byte loop through zero-page pointers `$FC` (dst) and `$FE` (src).
+  The assembler emits absolute,y for `(zp),y`, which wrote past the zero page into the stack and hung; the
+  opcodes are now `.db 0xB1,0xFE` / `.db 0x91,0xFC`. Check the `.lst` after touching this.
+- **Whole renderer** (`d754d62`): `river_render_asm()` covers flags, land/feature slices, island edges and the right
+  feature, with `rn_fill` and `rn_pat`. `river_render_row` is a clear plus this under SDCC; the C body is the host reference
+  under `#else`. Long relative branches out of range were fixed with `jmp`.
+- **Owed-row bump cap** (`ea7941d`, `a87267c`): the entity pass gets its second river row only when `entity_count < 9`
+  (`RIVER_ENT_BUMP_MAX`, SDCC only). Before the cap, two-row entity passes were 33 per 400 frames with 39% late; after, 11
+  with 9%.
+- **Numbers, level 50 fast** (the same trace repeats exactly for a given ROM):
+
+  | build | late passes (trace) | late scroll steps (cadence, 600 frames) | render on-time (sampled) |
+  |---|---|---|---|
+  | `main` before this work (`d2ff334`) | ~5-6.5% | - | - |
+  | island asm (`1bd035f`) | 3.7% | - | 344 |
+  | copy asm (`6499095`) | 2.8% | 3.5% | 281 |
+  | full asm (`d754d62`) | 5.1% | 5.8% | 186 |
+  | full asm + cap (`a87267c`) | 1.8% | 2.2% | - |
+
+  Level 20 cadence: copy 2.8%, full 2.3%, full + cap 2.2%. Level 1: copy 1.5%, full 0.8%.
+  Cap cost: owed rows at the cap in 7 of 600 frames (0 before), average 1.47 px/frame (was 1.49).
+- **Playtest:** the copy build felt good; the full asm without the cap felt worse at level 50; the full asm with the cap
+  "feels fine", no drastic change at later levels.
+- **Verification:** `compare_tile_rows` JSON identical to the previous build at levels 1, 20 and 50 (83 rows each; feature
+  rows are about 9% of rows, so this is a thin sample for the feature path). `tests/host_river.ps1` all rows match at levels
+  1, 5, 20, 50 (the cap is `#ifdef __SDCC`: `entity_count` is not linked on the host).
+- **Mesen suites on the merged build:** pass: smoke, scroll_hud, river_cache, gameplay, hold, start_clear, sound,
+  sprite_lock. Fail: `nes_entity_hits` 12/20 (helicopter and ship hits missed), `nes_hud_blink` 6 failed, `nes_menu` 2 failed.
+  The same failures happen on `d2ff334` (checked before this work), so they predate it. Not investigated yet.
+- **Dead ends:** an earlier owed-bump cap on entity count without the asm (`experiment/entity-pacing`): no feel change.
+  Split moved to scanline 1 (cycle test only, playfield and HUD broken): the split wait is the largest fixed cost, about
+  29 scanlines (~3.3k cycles) per frame; not done for real. No-tile-job build (`experiment/no-tile-job`, measurement only):
+  the tile job is about 1-4k cycles per pass.
+- **Build line:** ROM 65552 bytes; RAM 4 bytes free; `_XINIT` ends `$FCF9` (about 769 bytes before `$FFFA`).

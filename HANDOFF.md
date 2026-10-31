@@ -11,17 +11,26 @@ and read only the matching `### date - title` entry. `AGENTS.md` has the toolcha
 Phases 1-5 are done (reverse engineering, build, HUD/split scroll, river generator and exact tile cache,
 jet/entities/scoring/bridge/tank/respawn, 30 Hz logic + 60 Hz river). **Phase 6** (sound, attract, menus, 2P,
 HUD polish) is in progress: sound, attract, start-level select, 1P/2P, per-level hi-scores, game select,
-`ent_hold` and the HUD polish are done and tested. Enemy shooters (side tank, fast-helicopter missile) are
-ported and play-tested; OAM layout: 2-3 tank, 4-5 shell, 6 missile, 7+ entities.
+`ent_hold`, the HUD polish and the shooters (side tank, fast-helicopter missile) are done and play-tested.
 
 The cart **boots into attract**; every Mesen test calls `startGame()` from `tests/mcp_client.mjs`.
 
+**Performance (2026-10-31):** the river renderer is now hand-written asm for every row kind under SDCC
+(`river_render_asm`, with plain rows in `river_render_plain`). The C renderer stays as the host reference
+under `#else`. A two-row entity pass no longer happens at 9+ entities (`RIVER_ENT_BUMP_MAX`, SDCC only).
+Play-tested: smoother at high levels, but no drastic change at later levels. Level 50 late passes went
+from about 5% to about 2% in the trace. Fast flight is still not fully smooth when shooting.
+
 ## Next steps (priority order)
 
-No known open bugs; the Phase 6 list is clear. Remaining work is the Phase 6 polish in `PORTING_PLAN.md` and
-the feature ideas in `BUGS&FEATS.md`.
-
-(Start levels 5/20/50 and the level-20 model trace were judged stale: play-tested with no visible tile problems.)
+1. **Stutter when shooting** (play-tested, still there). Not yet measured: profile a level 20/50 run that
+   fires continuously (`perf_pass_trace` with a fire input) and see which group the late passes fall in.
+2. **Three suites fail on `main`** (they also fail on `d2ff334`, before the perf work; not investigated):
+   `nes_entity_hits` (helicopter and ship hits missed, 8 of 20 cases), `nes_hud_blink` (2P blink, 6 checks),
+   `nes_menu` (2P life loss, 2 checks). Start with `nes_entity_hits`: it looks like collision, not the river.
+3. Phase 6 polish list in `PORTING_PLAN.md`; feature ideas in `BUGS&FEATS.md`.
+4. Possible perf follow-up if (1) points at entities: hand-written entity loop (`ent_move`/`ent_draw`).
+   `entity_gfx` must leave bank 1 first (check `_CODE_1` headroom in the map).
 
 Open bugs: `BUGS&FEATS.md` is the source (the "planes replaced by random enemies" bug is stale, see
 PROGRESS.md "Plane replaced by random enemies").
@@ -29,11 +38,14 @@ PROGRESS.md "Plane replaced by random enemies").
 ## Budgets (check, do not trust these numbers)
 
 - Run `./build.ps1`. It must print `ROM  65552 bytes`; also confirm `_XINIT` in `roms/river_raid.map`
-  ends below `$FFFA`. The linker does **not** fail on fixed-bank overflow, the ROM silently becomes 128 KiB.
-- Internal RAM was **4 bytes free** at the last build (2026-10-31); `digit_buf` (16 B) can alias a shared
-  scratch if more is needed. `build.ps1` prints the live figure and throws if `_BSS` passes `$07FF`.
+  ends below `$FFFA` (last check: `$FCF9`, about 769 bytes free). The linker does **not** fail on fixed-bank
+  overflow, the ROM silently becomes 128 KiB.
+- Internal RAM: **4 bytes free** at the last build (`_BSS` ends `$07FB`). `build.ps1` prints the live figure
+  and throws if `_BSS` passes `$07FF`. The `-Profile` build has 2-3 bytes less.
 - Bank layout: fixed bank = everything else; bank 1 = `entities`, `entity_gfx`, `player`; bank 2 = `hud`
   (`$bankedSources` / `$bank2Sources` in `build.ps1`). Check `_CODE_1` / `_CODE_2` in the map for headroom.
+- Zero page `$FC-$FF` is used by the river copy and renderer as pointers (`rt_dst`/`rt_src`). Nothing else
+  may use it. Check with the `.noi`: no `DEF` in `$FC-$FF` (see PROGRESS "Asm renderer").
 
 ## Decisions not to reopen
 
@@ -43,6 +55,8 @@ PROGRESS.md "Plane replaced by random enemies").
 - **Loop shape:** `river_update()` + `sound_update()` at 60 Hz; player/collision and HUD/entities at 30 Hz on
   alternating frames. MMC3 + cc65 was assessed and rejected as too expensive.
 - **Exact 207-slot CHR river cache**, no edge/tree atlas. River 24 tile columns at nametable cols 4..27.
+- **Owed-row bump off at 9+ entities** (SDCC only). The two-row entity pass was the late pass; the host build
+  keeps the old rule (`#ifdef __SDCC` in `river_update`).
 - **HUD art comes from `charset.bin`**; do not redraw it. Digits stay 8 px wide (width compromise).
 - **Sound** values come from live Atari captures, not estimates. Verify Atari behaviour by sampling over
   time, not static reads (see memory note on the attract freeze misread).
@@ -54,6 +68,7 @@ PROGRESS.md "Plane replaced by random enemies").
 
 | Topic | Entry / file |
 |---|---|
+| Asm renderer, copy, zero-page pointers, owed-bump cap | "Asm river renderer and entity-pacing cap" |
 | River generator, repeat-row skip, tile cache | "Atari river/tree layout + exact tile cache", `tools/river_model.py` |
 | Frame loop, 30/60 Hz split, perf numbers | "Performance: 30 Hz game logic", "Late frames", "Row render and pacing" |
 | Sound, channel map, POKEY->2A03 conversion | "sound re-derived from the Atari", "Fuel tank sound", `src/sound.c` |
@@ -68,12 +83,17 @@ PROGRESS.md "Plane replaced by random enemies").
 
 ```powershell
 ./build.ps1                          # build + RAM asserts; expect ROM 65552
+./build.ps1 -Profile                 # same ROM with exported statics, for the perf scripts
 ./tests/host_river.ps1               # C generator vs Python model (needs zig); run after touching river.c
 # Mesen suites need MesenCE-MCP running (launch flags in AGENTS.md)
 node tests/nes_smoke.mjs; node tests/nes_scroll_hud.mjs; node tests/nes_river_cache.mjs
 node tests/nes_gameplay.mjs; node tests/nes_menu.mjs; node tests/nes_hud_blink.mjs
 node tests/nes_hold.mjs; node tests/nes_start_clear.mjs; node tests/nes_sound.mjs
 node tests/nes_entity_hits.mjs; node tests/nes_sprite_lock.mjs
+# Perf (profile build, start level = variant 0..3 = 1/5/20/50; Up steps the game number)
+node tests/perf_pass_trace.mjs roms/river_raid.nes roms/river_raid.noi 3 Up 400
+node tests/perf_cadence_levels.mjs roms/river_raid.nes roms/river_raid.noi 3 Up 600
+node tests/compare_tile_rows.mjs out.json 800 roms/river_raid.nes roms/river_raid.noi 3   # diff two ROMs' JSON
 ```
 
 The full command list (profilers, Atari trace tools, asset regeneration) is under "Handy commands" in `PROGRESS.md`.
