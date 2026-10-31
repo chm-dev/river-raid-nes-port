@@ -2021,8 +2021,8 @@ static void river_start(uint8_t restart, uint8_t bridges) {
     river_road_left = 0;
     river_road_slot = 0xFFu;
     river_road_stage = 0;
-    river_land_alt = 0;
-    river_job_pal = PLAYFIELD_PALETTE;
+    river_land_alt = (uint8_t)((bridges & 1u) ^ 1u);    /* odd bridge: dark $D2 */
+    river_job_pal = river_land_alt ? PLAYFIELD_ALT_PALETTE : PLAYFIELD_PALETTE;
     river_step = 0;
     river_distance = 0;
     river_block_index = 0;
