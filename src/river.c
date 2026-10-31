@@ -718,50 +718,120 @@ static void river_render_plain(void) {
 #endif
 
 #ifdef __SDCC
-static uint8_t isl_x;               /* island row: x of the current edge */
+static uint8_t isl_x;               /* x of the current edge (island and feature rows) */
+static uint8_t rn_f;                /* row flags: 1 feature row, 2 island, 4 left feature, 8 right feature */
 
-/* river_render_row() for an island row without a feature (the renderer's island
- * path, see river_render_row).  The 0x55 fills only move the position, because
- * the row clear already wrote land, so they are gone.  The 0xFF and 0xAA fills
- * write y+1 bytes; the patterns are river_pattern(). */
-static void river_island_asm(void);
+static void river_render_asm(void);
 
-static void river_render_island(void) {
+/* river_render_row() for SDCC: the clear, then the whole renderer in asm (the C
+ * version is under #else and is the host reference).  State is read and written
+ * in memory; river_render_asm() calls river_copy_template() for the tree/hill
+ * slices and uses the rn_fill and rn_pat subroutines below. */
+static void river_render_row(void) {
     river_clear_row();
-    river_island_asm();
+    river_render_asm();
 }
 
-static void river_island_asm(void) {
+static void river_render_asm(void) {
     __asm
+        ; ---- row flags -------------------------------------------------------
+        lda     #0
+        sta     _rn_f
+        ldx     _rg_feature
+        beq     rn_flags_i
+        lda     _rg_rowcount
+        cmp     _rg_be
+        bcs     rn_flags_i
+        lda     #1
+        sta     _rn_f
+    rn_flags_i:
+        lda     _rg_island_flags
+        and     #0x80
+        beq     rn_flags_lr
+        lda     _rn_f
+        ora     #2
+        sta     _rn_f
+    rn_flags_lr:
+        lda     _rn_f               ; feature and not island: left or right side
+        and     #3
+        cmp     #1
+        bne     rn_flags_done
+        lda     _rg_feature
+        and     #0x80
+        bne     rn_flag_left
+        lda     _rn_f
+        ora     #8
+        sta     _rn_f
+        jmp     rn_flags_done
+    rn_flag_left:
+        lda     _rn_f
+        ora     #4
+        sta     _rn_f
+    rn_flags_done:
+
+        ; ---- x, rg_row_left and the land fill before the bank ----------------
         lda     #0
         sta     _rg_row_pos
         sta     _rg_row_island_left
         sta     _rg_row_island_right
+        lda     _rn_f
+        and     #2
+        bne     rn_x_isl
         lda     _rg_left
+        clc
+        adc     _rg_phase
+        jmp     rn_x_set
+    rn_x_isl:
+        lda     _rg_left
+    rn_x_set:
         sta     _rg_row_left
         sta     _isl_x
-        lsr     a                   ; land fill y = (x>>2)-1: position only
+        lsr     a                   ; y = (x>>2)-1, kept in rf_cnt
         lsr     a
         sec
         sbc     #1
-        bmi     isl_1
-        clc
-        adc     _rg_row_pos
-        sta     _rg_row_pos
-    isl_1:
-        lda     _rg_left
+        sta     _rf_cnt
+
+        ; ---- left feature (not island, bit 7 of the feature type) -----------
+        lda     _rn_f
+        and     #4
+        beq     rn_noleft
+        lda     _rf_cnt
+        sta     _rg_ysave
+        ldy     _rg_bd
+        lda     #0x55
+        jsr     rn_fill
+        jsr     _river_copy_template
+        lda     _rg_ysave           ; y = ysave - bc - bd
+        sec
+        sbc     _rg_bc
+        sec
+        sbc     _rg_bd
+        sta     _rf_cnt
+    rn_noleft:
+        ldy     _rf_cnt
+        lda     #0x55
+        jsr     rn_fill
+        lda     _isl_x
         and     #3
         asl     a
         asl     a
-        jsr     isl_pat
+        jsr     rn_pat
+
+        ; ---- island edges -----------------------------------------------------
+        lda     _rn_f
+        and     #2
+        bne     rn_isl_go
+        jmp     rn_nonisl
+    rn_isl_go:
         lda     _rg_phase
         cmp     #6
-        bcs     isl_big
-        asl     a                   ; phase < 6: a = width + 2*phase
+        bcs     rn_isl_big
+        asl     a                   ; phase < 6: a = width + 2*phase, x = left
         clc
         adc     _rg_width
-        jmp     isl_tail
-    isl_big:
+        jmp     rn_tail
+    rn_isl_big:
         lda     _rg_width           ; left island edge: x = (width>>1) + left
         lsr     a
         clc
@@ -772,11 +842,9 @@ static void river_island_asm(void) {
         lsr     a
         sec
         sbc     _rg_row_pos
-        bmi     isl_2
         tay
         lda     #0xFF
-        jsr     isl_fill
-    isl_2:
+        jsr     rn_fill
         lda     _isl_x
         and     #3
         asl     a
@@ -784,11 +852,11 @@ static void river_island_asm(void) {
         ora     #2
         ldx     _rg_phase
         cpx     #8
-        bcs     isl_3
+        bcs     rn_isl_p8
         clc
         adc     #0x10
-    isl_3:
-        jsr     isl_pat
+    rn_isl_p8:
+        jsr     rn_pat
         lda     _rg_phase           ; right island edge: x = left + 2*phase
         asl     a
         clc
@@ -801,38 +869,57 @@ static void river_island_asm(void) {
         sbc     _rg_row_pos
         sec
         sbc     #1
-        tay                         ; Y = y for the fills below
+        sta     _rf_cnt
         lda     _rg_phase
         cmp     #8
-        bcs     isl_hi
-        tya                         ; phase < 8: 0xAA fill (writes 0), pattern +0x10
-        bmi     isl_4
-        lda     #0
-        jsr     isl_fill
-    isl_4:
+        bcs     rn_isl_hi
+        ldy     _rf_cnt             ; phase < 8: 0xAA fill (writes 0), pattern +0x10
+        lda     #0xAA
+        jsr     rn_fill
         lda     _isl_x
         and     #3
         asl     a
         asl     a
         ora     #0x10
-        jsr     isl_pat
-        jmp     isl_half
-    isl_hi:
-        tya                         ; phase >= 8: 0x55 fill (position only)
-        bmi     isl_5
-        clc
-        adc     _rg_row_pos
-        sta     _rg_row_pos
-    isl_5:
+        jsr     rn_pat
+        jmp     rn_isl_half
+    rn_isl_hi:
+        lda     _rn_f               ; phase >= 8: feature slice, then the 0x55 fill
+        and     #1
+        beq     rn_isl_plain
+        lda     _rg_bd              ; b7 = bd - pos ; y = y - b7 - bc
+        sec
+        sbc     _rg_row_pos
+        sta     _rf_val
+        lda     _rf_cnt
+        sec
+        sbc     _rf_val
+        sec
+        sbc     _rg_bc
+        sta     _rg_ysave
+        ldy     _rf_val
+        lda     #0x55
+        jsr     rn_fill
+        jsr     _river_copy_template
+        lda     _rg_ysave
+        sta     _rf_cnt
+    rn_isl_plain:
+        ldy     _rf_cnt
+        lda     #0x55
+        jsr     rn_fill
         lda     _isl_x
         and     #3
         asl     a
         asl     a
-        jsr     isl_pat
-    isl_half:
+        jsr     rn_pat
+    rn_isl_half:
         lda     _rg_width           ; right part: width >> 1
         lsr     a
-    isl_tail:                       ; A = width part, x = _isl_x
+        jmp     rn_tail
+    rn_nonisl:
+        lda     _rg_width
+
+    rn_tail:                        ; A = width part, x = _isl_x
         clc
         adc     _isl_x
         sta     _isl_x
@@ -841,31 +928,63 @@ static void river_island_asm(void) {
         lsr     a
         sec
         sbc     _rg_row_pos
-        bmi     isl_6
         tay
         lda     #0xFF
-        jsr     isl_fill
-    isl_6:
+        jsr     rn_fill
         lda     _isl_x
         and     #3
         asl     a
         asl     a
         ora     #2
-        jsr     isl_pat
+        jsr     rn_pat
+
+        ; ---- right feature (not island, bit 7 clear) --------------------------
+        lda     _rn_f
+        and     #8
+        beq     rn_end
+        lda     #0x30               ; y = (0x30 - pos) - bd - bc + 1
+        sec
+        sbc     _rg_row_pos
+        sec
+        sbc     _rg_bd
+        sec
+        sbc     _rg_bc
+        clc
+        adc     #1
+        tay
+        lda     #0x55
+        jsr     rn_fill
+        jsr     _river_copy_template
+    rn_end:
         rts
 
-    isl_fill:                       ; A = value, Y = y (0..127): y+1 bytes, pos += y
+    rn_fill:                        ; A = value, Y = y (bit 7 set: nothing)
+        cpy     #0x80
+        bcs     rn_fill_ret
+        cmp     #0xAA
+        bne     rn_fill_v
+        lda     #0
+    rn_fill_v:
+        cmp     #0x55               ; land: the row clear wrote it, only advance
+        beq     rn_fill_adv
         ldx     _rg_row_pos
-    isl_fill_loop:
+    rn_fill_w:
         sta     _river_raw_row,x
         inx
         dey
-        bpl     isl_fill_loop
+        bpl     rn_fill_w
         dex
         stx     _rg_row_pos
+    rn_fill_ret:
+        rts
+    rn_fill_adv:
+        tya
+        clc
+        adc     _rg_row_pos
+        sta     _rg_row_pos
         rts
 
-    isl_pat:                        ; A = index: river_pattern(), pos += 2
+    rn_pat:                         ; A = index: river_pattern(), pos += 2
         tay
         ldx     _rg_row_pos
         lda     _river_bank_black,y
@@ -878,8 +997,7 @@ static void river_island_asm(void) {
         rts
     __endasm;
 }
-#endif
-
+#else
 static void river_render_row(void) {
     uint8_t island = (uint8_t)(rg_island_flags & 0x80u);
     uint8_t x, y, a, b7;
@@ -970,6 +1088,7 @@ static void river_render_row(void) {
     river_fill(y, 0x55u);
 
 }
+#endif
 
 /* ------------------------------------------------------------------------- */
 /* State machine ($A6DE-$A9D5)                                               */
@@ -1108,7 +1227,7 @@ static void river_step_state(void) {
     } else {
 #ifdef __SDCC
         if (rg_island_flags & 0x80u) {
-            river_render_island();
+            river_render_row();
         } else {
             river_render_plain();
         }
