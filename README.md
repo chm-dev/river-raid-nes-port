@@ -25,8 +25,9 @@ node tests/nes_smoke.mjs         # Mesen checks (start MesenCE-MCP first, see AG
 ./tests/host_river.ps1           # C generator vs. the Python model (needs zig)
 ```
 
-`AGENTS.md` has the toolchain rules and the lessons learned, `PROGRESS.md` the
-status log and next steps, `PORTING_PLAN.md` the roadmap.
+`HANDOFF.md` is the short current status and next steps, `AGENTS.md` the toolchain
+rules, `info/LESSONS.md` the detailed lessons learned, `PROGRESS.md` the history
+log, `PORTING_PLAN.md` the roadmap.
 
 <img width="508" height="476" alt="river" src="https://github.com/user-attachments/assets/382baff0-3d52-4f3e-8823-18b9decd1e3b" />
 

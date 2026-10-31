@@ -81,7 +81,7 @@ Consult the file.
 | Bridge, road, tank, respawn checkpoint | "Bridge and road", "Bridge tank and its shell", "Respawn at the last cleared bridge" |
 | Atari reverse-engineering spec | `docs/ATARI_RE_SPEC.md` (disassembly in `docs/atari_disasm_*.txt`; `docs/do_not_read_unless_asked` is exactly that) |
 | Roadmap | `PORTING_PLAN.md` |
-| Mesen / Altirra tooling | `info/MESEN_MCP_NOTES.md`, `info/ALTIRRA_BRIDGE_NOTES.md` (only when driving the emulators) |
+| Perf work, Altirra tracing, Mesen scripting rules | `info/LESSONS.md` (read the section you need), then `info/MESEN_MCP_NOTES.md`, `info/ALTIRRA_BRIDGE_NOTES.md` |
 
 ## Core commands
 
