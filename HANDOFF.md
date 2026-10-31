@@ -18,12 +18,13 @@ The cart **boots into attract**; every Mesen test calls `startGame()` from `test
 
 ## Next steps (priority order)
 
-1. **Check start levels 5/20/50** against the river model and `tests/nes_ring_integrity.mjs`.
+1. **Attract extras:** the Atari's idle screen-saver blank (`$78`) is not ported (blanks after ~73 min idle,
+   any input wakes; needs ~2 bytes RAM). Attract speed is done: boot attract and the pre-play scroll-in run at 1.5 px.
+2. Re-measure `ENT_WAIT_ROWS` if the playfield height or start scroll changes.
+3. **Check start levels 5/20/50** against the river model and `tests/nes_ring_integrity.mjs`.
    CHR-cache overflow (more visible 8x8 blocks than the 250 cache slots) is reachable from the first
    screen at high levels. Entry: PROGRESS.md "Known issues" 1d.
-1b. **Model vs Atari trace at level 20** still diverges from row 264 (see PROGRESS.md Level 20 river edge); examine with `tools/atari_river_trace.py --select 4`.
-2. **Attract extras:** the Atari's idle screen-saver blank (`$78`) and attract scroll speed (`$59`).
-3. Re-measure `ENT_WAIT_ROWS` if the playfield height or start scroll changes.
+3b. **Model vs Atari trace at level 20** still diverges from row 264 (see PROGRESS.md Level 20 river edge); examine with `tools/atari_river_trace.py --select 4`.
 
 Open bugs: `BUGS&FEATS.md` is the source (the "planes replaced by random enemies" bug is stale, see
 PROGRESS.md "Plane replaced by random enemies").

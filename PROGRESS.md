@@ -2213,3 +2213,10 @@ entity loop and the split-wait work are not needed for now; RAM 72 bytes free.
 ### 2026-10-31 - Level 50 bottleneck fix play-tested
 
 - User confirmed the 4-px outline fix feels right at level 50; `BUGS&FEATS.md` entry marked `[x]`.
+
+### 2026-10-31 - Attract and scroll-in speed (branch `main`)
+
+- Attract (boot via `player_init`, and `player_attract` on game-mode change) and the pre-play scroll-in (`player_start_game`, WAIT state) now run at the fast tier (`river_speed 2`, 1.5 px). Speed resets to cruise when the jet appears, so play starts at 1 px.
+- Tried 2 px for attract and for the scroll-in: attract was far too fast, and 2 px scroll-in cost too much performance. Both were reverted; the Atari's `$59` is `$80` (games 1-4) / `$FE` (5-8) but the port uses one speed, by decision.
+- Screen-saver blank (`$78`, $B3EB-$B402) not ported: increments every 2048 frames, bit 7 blanks after ~73 min, any stick/key input clears it ($A1BF).
+- Build: ROM 65552 bytes, RAM 4 bytes free. Play-tested by the user; no Mesen suites run.

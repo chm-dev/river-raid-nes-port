@@ -152,8 +152,8 @@ void player_init(void) BANKED {
     player_timer = 0;
     player_fuel_tick = 0;
     player_prev_pad = 0xFFu;            /* a button held at boot is not a press */
-    river_speed = 1u;
-    river_vel = RIVER_VEL_CRUISE;
+    river_speed = 2u;                   /* the boot attract scrolls at the fast speed */
+    river_vel = RIVER_VEL_FAST;
     joypad_init(2u, &pl_pads);
     pl_two = 0;
     pl_cur = 0;
@@ -507,6 +507,8 @@ static void player_attract(uint8_t variant) {
     pl_sel = river_variant;
     pl_frozen = 0;
     ent_hold = 0;                       /* the demo world moves again */
+    river_speed = 2u;                   /* attract scrolls at the fast speed */
+    river_vel = RIVER_VEL_FAST;
     pl_hi_idx = river_variant;
     hud_hi_bcd[0] = pl_hi[pl_hi_idx][0];
     hud_hi_bcd[1] = pl_hi[pl_hi_idx][1];
@@ -521,8 +523,6 @@ static void player_attract(uint8_t variant) {
     pl_other[1] = 0;
     pl_other[2] = 0;
     player.alive = 0;
-    river_speed = 1u;
-    river_vel = RIVER_VEL_CRUISE;
     player_show_game();
     player_state = PLAYER_STATE_ATTRACT;
 }
@@ -636,8 +636,8 @@ static void player_respawn(uint8_t new_game) {
     player.speed = 1;
     hud_fuel = 255u;
     player_fuel_tick = 0;
-    river_speed = 1u;
-    river_vel = RIVER_VEL_CRUISE;
+    river_speed = 2u;                   /* the river scrolls in at the attract speed */
+    river_vel = RIVER_VEL_FAST;
     ent_hold = 1u;                      /* the world waits for the jet */
     ent_scrolled = 0;
     pl_steer_acc = 0;
@@ -695,6 +695,8 @@ void player_update(void) BANKED {
             return;
         }
         river_freeze = 1u;
+        river_speed = 1u;               /* play starts from cruise, not the scroll-in speed */
+        river_vel = RIVER_VEL_CRUISE;
         player_center();
         if (hud_lives != 0u) {
             hud_lives--;                /* the jet appears: one plane leaves the HUD */
