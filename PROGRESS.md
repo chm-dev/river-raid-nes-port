@@ -2039,3 +2039,19 @@ entity loop and the split-wait work are not needed for now; RAM 72 bytes free.
   art, the row-0 top tiles and the bridge/game digit tiles; `nes_hud_blink` also covers the top row.
   All Mesen suites pass (smoke, scroll_hud, hud_blink, menu, hold, start_clear, gameplay, sound,
   entity_hits, sprite_lock, jet_hitbox).
+
+### 2026-10-31 - Land colour after respawn; shooting enemies researched (branch `main`)
+
+- **Fixed (play-tested by the user):** after dying at an even level the grass came back dark. `river_start()`
+  always set `river_land_alt = 0`. First attempt keyed it to `rg_level & 1`, which failed: the generator
+  advances `rg_level` only after the bridge road, but the colour flips at the road, so `rg_level` can still be
+  the old level at restart. Now `river_land_alt = (bridges & 1) ^ 1` (bridge number == level in
+  `atari_level_descriptors`; odd = dark `$D2`) and `river_job_pal` follows it. Commit `3510a5b`.
+- **Research for "white striped helicopters do not shoot" / "no side tanks" (nothing implemented):**
+  the Atari shell for helicopters/ships is the spawner block `$ADA6-$AE92` in `docs/atari_disasm_a000_b2a4.txt`.
+  Conditions seen at `$ADCD-$AE22`: slot-`$4E` type >= 8, level (`$60`) >= 7, `$5D` in 5..13, `$AC & $C0 == 0`,
+  `$5F`/`$2C` in 2..13; it fills `$38/$39/$3A` (shell kind/position/state) and sets `$50 = $FF`. The port only
+  has the bridge tank's use of this shell (`ENT_AUX_SHELL`, OAM 4-5, `ent_shell_tick`). The shell kind on the
+  Atari is shared, so one enemy shell exists at a time. Side-of-river tanks are probably the `$ADA6` branch
+  (`$23` bit 7 clear path, `$38 = 5/6`) but that is unconfirmed.
+- Not built or run this session (docs and memory only besides the colour fix).
