@@ -43,6 +43,7 @@ static uint16_t ticks(void) {
 uint16_t bench_a_avg[4], bench_a_max[4], bench_a_over[4];
 uint16_t bench_b_avg[4], bench_b_max[4], bench_b_over[4];
 uint8_t bench_ents_max[4];
+uint16_t bench_a_over2[4], bench_b_over2[4];   /* passes over the CGB frame */
 uint8_t bench_done;
 
 static uint16_t b_t0, b_dt, b_i;
@@ -65,6 +66,19 @@ void main(void) {
         player_state = 0u;
         player.x = 120u;
         player.y = 218u;
+        /* Warm up: leave the black rows and the start road behind. */
+        for (b_i = 0; b_i < 200u; b_i++) {
+            sys_time++;
+            game_ticks = 1u;
+            river_gen_budget = 3u;
+            river_update();
+            entities_follow();
+            sys_time++;
+            game_ticks = 1u;
+            river_gen_budget = 1u;
+            river_update();
+            entities_update();
+        }
         b_sa = 0u;
         b_sb = 0u;
         for (b_i = 0; b_i < BENCH_PASSES; b_i++) {
@@ -79,6 +93,7 @@ void main(void) {
             b_sa += b_dt;
             if (b_dt > bench_a_max[b_v]) bench_a_max[b_v] = b_dt;
             if (b_dt >= (17556u >> 4)) bench_a_over[b_v]++;
+            if (b_dt >= (35112u >> 4)) bench_a_over2[b_v]++;
 
             sys_time++;
             game_ticks = 1u;
@@ -90,6 +105,7 @@ void main(void) {
             b_sb += b_dt;
             if (b_dt > bench_b_max[b_v]) bench_b_max[b_v] = b_dt;
             if (b_dt >= (17556u >> 4)) bench_b_over[b_v]++;
+            if (b_dt >= (35112u >> 4)) bench_b_over2[b_v]++;
             if (entity_count > bench_ents_max[b_v]) bench_ents_max[b_v] = entity_count;
         }
         bench_a_avg[b_v] = (uint16_t)((b_sa << 4) / BENCH_PASSES);
