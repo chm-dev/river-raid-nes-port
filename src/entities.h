@@ -41,6 +41,9 @@
 #define ENT_F_WAIT              0x08u
 #define ENT_F_STOP              0x10u
 #define ENT_F_SHOOT             0x20u
+/* Tank only: a bank/island tank ($41 bit 7): it walks until it touches an
+ * outline, then shoots; the bridge tank shoots only when the bridge is hit. */
+#define ENT_F_SIDE              0x40u
 extern uint8_t ent_type[MAX_ENTITIES];
 extern uint8_t ent_x[MAX_ENTITIES];
 extern uint8_t ent_y[MAX_ENTITIES];

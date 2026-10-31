@@ -32,6 +32,11 @@ The cart **boots into attract**; every Mesen test calls `startGame()` from `test
    "Land colour after respawn; shooting enemies researched". Plan: a temporary playtest build (every
    helicopter shoots, a few shooting tanks on the banks), then port the real conditions. The user
    playtests; build the ROM and hand over a checklist, do not drive Mesen.
+   **Side tank ported 2026-10-31, awaiting playtest** (`ent_side_tank_spawn`, `ent_tank_edge`, `ENT_F_SIDE`
+   in `src/entities.c`; traced with `tools/atari_shoot_trace.py 50 3000` in attract mode). The Atari has no
+   helicopter shell: the "shooting helicopter" is this tank, spawned beside a ship/helicopter/fuel at level 7+.
+   If the user confirms, close both bugs; tune the outline-touch test (`ent_tank_edge`, 2 px slack) and
+   `SIDE_TANK_ACTIVE_Y` from their feedback. Playtest: start at bridge 20 or 50.
 
 1. **Check start levels 5/20/50** against the river model and `tests/nes_ring_integrity.mjs`.
    CHR-cache overflow (more visible 8x8 blocks than the 250 cache slots) is reachable from the first

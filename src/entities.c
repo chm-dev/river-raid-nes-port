@@ -410,6 +410,21 @@ static const uint8_t shell_box[20] = {
     3, 2, 8, 12,  2, 4, 7, 13,  2, 4, 6, 14,  1, 6, 5, 15,  0, 8, 4, 16
 };
 
+/* Bank/island tanks ($ADCD-$AE92, level 7+): one per 32 rows beside a ship,
+ * helicopter or fuel depot.  They walk until they touch a bank or island
+ * outline, then shoot at the shell speed the spawner drew ($B7F4: 8.8 px per
+ * frame, 0.5 .. 4); only one tank, so one shell speed ($3E/$3F, $3D fraction). */
+#define SIDE_TANK_MIN_LEVEL     7u
+#define SIDE_TANK_ACTIVE_Y      (PLAYFIELD_SCANLINE + 14u)   /* $1A is 14 rows below its first row $0C */
+#define SIDE_TANK_WIDTH         8u
+static const uint8_t side_shell_speed[10] = { 1, 0x80, 0, 0x80, 1, 0, 2, 0, 4, 0 };   /* $B7F4 */
+static const uint8_t side_tank_x[14] = {                                              /* $BFE4 */
+    0x18, 0x00, 0x96, 0x04, 0x8C, 0x10, 0x8E, 0x0C, 0x7C, 0x20, 0x86, 0x14, 0x6C, 0x30
+};
+static uint8_t shell_vx_hi;     /* $3E: whole pixels per frame */
+static uint8_t shell_vx_lo;     /* $3F: 1/256 pixels per frame */
+static uint8_t shell_frac;      /* $3D: sub-pixel position */
+
 /*
  * These helpers take no parameters and use the file-scope e_* scratch
  * variables: SDCC's mos6502 target allocates locals and parameters statically
@@ -438,6 +453,7 @@ static void ent_shell_init(void) {
     ent_x[e_src] = e_c ? (uint8_t)(ent_x[e_slot] - 4u) : (uint8_t)(ent_x[e_slot] + 4u);
     ent_y[e_src] = (uint8_t)(ent_y[e_slot] - 6u);
     ent_aux[e_src] = 0;
+    shell_frac = 0;                     /* $A619 */
     sound_play_shell();         /* $50 = 0: the ch4 chirp starts with the shell */
 }
 
@@ -460,6 +476,99 @@ static void ent_tank_spawn(void) {
     ent_aux[e_t] = (e_c < 0x40u) ? 5u : 6u;
     ent_flags[e_t] = ENT_F_WAIT;
     ent_y[e_t] = 0;
+    shell_vx_hi = 2u;                       /* $ADB6-$ADB8: 2 px per frame */
+    shell_vx_lo = 0u;
+    entity_count++;
+}
+
+/* Tank slot e_slot fires: shell in a free slot, if there is one.  Scratch:
+ * e_src (the shell's slot, MAX_ENTITIES when none), e_c. */
+static void ent_tank_fire(void) {
+    for (e_src = 0; e_src < MAX_ENTITIES && ent_type[e_src] != ENTITY_NONE; e_src++) {
+    }
+    if (e_src < MAX_ENTITIES) {
+        ent_flags[e_slot] |= ENT_F_SHOOT;
+        entity_count++;
+        ent_shell_init();
+    }
+}
+
+/* $ADCD-$AE92: after the spawner placed a ship, helicopter or fuel depot, maybe
+ * add a bank/island tank above it.  Position and facing follow the river's
+ * state; at the top it is first placed like any object.  Scratch: e_t, e_c
+ * (narrower of the two widths), e_n (speed index), e_x (X), e_prop (state). */
+static void ent_side_tank_spawn(void) {
+    if (rg_rowcount != 0u || rg_level < SIDE_TANK_MIN_LEVEL || rg_countdown < 5u ||
+        rg_countdown >= 14u || (rg_lfsr_c & 0xC0u)) {
+        return;
+    }
+    for (e_t = 0; e_t < MAX_ENTITIES; e_t++) {
+        if (ent_type[e_t] == ENT_AUX_TANK) {
+            return;                         /* $38 != 0 */
+        }
+    }
+    e_c = (rg_island_width < rg_margin) ? rg_island_width : rg_margin;
+    if (e_c < 2u || e_c >= 14u) {
+        return;
+    }
+    e_n = (uint8_t)(rg_lfsr_c >> 3);
+    if (rg_level == 10u) {
+        e_n ^= 7u;
+    }
+    e_n &= 6u;
+    if (e_n == 0u && !(rg_island_flags & 0x80u) && e_c < 8u) {
+        e_n = 8u;
+    }
+    e_prop = 5u;                            /* facing right; 6 = left */
+    if (rg_island_flags & 0x80u) {
+        /* On an island: only while the river does not bend, in the middle. */
+        if (rg_feature != 0u || e_c < 4u || e_c >= 11u) {
+            return;
+        }
+        if (rg_lfsr_c & 1u) {
+            e_prop = 6u;
+        }
+        e_x = 0x4Cu + 0x30u;
+    } else if (rg_level & 1u) {
+        e_x = (uint8_t)(rg_lfsr_c & 0x1Fu);
+        if (e_x >= 0x10u) {
+            e_x = (uint8_t)(e_x + 0x58u);
+            if (rg_feature == 0u || (rg_feature & 0x80u)) {
+                e_prop = 6u;
+            } else {
+                e_x = (uint8_t)(0x78u - e_x);
+            }
+        } else if (rg_feature & 0x80u) {
+            e_prop = 6u;
+            e_x = (uint8_t)(0x78u - e_x);
+        }
+        e_x = (uint8_t)(e_x + rg_left + 0x20u);
+    } else {
+        e_x = side_tank_x[e_c];
+        if (e_x >= 0x50u) {
+            if (rg_feature == 0u || (rg_feature & 0x80u)) {
+                e_prop = 6u;
+            } else {
+                e_x = (uint8_t)(0x98u - e_x);
+            }
+        } else if (rg_feature & 0x80u) {
+            e_prop = 6u;
+            e_x = (uint8_t)(0x98u - e_x);
+        }
+        e_x = (uint8_t)(e_x + 0x30u);
+    }
+    for (e_t = 0; e_t < MAX_ENTITIES && ent_type[e_t] != ENTITY_NONE; e_t++) {
+    }
+    if (e_t == MAX_ENTITIES) {
+        return;
+    }
+    ent_type[e_t] = ENT_AUX_TANK;
+    ent_x[e_t] = e_x;
+    ent_aux[e_t] = e_prop;
+    ent_flags[e_t] = ENT_F_SIDE;
+    ent_y[e_t] = ent_y[sp_slot];            /* beside the object it came with */
+    shell_vx_hi = side_shell_speed[e_n];
+    shell_vx_lo = side_shell_speed[(uint8_t)(e_n + 1u)];
     entity_count++;
 }
 
@@ -502,13 +611,7 @@ static uint8_t ent_bridge_hit(void) {
         !(e_px & 0x80u) &&
         (((e_px & 0x7Fu) < 6u) ? ((uint8_t)(e_l - e_r) < TANK_FIRE_RIGHT)
                                : ((uint8_t)(e_r - e_l) < TANK_FIRE_LEFT))) {
-        for (e_src = 0; e_src < MAX_ENTITIES && ent_type[e_src] != ENTITY_NONE; e_src++) {
-        }
-        if (e_src < MAX_ENTITIES) {
-            ent_flags[e_slot] |= ENT_F_SHOOT;
-            entity_count++;
-            ent_shell_init();
-        }
+        ent_tank_fire();
     }
     return 0x50u;
 }
@@ -659,6 +762,9 @@ void entities_row(void) BANKED {
     ent_flags[e_i] = (uint8_t)(ENT_F_LATCH | (sp_left ? ENT_F_LEFT : 0u));
     ent_aux[e_i] = 0;
     entity_count++;
+    if (sp_y >= 8u) {
+        ent_side_tank_spawn();              /* $ADCD: ship, helicopter or fuel depot */
+    }
 }
 
 /* The explosion keeps the object's own shape class (colours, height, width)
@@ -844,6 +950,31 @@ static uint8_t ent_touching(void) {
 
 static uint8_t ent_cur;         /* frame counter value of the tick being run */
 
+/* The side tank's sprite overlaps a bank or island outline (the Atari's
+ * P1/playfield collision, $20).  Scratch: e_slot, e_l, e_r, e_px, e_c clobbered. */
+static uint8_t ent_tank_edge(void) {
+    e_slot = river_slot_at_scanline((uint8_t)(ent_y[e_i] + 6u));
+    e_r = river_right_x[e_slot];
+    if (e_r == 0u) {
+        return 0;
+    }
+    e_l = river_left_x[e_slot];
+    e_px = (uint8_t)(ent_x[e_i] - SOURCE_X_OFFSET);
+    /* overlap of [e_px, e_px + width] with an outline column, 2 px of slack */
+    if ((uint8_t)(e_l + 2u - e_px) <= SIDE_TANK_WIDTH + 4u ||
+        (uint8_t)(e_r + 2u - e_px) <= SIDE_TANK_WIDTH + 4u) {
+        return 1;
+    }
+    if ((river_flags[e_slot] & RIVER_FLAG_ISLAND) &&
+        river_island_left_x[e_slot] < river_island_right_x[e_slot]) {
+        e_l = river_island_left_x[e_slot];
+        e_r = river_island_right_x[e_slot];
+        return (uint8_t)(e_l + 2u - e_px) <= SIDE_TANK_WIDTH + 4u ||
+               (uint8_t)(e_r + 2u - e_px) <= SIDE_TANK_WIDTH + 4u;
+    }
+    return 0;
+}
+
 /* One frame of the tank ($A21B-$A26A) for slot e_i.  Scratch: e_c. */
 static void ent_tank_tick(void) {
     e_c = ent_aux[e_i];
@@ -855,8 +986,23 @@ static void ent_tank_tick(void) {
         e_c = 3u;                           /* destroyed: start the explosion */
     } else {
         if (!(ent_flags[e_i] & (ENT_F_STOP | ENT_F_SHOOT))) {
-            ent_x[e_i] = (e_c < 6u) ? (uint8_t)(ent_x[e_i] + 1u)
-                                    : (uint8_t)(ent_x[e_i] - 1u);
+            if (!(ent_flags[e_i] & ENT_F_SIDE)) {
+                ent_x[e_i] = (e_c < 6u) ? (uint8_t)(ent_x[e_i] + 1u)
+                                        : (uint8_t)(ent_x[e_i] - 1u);
+            } else if (ent_y[e_i] >= SIDE_TANK_ACTIVE_Y) {      /* $A23D: $3A >= $1A */
+                if (ent_tank_edge()) {
+                    e_slot = e_i;
+                    ent_tank_fire();
+                    if (e_src > e_i && e_src < MAX_ENTITIES) {
+                        /* the new shell is scrolled again later in this pass */
+                        ent_y[e_src] = (uint8_t)(ent_y[e_src] - river_scrolled);
+                    }
+                } else {
+                    ent_x[e_i] = (ent_aux[e_i] < 6u) ? (uint8_t)(ent_x[e_i] + 1u)
+                                                     : (uint8_t)(ent_x[e_i] - 1u);
+                }
+                e_c = ent_aux[e_i];
+            }
         }
         e_c = tank_next[e_c];
     }
@@ -873,8 +1019,21 @@ static void ent_tank_tick(void) {
 static void ent_shell_tick(void) {
     e_c = ent_aux[e_i];
     if (e_c != 0u && e_c < SHELL_FLY_FRAMES) {
-        ent_x[e_i] = (ent_flags[e_i] & ENT_F_LEFT) ? (uint8_t)(ent_x[e_i] - 2u)
-                                                   : (uint8_t)(ent_x[e_i] + 2u);
+        /* $A630-$A650: 8.8 fixed-point step, carry/borrow into the pixel. */
+        e_px = shell_vx_hi;
+        if (ent_flags[e_i] & ENT_F_LEFT) {
+            if (shell_frac < shell_vx_lo) {
+                e_px++;
+            }
+            shell_frac = (uint8_t)(shell_frac - shell_vx_lo);
+            ent_x[e_i] = (uint8_t)(ent_x[e_i] - e_px);
+        } else {
+            shell_frac = (uint8_t)(shell_frac + shell_vx_lo);
+            if (shell_frac < shell_vx_lo) {
+                e_px++;
+            }
+            ent_x[e_i] = (uint8_t)(ent_x[e_i] + e_px);
+        }
         ent_y[e_i] = (uint8_t)(ent_y[e_i] + shell_dy[e_c]);
     }
     e_c++;

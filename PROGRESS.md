@@ -2078,3 +2078,27 @@ entity loop and the split-wait work are not needed for now; RAM 72 bytes free.
   Atari is shared, so one enemy shell exists at a time. Side-of-river tanks are probably the `$ADA6` branch
   (`$23` bit 7 clear path, `$38 = 5/6`) but that is unconfirmed.
 - Not built or run this session (docs and memory only besides the colour fix).
+
+### 2026-10-31 - Shooting enemies traced on the live Atari (branch `main`)
+
+- `tools/atari_shoot_trace.py <level> <frames>` boots the Atari, stays in attract, pokes `$60` and logs the
+  frame on which `$38` goes 0 -> non-zero, with `$23 $2D $36 $4E $5D $5F $2C $AC $3A` and screenshots
+  (start and +25 frames). Tip from the user: level 50 in attract gives shooters within seconds (level 9 gave one in 15k frames).
+- Findings (level 50, 3000 frames, 7 starts): `$38` = 5/6 is always a tank. `$3A = $0B` + `$23` bit 7 set = the bridge tank
+  (already ported); `$3A = $0C` + `$23` bit 7 clear = a **side tank** from the `$ADCD-$AE86` branch (frames 176, 912, 1296, 2192).
+  Conditions in the disasm: helicopter in slot `$4E`, level >= 7, `$5D` 5..13, `$AC & $C0 == 0`, `$5F/$2C` 2..13.
+  So "no side tanks" is this branch; whether "striped helicopters don't shoot" is a separate mechanism is still unconfirmed.
+- Not yet verified: where the side tank sits (X from `$39`, Y from `$3E/$3F`, `$B7F4` table), whether it uses the
+  bridge-tank shell rules, and what the light-blue horizontal sprite near the banks in the late screenshots is. No port code changed.
+
+### 2026-10-31 - Side tank ported (branch `main`)
+
+- Sampled the live Atari (level 50, attract): the side tank (`$38`=5/6, `$3A` Y starting `$0C`, `$41`=`$FF`) walks 1 px
+  per 4 frames only once `$3A >= $1A`, and fires the shell as soon as `$20` (P1/playfield collision) is set,
+  then stands still; the shell cycles 57 frames like the bridge tank's. Shell speed is 8.8 fixed point from
+  `$B7F4` (0.5/1/1.5/2/4 px per frame), the bridge tank's is 2. Spawn rules `$ADCD-$AE86` are in `ent_side_tank_spawn`
+  (needs rowcount 0, level >= 7, countdown 5..13, `$AC & $C0 == 0`, narrower width 2..13, no tank alive, and a ship/heli/fuel
+  just placed). `$36` is `rg_feature` (now exported). Position tables `$BFE4` and the sign rules copied from `$AE3E-$AE86`.
+- Port: `ENT_F_SIDE` tanks use `ent_tank_edge()` (overlap with bank/island outline columns, 2 px slack) in place of `$20`;
+  `shell_vx_hi/lo/frac` globals make the shell speed variable. The tank starts at its companion's Y.
+- Build: ROM 65552, RAM 10 bytes free, `_XINIT` ends `$FC1C`, `_CODE_1` 14303 bytes. Not run in Mesen; user playtests.

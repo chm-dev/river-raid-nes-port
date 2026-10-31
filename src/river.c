@@ -62,7 +62,7 @@ static uint8_t rg_width;          /* $53 */
 uint8_t rg_phase;                 /* $54 */
 uint8_t rg_rowcount;              /* $2F */
 uint8_t rg_island_flags;          /* $2D */
-static uint8_t rg_feature;        /* $36 */
+uint8_t rg_feature;               /* $36 */
 uint8_t rg_section_timer;         /* $5A */
 uint8_t rg_countdown;             /* $5D */
 uint8_t rg_island_width;          /* $5F */

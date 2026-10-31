@@ -54,7 +54,7 @@ extern uint8_t river_obj_v37;
  * river.c) and the number of scrolled rows the generator still owes. */
 extern uint8_t rg_left, rg_phase, rg_rowcount, rg_island_flags, rg_countdown;
 extern uint8_t rg_island_width, rg_margin, rg_margin_flag, rg_level;
-extern uint8_t rg_section_timer, rg_flags23, rg_lfsr_a, rg_lfsr_b, rg_lfsr_c, rg_b5;
+extern uint8_t rg_section_timer, rg_flags23, rg_lfsr_a, rg_lfsr_b, rg_lfsr_c, rg_b5, rg_feature;
 extern uint8_t river_owed;
 
 /* Number of tile rows generated so far (also the demo scroll distance). */
