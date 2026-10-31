@@ -11,6 +11,29 @@
 > **Archive.** `HANDOFF.md` is the current state. "Current status" and "Next step" below are
 > frozen snapshots as of 2026-10-31 and may be stale.
 
+### Topic index (find an entry, then read only that one)
+
+Entries are `### date - title` under **Session log**. Find one with
+`Select-String -Path PROGRESS.md -Pattern '<title fragment>' -SimpleMatch`, note the line number, and Read ~80 lines from there
+(or use `Grep -A 60`). Titles are stable; line numbers drift. Sections in the first ~590 lines: *Confirmed technical
+decisions* (display/PMG/river constants), *Known issues / deferred items*, *Handy commands*.
+
+| Topic | Entry titles (fragments) |
+|---|---|
+| Phase 1-3 setup, HUD base | "Phase 1 complete", "Phase 2 complete", "Phase 3 complete", "Source-faithful HUD" |
+| River generator + collision ring | "Phase 4 generator and collision ring", "Atari river/tree layout", "Playfield orientation", "Out-of-bounds river" |
+| Palette, black world at start | "Atari-like palette", "Black world at game start", "Land colour after respawn" |
+| Player jet, shot, throttle, death | "Phase 5 slice 1", "Phase 5 slice 2", "Fast throttle", "Death animations", "Throttle ramp" |
+| Spawner, entities, helicopters | "Faithful object spawner", "Entity fixes after play-testing", "Start sequence, colours, helicopter", "Entities moved while the river scrolled in", "No enemies near the jet" |
+| Bridge, road, tank, shell | "Bridge and road", "Bridge tank and its shell", "Tank priority, bridge debris", "Tank shell scrolled wrongly" |
+| Shooting enemies research (helicopter shell, side tanks) | "shooting enemies researched" |
+| Respawn / checkpoint, fuel | "Respawn at the last cleared bridge", "Fuel rates checked", "Phase 5 closed out", "Phase 5 finished" |
+| Hitboxes, level 50 gaps | "Hitboxes lagged", "Narrow gaps (level 50)" |
+| Performance (frame loop, profiling) | "Frame-time profile", "Performance: time-based game", "30 Hz game logic", "Late frames", "Row render and pacing" |
+| HUD geometry and tweaks | "Compact HUD", "HUD padding", "HUD: start blink", "HUD: first line raised" |
+| Sound (APU) | "RAM freed, first APU sound pass", "sound re-derived", "Fuel tank sound", "Low-fuel warning, enemy shell" |
+| Attract, menus, 1P/2P | "attract / SELECT / START read off", "game variants and two-player", "attract mode, start-level select", "Atari-style game select", "attract game select freezes" |
+
 ---
 
 ## Current status
