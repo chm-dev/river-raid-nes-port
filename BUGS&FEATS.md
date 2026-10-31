@@ -14,11 +14,16 @@ Found in the milestone 1 playtest (`roms/m1_jet.gb`, 2026-10-31). All expected a
 - [x] **Death animation gets very slow when scene becomes busy**
 - [x] **Enemies move very slow and stutter a lot**
 - [ ] **Pause menu is broken. Is invisible only letter "IT" can be seen** It still is usable if you navigate blind.
-
+- [ ] **Scroll camera when river scrolls down should be aligned vertically with the position where plane will appear** currently it is bit off and gets aligned only after plane appears.
+- [ ] **Flash after hitting bridge with tank on it is not present**
+- [ ] **Road color should be gray and is green**
+- [ ] **Grass color does not alternate between bridges**
+- [ ] 
 # FEATURES
-- [~] **Move the jet lower on screen.** The view is bottom-anchored (`GBC_VIEW_TOP_SCANLINE` 112), so only the jet's logic Y can move it: `PLAYER_START_Y` is 222 on GBC (was 218; sprites at y >= 232 are culled, so 222 is the limit). It also sets reaction time, the plan's main risk. If 4 px is not enough, thin the HUD Window (16 px) for look-ahead.
+- [x] **Move the jet lower on screen.** The view is bottom-anchored (`GBC_VIEW_TOP_SCANLINE` 112), so only the jet's logic Y can move it: `PLAYER_START_Y` is 222 on GBC (was 218; sprites at y >= 232 are culled, so 222 is the limit). It also sets reaction time, the plan's main risk. If 4 px is not enough, thin the HUD Window (16 px) for look-ahead.
 - [x] **Bank 0 headroom.** Done: `player.c` moved to bank 2; bank 0 now has ~2.6 KB free (see HANDOFF).
 - [ ] **Sprite Y may be 1 px off** (NES draws at `y+1`). Check against the Atari after the jet is lowered.
 - [ ] **Rework the HUD (separate, later task).** `src/gbc/hud_gbc.c` is a minimal stand-in (score, fuel bar, lives, bridge number). Needs a proper layout and the original charset art; also HI score, blink, game number.
 - [ ] **Remove two-player mode for GBC.** Strip `pl_two`, `player_swap_players`, the `joypad_ex` path and the `hud_two`/`hud_other_bcd` state from the GBC build; the attract menu then only picks the level.
+- [ ] **Come up with smarter camera scrolling so it doesn't follow on every small vertical movement**
 
