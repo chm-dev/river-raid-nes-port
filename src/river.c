@@ -2125,7 +2125,7 @@ static void river_job_solids(void) {
  * as when the buffer is full.  The 6502 keeps its unlimited job. */
 #ifndef RIVER_JOB_COLS
 #ifdef __SDCC_sm83
-#define RIVER_JOB_COLS      6u
+#define RIVER_JOB_COLS      10u
 #else
 #define RIVER_JOB_COLS      255u
 #endif
