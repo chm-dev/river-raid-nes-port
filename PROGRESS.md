@@ -2155,3 +2155,16 @@ entity loop and the split-wait work are not needed for now; RAM 72 bytes free.
 - Checked in our code: `ent_type` is only written by the spawner, the explosion code (`ent_type` = 2..6, class in the flags high nibble) and the tank/shell code; the only type rewrite on live objects is the helicopter rotor swap (8<->9, 10<->11, `entities.c` ~1625), which excludes 7. Sprite tile ranges do not overlap: HUD/BG 1..64, entities `ENT_TILE_BASE` 88..228, pause glyphs 240..247, HUD top tiles 248..255.
 - Mesen probe at level 50 (poked `rg_level`=50 after `startGame()`, held Up, 1500 frames, `ent_type[11]` sampled every frame): only 8<->9 and 10<->11 transitions (~410 and ~108 each); one plane appeared (slot 1, frame 88) and stayed type 7. So no corruption after spawn.
 - Not done: Atari comparison. If it comes back, the open question is whether `sp_choose` (`entities.c` ~260, Atari `$AC00-$AC8A`) picks the same types at high levels: `tools/atari_object_trace.py --level 50 --rows 1500 --out build/object_trace50.jsonl`, then `tools/object_validate.py` on it (needs AltirraBridgeServer, see `info/ALTIRRA_BRIDGE_NOTES.md`). Planes come only from `atari_spawn_types[rg_lfsr_b & 7]` (1 in 8 draws), demoted to a ship below level 5. Also capture a screenshot of the wrong sprite and the level/bridge number.
+
+### 2026-10-31 - Extra life every 1000 points (branch `main`)
+
+- `entities_add_score` compared `hud_score_bcd[1] & 0xF0` (thousands digit) instead of the ten-thousands digit (`hud_score_bcd[0] & 0x0F`; score is 6-digit big-endian BCD), so a life and the bonus arpeggio fired every 1000 pts. Now every 10,000 as on the Atari. Not play-tested (marked `[~]`).
+- Build: ROM 65552, RAM 5 bytes free.
+
+- Follow-up: the life was granted but the HUD capped lives icons at 3 (`HUD_LIVES_ICON_MAX`), so a 4th was invisible. Cap is now 4; the 4th icon uses OAM slot 56 (`HUD_LIFE_SLOT4`; 47 is the player shot, 48..55 the gauge). The Atari draws up to 8 icons (`$AF5B`); more here would exceed 8 sprites/scanline with the gauge. Build: ROM 65552, RAM 5 free. Untested.
+
+- Lives icon cap raised from 4 to 8 (the Atari's 9-cell field at `$AF5B`): icons 4..8 use OAM slots 56..60. The gauge sprites are all at x<150 and the icons start at x=160, so they never share a scanline with more than the 8 icons. Untested.
+
+- Lives icons moved from sprites to BG tiles (`TILE_LIFE` 62, nametable row 3, cols 20..27). Sprite slots 56..60 were wrong twice over: the gauge already uses 8 sprites on those scanlines (hardware drops sprites past 8/scanline, wherever they sit in x; the MiSTer only looked fine with its sprite limit turned off), and `pause_slot` uses OAM 56..63. Sprite tile 15 stays for the pause cursor. The row is written via `digit_buf` as scratch (RAM was 4 bytes over with a dedicated array). Build: ROM 65552, RAM 5 free. `nes_scroll_hud.mjs` still checks OAM slots 44..46 for the icons and needs updating. Test ROM: `roms/river_raid_9lives.nes` (start lives 9; patch both `hud_lives` and `pl_other[3]` in `player_start_game`).
+
+- Closed: plane tile now uses the gray HUD band (INK_PLANE0/1 like the yellow digits); play-tested by the user with a 9-lives ROM (removed, source back to 3 lives). `tests/nes_scroll_hud.mjs` lives check now reads nametable row 3 cols 20..27 (tile 62) instead of OAM slots 44..46; not re-run (user asked to skip Mesen tests).

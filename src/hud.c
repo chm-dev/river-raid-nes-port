@@ -357,6 +357,14 @@ static void hud_build_life_tile(void) {
         gauge_sprite_buf[row * 2u + 1u] = 0u;
     }
     set_sprite_data(HUD_LIFE_TILE, 1, gauge_sprite_buf);
+
+    /* The same glyph as a BG tile: yellow ink (value 2) on the gray band (value 1),
+     * like the yellow digits. */
+    for (row = 0; row < 8u; row++) {
+        gauge_sprite_buf[row * 2u] = INK_PLANE0(src[row], INK_YELLOW);
+        gauge_sprite_buf[row * 2u + 1u] = INK_PLANE1(src[row], INK_YELLOW);
+    }
+    set_sprite_data(TILE_LIFE, 1, gauge_sprite_buf);
 }
 
 static void hud_init_gauge_sprites(void) {
@@ -395,13 +403,6 @@ static void hud_init_gauge_sprites(void) {
     set_sprite_prop(HUD_FUEL_BAR_SLOT2, S_PAL(0));
     move_sprite(HUD_FUEL_BAR_SLOT2, HUD_FUEL_BAR_X_MAX, HUD_FUEL_BAR_Y2 - 1u);
 
-    for (i = 0; i < HUD_LIVES_ICON_MAX; i++) {
-        uint8_t slot = (uint8_t)(HUD_LIFE_SLOT + i);
-
-        set_sprite_tile(slot, HUD_LIFE_TILE);
-        set_sprite_prop(slot, S_PAL(0));
-        hide_sprite(slot);
-    }
 }
 
 /* ------------------------------------------------------------------------- */
@@ -536,15 +537,9 @@ static void hud_write_lives(void) {
         return;
     }
     for (i = 0; i < HUD_LIVES_ICON_MAX; i++) {
-        uint8_t slot = (uint8_t)(HUD_LIFE_SLOT + i);
-
-        if (i < icons) {
-            move_sprite(slot, (uint8_t)(HUD_LIFE_X + i * 8u),
-                        HUD_LIFE_Y - 1u);
-        } else {
-            hide_sprite(slot);
-        }
+        digit_buf[i] = (i < icons) ? TILE_LIFE : TILE_BLANK;   /* scratch: copied at once */
     }
+    set_bkg_tiles(HUD_LIVES_X, HUD_LIVES_ROW, HUD_LIVES_ICON_MAX, 1, digit_buf);
     shown_lives = icons;
 }
 
@@ -693,6 +688,7 @@ void hud_init_graphics(void) BANKED {
     hud_game = 1;
     hud_bridge = 1;
     shown_fuel_step = 0xFFu; /* force the first marker write */
+    shown_lives = 0xFFu;     /* force the first lives write */
     shown_p1 = TILE_P1_WIDE;
     shown_label = TILE_HI_WIDE;
     shown_white = 0;

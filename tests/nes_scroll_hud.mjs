@@ -46,7 +46,7 @@ const TILE_DIGIT_BASE = 1;          /* black digits */
 const TILE_DIGIT_YELLOW_BASE = 48;  /* yellow digits (score, bridge) */
 const HUD_FUEL_BAR_SLOT = 54;
 const HUD_FUEL_BAR_SLOT2 = 55;
-const HUD_LIFE_SLOT = 44;
+const TILE_LIFE = 62;
 
 let failures = 0;
 
@@ -295,14 +295,10 @@ async function main() {
         slot[3] === 80 && slot2[3] === 80,
         `bar x=${slot[3]}/${slot2[3]}`);
 
-    const life0 = await readBytes(oam + HUD_LIFE_SLOT * 4, 4, 'NesMemory');
-    const life1 = await readBytes(oam + (HUD_LIFE_SLOT + 1) * 4, 4, 'NesMemory');
-    const life2 = await readBytes(oam + (HUD_LIFE_SLOT + 2) * 4, 4, 'NesMemory');
+    /* Lives icons are BG tiles on row 3, cols 20..27 (blank where no life is left). */
     check('two lives icons remain visible',
-        life0[3] === 160 && life0[0] === 18 &&
-        life1[3] === 168 && life1[0] === 18 &&
-        life2[0] === 240,
-        `x=${life0[3]},${life1[3]} y2=${life2[0]}`);
+        eq(row3.slice(20, 28), [TILE_LIFE, TILE_LIFE, 0, 0, 0, 0, 0, 0]),
+        hexArray(row3.slice(20, 28)));
 
     await callTool('mesen_playback', { action: 'resume' });
 

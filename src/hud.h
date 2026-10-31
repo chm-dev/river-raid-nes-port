@@ -23,7 +23,7 @@ extern volatile uint8_t playfield_scroll_y;
 extern uint8_t hud_score_bcd[3];    /* big-endian BCD, 6 digits */
 extern uint8_t hud_hi_bcd[3];
 extern uint8_t hud_fuel;            /* 0..255, shown as a reduced fraction */
-extern uint8_t hud_lives;           /* plane icons under BRIDGE (0..3) */
+extern uint8_t hud_lives;           /* plane icons under BRIDGE (0..9, 8 drawn) */
 extern uint8_t hud_game;            /* game variation / skill */
 extern uint8_t hud_bridge;          /* current bridge number (0..99) */
 

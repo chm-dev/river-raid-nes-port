@@ -140,16 +140,15 @@
 
 /* Sprite tiles for the gauge overlay.
  *   8 = E, 9 = F, 10..13 = 16x14 "1/2", 14 + 16 = yellow level bar,
- *   15 = yellow lives plane ($5C).
+ *   15 = yellow plane ($5C), the pause-menu cursor.
  * Gauge labels use OAM slots 48..53; the bar uses slots 54..55 so it sits
- * behind them (lower OAM index wins).  Lives planes use slots 44..46. */
+ * behind them (lower OAM index wins). */
 #define HUD_GAUGE_E_TILE        (SPRITE_TILE_BASE + 8u)
 #define HUD_GAUGE_F_TILE        (SPRITE_TILE_BASE + 9u)
 #define HUD_FRAC_TILE           (SPRITE_TILE_BASE + 10u)
 #define HUD_FUEL_BAR_TILE       (SPRITE_TILE_BASE + 14u)
 #define HUD_LIFE_TILE           (SPRITE_TILE_BASE + 15u)
 #define HUD_FUEL_BAR_TILE2      (SPRITE_TILE_BASE + 16u)
-#define HUD_LIFE_SLOT           44u
 #define HUD_GAUGE_E_SLOT        48u
 #define HUD_FRAC_SLOT           49u
 #define HUD_GAUGE_F_SLOT        53u
@@ -166,8 +165,6 @@
 #define HUD_FUEL_BAR_Y2         24u     /* ends just above the bottom rule */
 #define HUD_FUEL_BAR_X_MIN      80u     /* empty, on the E marker */
 #define HUD_FUEL_BAR_X_MAX      142u    /* full, on the F marker */
-#define HUD_LIFE_X              160u
-#define HUD_LIFE_Y              19u
 
 /* ------------------------------------------------------------------------- */
 /* Background palettes                                                       */
@@ -276,6 +273,12 @@
 #define HUD_BRIDGE_DIGIT_X      29u     /* two tiles, 29..30 */
 #define HUD_BRIDGE_DIGIT_MAX    99u
 
-#define HUD_LIVES_ICON_MAX      3u
+/* Lives icons are background tiles (row 3, under BRIDGE): sprites would blow the
+ * 8-per-scanline limit next to the gauge overlays.  The Atari's 9-cell field
+ * ($AF5B) holds 8 icons. */
+#define HUD_LIVES_ICON_MAX      8u
+#define HUD_LIVES_ROW           3u
+#define HUD_LIVES_X             20u
+#define TILE_LIFE               62u     /* yellow plane ($5C), BG tile in the $1000 table */
 
 #endif /* CONFIG_H */
