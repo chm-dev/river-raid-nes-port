@@ -1,10 +1,11 @@
 /*
  * nes_jet_hitbox.mjs - the jet collides with its lit pixels, like the Atari's
- * P2PF test, not with its 8-px cell.
+ * P2PF test, not with its 8-px cell, and the 4-px bank outline (playfield colour
+ * 2) is harmless: only the land colour beyond it counts (P2PF bit 0).
  *
  * The straight jet (shape 9) lights columns 1..7, so on a frozen river with the
- * water spanning [lo, hi) under all 14 rows it survives at px = lo-1 and
- * px = hi-8 and crashes one pixel further out on either side.  (The ring stores
+ * water spanning [lo, hi) under all 14 rows it survives at px = lo-5 and
+ * px = hi-4 and crashes one pixel further out on either side.  (The ring stores
  * one bound pair per 8-row tile row; lo/hi are the tightest over the rows the
  * jet touches.)
  *
@@ -53,10 +54,10 @@ const alive = async () => (await readBytes(S('player') + 7, 1))[0];
 await init();
 try {
     const trials = [
-        ['lo-1 (straight jet touches the left bank pixel)', g => g.lo - 1, true],
-        ['hi-8 (right wing flush with the right bank)', g => g.hi - 8, true],
-        ['lo-2 (one pixel into the left bank)', g => g.lo - 2, false],
-        ['hi-7 (one pixel into the right bank)', g => g.hi - 7, false],
+        ['lo-5 (straight jet touches the first land pixel, past the 4-px outline)', g => g.lo - 5, true],
+        ['hi-4 (right wing flush with the first right land pixel)', g => g.hi - 4, true],
+        ['lo-6 (one pixel into the left land)', g => g.lo - 6, false],
+        ['hi-3 (one pixel into the right land)', g => g.hi - 3, false],
     ];
     for (const [name, px, survives] of trials) {
         const g = await setup();

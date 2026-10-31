@@ -218,6 +218,7 @@ void player_init_graphics(void) BANKED {
  * pl_bits) overlap land on the tile row `pl_slot`?  The Atari tests the sprite's
  * own pixels (P2PF), not its 8-px cell: the straight jet is columns 1..7 and
  * both banked jets columns 2..6, so a gap that fits the banked jet is passable. */
+#define PLAYER_EDGE_BAND 4u
 static uint8_t pl_bits;
 static uint8_t pl_cmin;
 static uint8_t pl_cmax;
@@ -241,13 +242,18 @@ static uint8_t player_slot_hit(uint8_t px) {
     if (river_right_x[pl_slot] == 0u) {
         return 0;
     }
-    if (pl_l < river_left_x[pl_slot] || pl_r > river_right_x[pl_slot]) {
+    /* The stored bounds are where the water starts; the 4-px outline beside it is
+     * playfield colour 2 and the jet's crash test ($B651: P2PF bit 0) only sees
+     * the land colour beyond it. */
+    if ((uint8_t)(pl_l + PLAYER_EDGE_BAND) < river_left_x[pl_slot] ||
+        pl_r > (uint8_t)(river_right_x[pl_slot] + PLAYER_EDGE_BAND)) {
         return 1;
     }
+    /* Island tips (width < 16) are drawn as outline only, with no land inside. */
     return (river_flags[pl_slot] & RIVER_FLAG_ISLAND) &&
-           river_island_left_x[pl_slot] < river_island_right_x[pl_slot] &&
-           pl_l < river_island_right_x[pl_slot] &&
-           pl_r > river_island_left_x[pl_slot];
+           (uint8_t)(river_island_right_x[pl_slot] - river_island_left_x[pl_slot]) >= 16u &&
+           pl_l < (uint8_t)(river_island_right_x[pl_slot] - PLAYER_EDGE_BAND) &&
+           pl_r > (uint8_t)(river_island_left_x[pl_slot] + PLAYER_EDGE_BAND);
 }
 
 /*

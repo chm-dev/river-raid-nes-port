@@ -2202,3 +2202,10 @@ entity loop and the split-wait work are not needed for now; RAM 72 bytes free.
 ### 2026-10-31 - Level 20 river edge play-tested
 
 - User play-tested the fix: the glitch is gone. The Atari start screen still has a different island (straight vertical sides) because its LFSR is already advanced before the first visible row; accepted as a known low-priority difference, no code change.
+
+### 2026-10-31 - Jet no longer crashes on the 4-px bank outline (level 50 bottleneck)
+
+- Bug: level 50 bottleneck unbeatable on NES. Model check (`tools/river_model.py`, level 50): the one-sample-per-tile-row ring is never stricter than exact per-scanline bounds (0 windows where exact passes and sampled blocks), so the sampling is not the cause.
+- Cause: the Atari jet crash test is `lda P2PF; lsr; bcc` (`$B651`), bit 0 only = playfield colour 1 = land (`$55`). The bank outline is `$AA` (colour 2) and water `$FF` (colour 3), neither crashes. `river_pattern` puts a 4-px outline between water and land (left land ends at x-4, right land starts at x+4, island likewise), while `river_left_x/right_x` are the water edges, so the port crashed 4 px early on each side (gaps 8 px narrower).
+- Fix: `player_slot_hit` (src/player.c) adds `PLAYER_EDGE_BAND` = 4 to both bank bounds and shrinks the island span by 4 per side; island tips (width < 16, phase 6/7 drawn as outline only) have no land. Shot (M0 tests PF0|PF1) and entity checks keep the outline bounds. `nes_jet_hitbox.mjs` updated (survives at lo-5 / hi-4, crashes at lo-6 / hi-3).
+- Build: ROM 65552, RAM 4 free. Tests: nes_jet_hitbox, nes_gameplay pass. Awaiting user playtest at level 50.
