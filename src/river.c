@@ -664,6 +664,169 @@ static void river_render_plain(void) {
 }
 #endif
 
+#ifdef __SDCC
+static uint8_t isl_x;               /* island row: x of the current edge */
+
+/* river_render_row() for an island row without a feature (the renderer's island
+ * path, see river_render_row).  The 0x55 fills only move the position, because
+ * the row clear already wrote land, so they are gone.  The 0xFF and 0xAA fills
+ * write y+1 bytes; the patterns are river_pattern(). */
+static void river_island_asm(void);
+
+static void river_render_island(void) {
+    river_clear_row();
+    river_island_asm();
+}
+
+static void river_island_asm(void) {
+    __asm
+        lda     #0
+        sta     _rg_row_pos
+        sta     _rg_row_island_left
+        sta     _rg_row_island_right
+        lda     _rg_left
+        sta     _rg_row_left
+        sta     _isl_x
+        lsr     a                   ; land fill y = (x>>2)-1: position only
+        lsr     a
+        sec
+        sbc     #1
+        bmi     isl_1
+        clc
+        adc     _rg_row_pos
+        sta     _rg_row_pos
+    isl_1:
+        lda     _rg_left
+        and     #3
+        asl     a
+        asl     a
+        jsr     isl_pat
+        lda     _rg_phase
+        cmp     #6
+        bcs     isl_big
+        asl     a                   ; phase < 6: a = width + 2*phase
+        clc
+        adc     _rg_width
+        jmp     isl_tail
+    isl_big:
+        lda     _rg_width           ; left island edge: x = (width>>1) + left
+        lsr     a
+        clc
+        adc     _isl_x
+        sta     _isl_x
+        sta     _rg_row_island_left
+        lsr     a
+        lsr     a
+        sec
+        sbc     _rg_row_pos
+        bmi     isl_2
+        tay
+        lda     #0xFF
+        jsr     isl_fill
+    isl_2:
+        lda     _isl_x
+        and     #3
+        asl     a
+        asl     a
+        ora     #2
+        ldx     _rg_phase
+        cpx     #8
+        bcs     isl_3
+        clc
+        adc     #0x10
+    isl_3:
+        jsr     isl_pat
+        lda     _rg_phase           ; right island edge: x = left + 2*phase
+        asl     a
+        clc
+        adc     _isl_x
+        sta     _isl_x
+        sta     _rg_row_island_right
+        lsr     a
+        lsr     a
+        sec
+        sbc     _rg_row_pos
+        sec
+        sbc     #1
+        tay                         ; Y = y for the fills below
+        lda     _rg_phase
+        cmp     #8
+        bcs     isl_hi
+        tya                         ; phase < 8: 0xAA fill (writes 0), pattern +0x10
+        bmi     isl_4
+        lda     #0
+        jsr     isl_fill
+    isl_4:
+        lda     _isl_x
+        and     #3
+        asl     a
+        asl     a
+        ora     #0x10
+        jsr     isl_pat
+        jmp     isl_half
+    isl_hi:
+        tya                         ; phase >= 8: 0x55 fill (position only)
+        bmi     isl_5
+        clc
+        adc     _rg_row_pos
+        sta     _rg_row_pos
+    isl_5:
+        lda     _isl_x
+        and     #3
+        asl     a
+        asl     a
+        jsr     isl_pat
+    isl_half:
+        lda     _rg_width           ; right part: width >> 1
+        lsr     a
+    isl_tail:                       ; A = width part, x = _isl_x
+        clc
+        adc     _isl_x
+        sta     _isl_x
+        sta     _rg_row_right
+        lsr     a
+        lsr     a
+        sec
+        sbc     _rg_row_pos
+        bmi     isl_6
+        tay
+        lda     #0xFF
+        jsr     isl_fill
+    isl_6:
+        lda     _isl_x
+        and     #3
+        asl     a
+        asl     a
+        ora     #2
+        jsr     isl_pat
+        rts
+
+    isl_fill:                       ; A = value, Y = y (0..127): y+1 bytes, pos += y
+        ldx     _rg_row_pos
+    isl_fill_loop:
+        sta     _river_raw_row,x
+        inx
+        dey
+        bpl     isl_fill_loop
+        dex
+        stx     _rg_row_pos
+        rts
+
+    isl_pat:                        ; A = index: river_pattern(), pos += 2
+        tay
+        ldx     _rg_row_pos
+        lda     _river_bank_black,y
+        sta     _river_raw_row,x
+        lda     _river_bank_black+1,y
+        sta     _river_raw_row+1,x
+        inx
+        inx
+        stx     _rg_row_pos
+        rts
+    __endasm;
+}
+#endif
+
 static void river_render_row(void) {
     uint8_t island = (uint8_t)(rg_island_flags & 0x80u);
     uint8_t x, y, a, b7;
@@ -892,7 +1055,7 @@ static void river_step_state(void) {
     } else {
 #ifdef __SDCC
         if (rg_island_flags & 0x80u) {
-            river_render_row();
+            river_render_island();
         } else {
             river_render_plain();
         }

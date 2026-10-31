@@ -115,12 +115,9 @@ emu.addMemoryCallback(function() ups = ups + 1 end, emu.callbackType.exec, ${P('
 emu.addMemoryCallback(function() jobs = jobs + 1 end, emu.callbackType.exec, ${P('river_run_job')}, ${P('river_run_job')})
 emu.addMemoryCallback(function() grp = 1 end, emu.callbackType.exec, ${P('entities_update')}, ${P('entities_update')})
 emu.addMemoryCallback(function()
-  if emu.read(${S('rg_feature')}, emu.memType.nesMemory) ~= 0 and emu.read(${S('rg_rowcount')}, emu.memType.nesMemory) < emu.read(${S('rg_be')}, emu.memType.nesMemory) then
-    feat = feat + 1
-  elseif (emu.read(${S('rg_island_flags')}, emu.memType.nesMemory) & 128) ~= 0 then
-    isl = isl + 1
-  end
+  feat = feat + 1
 end, emu.callbackType.exec, ${P('river_render_row')}, ${P('river_render_row')})
+emu.addMemoryCallback(function() isl = isl + 1 end, emu.callbackType.exec, ${P('river_render_island')}, ${P('river_render_island')})
 emu.addMemoryCallback(function() pln = pln + 1 end, emu.callbackType.exec, ${P('river_render_plain')}, ${P('river_render_plain')})
 emu.log("armed")
 `;
