@@ -39,13 +39,7 @@ The cart **boots into attract**; every Mesen test calls `startGame()` from `test
 
 ## Open bugs (`BUGS&FEATS.md` is the source)
 
-- Balloon basket colour should be brown.
-- White striped helicopters do not shoot.
-- No tanks shooting from the side of the river.
-- Grass colour: level 1 dark green, level 2 light green; dying on level 2 restarts it dark green.
-- Pause menu unreachable until the jet starts moving.
-- Level 50 tight bottleneck is practically unbeatable on NES (beatable on Atari). Related fix history:
-  PROGRESS.md "Narrow gaps (level 50)".
+Consult the file.
 
 ## Budgets (check, do not trust these numbers)
 
