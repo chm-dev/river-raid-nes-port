@@ -65,6 +65,9 @@ def main() -> int:
     ap.add_argument("--start", action="store_true", default=True)
     ap.add_argument("--no-start", dest="start", action="store_false")
     ap.add_argument("--max-frames", type=int, default=4000)
+    ap.add_argument("--select-wait", type=int, default=900, help="frames to wait after the SELECT presses")
+    ap.add_argument("--select", type=int, default=0,
+                    help="SELECT presses before START (game n+1; 4 = start level 20)")
     args = ap.parse_args()
 
     a = connect_any(args.token)
@@ -73,6 +76,17 @@ def main() -> int:
     a.boot(str(args.xex))
     a.frame(args.warmup)
     a.clock()
+
+    for _ in range(args.select):
+        a.consol(select=True)
+        a.frame(6)
+        a.clock()
+        a.consol()
+        a.frame(6)
+        a.clock()
+    if args.select:
+        a.frame(args.select_wait)
+        a.clock()
 
     if args.start:
         a.consol(start=True)

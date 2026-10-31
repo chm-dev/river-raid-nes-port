@@ -827,12 +827,21 @@ static void river_step_state(void) {
             if (rg_level < 3u) {
                 rg_c4 = 0x1Cu;
                 rg_c5 = 0x24u;
-            } else if (rg_level < 0x0Au) {
+            } else if (rg_level < 0x0Au || !(rg_level & 1u) || rg_margin_flag) {
+                /* $A85F-$A86D: even levels, odd levels below 10, and any row
+                 * with the margin flag set keep the narrow bank limits. */
                 rg_c4 = 0x19u;
                 rg_c5 = 0x28u;
             } else {
-                rg_c4 = 0x0Du;
-                rg_c5 = 0x34u;
+                /* $A871: odd level >= 10 starts wide (0D/34, or 01/40 from
+                 * level 21) and the feature direction narrows one side. */
+                if (rg_level < 0x14u) {
+                    rg_c4 = 0x0Du;
+                    rg_c5 = 0x34u;
+                } else {
+                    rg_c4 = 0x01u;
+                    rg_c5 = 0x40u;
+                }
                 if (rg_feature) {
                     if (rg_feature & 0x80u) {
                         rg_c4 = 0x19u;

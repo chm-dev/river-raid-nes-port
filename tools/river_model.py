@@ -436,10 +436,13 @@ class RiverState:
                 # $A84F-$A887 bank limits
                 if self.level < 3:
                     self.c4, self.c5 = 0x1C, 0x24
-                elif self.level < 0x0A:
+                elif self.level < 0x0A or not (self.level & 1) or self.margin_flag:
+                    # $A85F-$A86D: even levels, odd levels below 10 and rows with
+                    # the margin flag set keep the narrow limits.
                     self.c4, self.c5 = 0x19, 0x28
                 else:
-                    self.c4, self.c5 = 0x0D, 0x34
+                    # $A871: odd level >= 10 starts wide (0D/34, 01/40 from 21).
+                    self.c4, self.c5 = (0x0D, 0x34) if self.level < 0x14 else (0x01, 0x40)
                     if self.feature:
                         if self.feature & 0x80:
                             self.c4 = 0x19
@@ -548,7 +551,7 @@ def initial_state(skill: int = 0) -> RiverState:
     st.left = st.seeds[3]
     st.width = 0x14
     st.phase = 0x36
-    st.flags23 = 0x84
+    st.flags23 = 0x84 if st.level & 1 else 0x80     # $B16B-$B178: level parity
     return st
 
 
