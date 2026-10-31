@@ -2102,3 +2102,21 @@ entity loop and the split-wait work are not needed for now; RAM 72 bytes free.
 - Port: `ENT_F_SIDE` tanks use `ent_tank_edge()` (overlap with bank/island outline columns, 2 px slack) in place of `$20`;
   `shell_vx_hi/lo/frac` globals make the shell speed variable. The tank starts at its companion's Y.
 - Build: ROM 65552, RAM 10 bytes free, `_XINIT` ends `$FC1C`, `_CODE_1` 14303 bytes. Not run in Mesen; user playtests.
+
+### 2026-10-31 - Fast helicopter missile and its sound (branch `main`)
+
+- User description: white striped helicopters shoot a 1 px horizontal short line. It is the Atari's **M0 missile**
+  (`$A5B9-$A607`, shooter = the type `$0A/$0B` helicopter the spawner makes at level 13+, slot `$51`), not a shell:
+  `$C1` = X (0 = none), `$C0` = dx (-2 left / +2 right, from status bit 3), `$C2` = scanline index. Traced on the live Atari
+  (`pm.py`/`heli.py` style: attract at level 50, dump `$0B00-$0FFF`): the missile is **1 scanline** at PM row = helicopter
+  top + 4, width 4 px (SIZEM = 1, two bits doubled), X = heli X - 3 (left) or + 7 (right); fires when heli Y17 - `$3C` >= `$1C`
+  (top >= 11 rows below the window top), refires the frame after it dies, dies on playfield collision (`M0PF & 3`) or when no
+  `$0A/$0B` helicopter exists; the kernel's M0PL & 4 hit on the jet kills it (`$21`). It scrolls with the river.
+- Port: `ent_missile_tick`, `msl_x/y/dx` (3 B RAM), sprite tile 239 (`MISSILE_TILE`), OAM slot 6 (`ENT_OAM_MISSILE`; first
+  dynamic entity slot is now 7), jet hit in `entities_check_player`; `ent_outline_overlap()` is shared with the side tank.
+- Sound: `$7F` is the ch2 missile counter (the earlier note "shot passing a helicopter" was wrong): for n = 9..1,
+  AUDC2 = `$46`+n, AUDF2 = 20,16,28,24,36,32,44,40,52; port plays it as a 9-frame pulse-2 job `P2_MISSILE`
+  (periods 72,58,100,86,128,114,156,142,184 by n, quarter duty, volume n+6). The Atari is silent for it in attract.
+  Pitch is a formula-based approximation (the poly distortion `$40` has no 2A03 equivalent): judge by ear.
+- Build: ROM 65552, RAM 7 bytes free, `_XINIT` ends `$FC71`. No tests run (user playtests; OAM slot shift is
+  covered by `nes_entity_hits`/`nes_sprite_lock`, not yet run).

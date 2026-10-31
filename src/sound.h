@@ -33,6 +33,7 @@ void sound_play_crash(void);
 /* The bridge tank fired its shell, or the shell restarted: the Atari's $B4C0
  * chirp and the fireball's noise tail ($50 = 1..$38). */
 void sound_play_shell(void);
+void sound_play_missile(void);
 
 /* Score crossed 10,000: the four-note arpeggio ($7E = $40). */
 void sound_play_bonus(void);

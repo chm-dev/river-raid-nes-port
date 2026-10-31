@@ -37,7 +37,8 @@ uint8_t entity_count;
  * its P3; everything else is allocated from ENT_OAM_FIRST. */
 #define ENT_OAM_TANK            2u
 #define ENT_OAM_SHELL           4u
-#define ENT_OAM_FIRST           6u
+#define ENT_OAM_MISSILE         6u      /* the fast helicopter's missile (Atari M0) */
+#define ENT_OAM_FIRST           7u
 #define ENT_OAM_LAST            43u
 /* Atari SIZEP3: ships are double width, the $0E bridge object quad width. */
 #define ent_width(type)         ((uint8_t)(ent_gfx_cols[type] << 3))
@@ -53,6 +54,19 @@ static uint8_t sp_slot;         /* entity slot of the object being built */
 static uint8_t bridge_x;        /* X of the bar of a scheduled road (0 = none): the bar is created later */
 static uint8_t bridge_flash;    /* Atari $31: frames of water flash left after a bridge hit */
 static uint8_t ent_anim;
+
+/* The fast helicopter's missile ($A5B9-$A607, Atari M0): a 4x1 px line that
+ * flies sideways at 2 px/frame from the helicopter's nose, 4 rows below its top,
+ * and dies on a bank or island outline; it scrolls with the river.  msl_dx = 0
+ * means none.  Sprite tile MISSILE_TILE is uploaded by entities_init_graphics. */
+#define MISSILE_TILE            239u    /* free sprite tile: debris 229..238, pause 240.. */
+#define MISSILE_WIDTH           4u      /* SIZEM = 1: two bits, doubled */
+#define MISSILE_ROW             4u      /* rows below the helicopter's top */
+#define MISSILE_FIRE_Y          (PLAYFIELD_SCANLINE + 11u)  /* $A5D8: Y - $3C >= $1C */
+static uint8_t msl_x;
+static uint8_t msl_y;
+static uint8_t msl_dx;
+static const uint8_t msl_tile[16] = { 0xF0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0 };
 
 /* Non-zero from the start of a game until the player first moves or fires: the river\n * scrolls in but the world (patrols, tanks, shells, wake-ups) stands still. */
 uint8_t ent_hold;
@@ -115,6 +129,7 @@ void entities_clear(void) BANKED {
     entity_count = 0;
     sp_hold = 0;
     bridge_x = 0;
+    msl_dx = 0;
     while (ent_oam_used > ENT_OAM_TANK) {   /* the sprites go with the entities */
         ent_oam_used--;
         shadow_OAM[ent_oam_used].y = 240u;
@@ -143,6 +158,7 @@ void entities_init_graphics(void) BANKED {
         set_sprite_palette((uint8_t)(e_i + 1u), 1, pal);
     }
     set_sprite_data(ENT_TILE_BASE, ENT_GFX_TILES, ent_gfx_chr);
+    set_sprite_data(MISSILE_TILE, 1, msl_tile);
 }
 
 uint8_t entities_tile(uint8_t aux) BANKED {
@@ -907,6 +923,10 @@ uint8_t entities_check_player(uint8_t px, uint8_t py) BANKED {
      * entities' true position is ent_y + river_scrolled; compare against that
      * by moving the jet the other way (the test only sees the difference). */
     e_y = (uint8_t)(py - river_scrolled);
+    /* The helicopter's missile (Atari M0 against the jet, $B630): jet box 8x14. */
+    if (msl_dx && (uint8_t)(msl_y - e_y) < 14u && (uint8_t)(msl_x + 3u - e_px) < 11u) {
+        return ENT_HIT_DEADLY;
+    }
     e_i = 0;
     for (;;) {
         ent_scan_player();
@@ -950,29 +970,34 @@ static uint8_t ent_touching(void) {
 
 static uint8_t ent_cur;         /* frame counter value of the tick being run */
 
-/* The side tank's sprite overlaps a bank or island outline (the Atari's
- * P1/playfield collision, $20).  Scratch: e_slot, e_l, e_r, e_px, e_c clobbered. */
-static uint8_t ent_tank_edge(void) {
-    e_slot = river_slot_at_scanline((uint8_t)(ent_y[e_i] + 6u));
+/* The span [e_px, e_px + e_w] (source pixels) overlaps a bank or island
+ * outline column of river slot e_slot, with 2 px of slack (the Atari's
+ * P1/M0-to-playfield collision).  Scratch: e_l, e_r. */
+static uint8_t ent_outline_overlap(void) {
     e_r = river_right_x[e_slot];
     if (e_r == 0u) {
         return 0;
     }
     e_l = river_left_x[e_slot];
-    e_px = (uint8_t)(ent_x[e_i] - SOURCE_X_OFFSET);
-    /* overlap of [e_px, e_px + width] with an outline column, 2 px of slack */
-    if ((uint8_t)(e_l + 2u - e_px) <= SIDE_TANK_WIDTH + 4u ||
-        (uint8_t)(e_r + 2u - e_px) <= SIDE_TANK_WIDTH + 4u) {
+    if ((uint8_t)(e_l + 2u - e_px) <= e_w + 4u || (uint8_t)(e_r + 2u - e_px) <= e_w + 4u) {
         return 1;
     }
     if ((river_flags[e_slot] & RIVER_FLAG_ISLAND) &&
         river_island_left_x[e_slot] < river_island_right_x[e_slot]) {
         e_l = river_island_left_x[e_slot];
         e_r = river_island_right_x[e_slot];
-        return (uint8_t)(e_l + 2u - e_px) <= SIDE_TANK_WIDTH + 4u ||
-               (uint8_t)(e_r + 2u - e_px) <= SIDE_TANK_WIDTH + 4u;
+        return (uint8_t)(e_l + 2u - e_px) <= e_w + 4u ||
+               (uint8_t)(e_r + 2u - e_px) <= e_w + 4u;
     }
     return 0;
+}
+
+/* The side tank's sprite overlaps an outline (the Atari's $20). */
+static uint8_t ent_tank_edge(void) {
+    e_slot = river_slot_at_scanline((uint8_t)(ent_y[e_i] + 6u));
+    e_px = (uint8_t)(ent_x[e_i] - SOURCE_X_OFFSET);
+    e_w = SIDE_TANK_WIDTH;
+    return ent_outline_overlap();
 }
 
 /* One frame of the tank ($A21B-$A26A) for slot e_i.  Scratch: e_c. */
@@ -1053,6 +1078,46 @@ static void ent_shell_tick(void) {
             ent_y[e_i] = (uint8_t)(ent_y[e_i] + river_scrolled);
         }
     }
+}
+
+/* One frame of the fast helicopter's missile ($A5B9-$A607).  With no such
+ * helicopter the missile is gone; a flying one moves and dies on an outline;
+ * with none flying the helicopter fires again as soon as it is far enough down
+ * the screen.  Called before the entity pass, so ent_y is still short of
+ * river_scrolled.  Scratch: e_t, e_slot, e_px, e_w, e_l, e_r. */
+static void ent_missile_tick(void) {
+    for (e_t = 0; e_t < MAX_ENTITIES; e_t++) {
+        if (ent_type[e_t] == 10u || ent_type[e_t] == 11u) {
+            break;
+        }
+    }
+    if (e_t == MAX_ENTITIES) {
+        msl_dx = 0;
+        return;
+    }
+    if (msl_dx) {
+        msl_x = (uint8_t)(msl_x + msl_dx);
+        e_slot = river_slot_at_scanline(msl_y);
+        e_px = (uint8_t)(msl_x - SOURCE_X_OFFSET);
+        e_w = MISSILE_WIDTH;
+        if (msl_x < 0x28u || msl_x >= 0xD8u || ent_outline_overlap()) {
+            msl_dx = 0;                     /* $22: hit the playfield */
+        }
+        return;
+    }
+    msl_y = (uint8_t)(ent_y[e_t] + river_scrolled);
+    if (msl_y < MISSILE_FIRE_Y || msl_y >= 232u) {
+        return;
+    }
+    if (ent_flags[e_t] & ENT_F_LEFT) {
+        msl_dx = (uint8_t)-2;
+        msl_x = (uint8_t)(ent_x[e_t] - 3u);
+    } else {
+        msl_dx = 2u;
+        msl_x = (uint8_t)(ent_x[e_t] + 7u);
+    }
+    msl_y = (uint8_t)(msl_y + MISSILE_ROW);
+    sound_play_missile();                   /* $7F = 9 ($A5E0) */
 }
 
 /* Sprite frame of the tank / shell in slot e_i (tiles per frame: 2). */
@@ -1479,6 +1544,24 @@ void entities_update(void) BANKED {
             ent_tank_place();
             bridge_x = 0;
         }
+    }
+
+    if (msl_dx) {
+        msl_y = (uint8_t)(msl_y + river_scrolled);          /* $AB7E: $C2 scrolls too */
+        if (msl_y >= 232u) {
+            msl_dx = 0;
+        }
+    }
+    if (!river_freeze && !ent_hold) {
+        for (e_n = 0; e_n < game_ticks; e_n++) {
+            ent_missile_tick();
+        }
+    }
+    if (msl_dx && msl_y >= HUD_SPLIT_SCANLINE) {
+        shadow_OAM[ENT_OAM_MISSILE].y = msl_y;
+        shadow_OAM[ENT_OAM_MISSILE].tile = MISSILE_TILE;
+        shadow_OAM[ENT_OAM_MISSILE].prop = S_PAL(0);
+        shadow_OAM[ENT_OAM_MISSILE].x = msl_x;
     }
 
     for (e_i = 0; e_i < MAX_ENTITIES; e_i++) {
