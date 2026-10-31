@@ -24,6 +24,8 @@ Short, current, rewritten every session. Rules are in `AGENTS.md`; the plan is `
 4. Split `river_run_job` across frames (fast-speed stutter is acceptable for now); measure first. Check the glitching hills and trees with `tests/host_river.ps1` before guessing.
 5. Measure player, HUD and uploads once they exist.
 
+**Use the advisor for steps 3 and 4** (the glitching hills/trees and the `river_run_job` split). Call it before committing to a diagnosis or approach, again if a fix does not change the symptom, and once before declaring done. Measure first and pass it the evidence (map and tile rows, profiler numbers, what was ruled out): it only knows what is in the transcript. It is not needed for palettes, the HUD or the bank 0 move, and it does not replace the user's playtest or the build checks.
+
 ## Decisions not to reopen
 
 - **GBC only.** DMG is dropped.
