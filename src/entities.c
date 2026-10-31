@@ -1287,6 +1287,11 @@ static void ent_draw_reg(void) {
         lda     _ent_gfx_rows,y
         sta     _e_rows
         lda     _ent_y,x
+        cpy     #12                 ; balloon: its tiles are padded 4 rows at the top
+        bne     8$
+        sec
+        sbc     #4
+    8$:
         sta     _e_y
         lda     _ent_x,x
         sta     _e_ex
@@ -1369,6 +1374,17 @@ static void ent_draw_reg(void) {
         clc
         adc     #8
         sta     _e_t
+        ldy     _e_type
+        cpy     #12                 ; balloon: the last tile row is the brown basket
+        bne     9$
+        cmp     #16
+        bne     9$
+        lda     _e_prop
+        and     #0xFC
+        ora     #1                  ; sprite palette 1 (flip bit kept)
+        sta     _e_prop
+    9$:
+        lda     _e_t
         cmp     _e_rows
         bcs     7$
         jmp     2$

@@ -2185,3 +2185,8 @@ entity loop and the split-wait work are not needed for now; RAM 72 bytes free.
 
 - Atari spends a life when the jet appears (`$6A` 4 -> 3 at WAIT->READY), not at the crash. `player_start_game` now sets `hud_lives` and `pl_other[3]` to 4; `hud_lives--` moved from `player_crash` to the WAIT->READY transition in `player_update`. Game over = crash with 0 in reserve (same test as before). Net effect: 4 planes per game (1 flying + 3 spare), was 3.
 - Build: ROM 65552, RAM 4 free. Play-tested by the user (1P and respawn flow); no Mesen run.
+
+### 2026-10-31 - Balloon basket is brown
+
+- Balloon = aux 12 (20 rows; bottom 8 Atari rows `$22` are the basket). A sprite takes one palette per tile and the 8/8/4 tiling split the basket across two tile rows, so `tools/gen_entity_gfx.py` pads the balloon 4 rows at the top (basket = last tile row, colour 2) and `ent_draw_reg` draws type 12 from `ent_y - 4`, switching the last tile row to sprite palette 1 (brown `$08`, flip bit kept). Collision rows stay 20. Debris frames still use palette 0 (not changed).
+- Build: ROM 65552, RAM 4 free. Play-tested by the user; no Mesen run.

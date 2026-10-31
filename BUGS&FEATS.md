@@ -1,6 +1,6 @@
 # BUGS
 - [x] Tanks shots are scrolling with the river (fixed 2026-10-30: the shell scrolls like every entity, as on the Atari)
-- [ ] baloon basket color - should be brown
+- [x] baloon basket color - should be brown (fixed and play-tested 2026-10-31: balloon tiles padded 4 rows at the top in `tools/gen_entity_gfx.py` so the basket is the last tile row; `ent_draw_reg` draws that row with sprite palette 1 (brown $08) from 4 px higher)
 - [x] White striped helicopters do not shoot (fixed and play-tested 2026-10-31: the fast helicopter, types $0A/$0B at level 13+, fires an M0 missile, a 4x1 px line at 2 px/frame that dies on a bank or island outline and kills the jet; noise-channel zap, silent in attract)
 - [x] There are no tanks shooting from side of the river (fixed and play-tested 2026-10-31: `ent_side_tank_spawn`, a tank on a bank or island that walks to the outline and fires, level 7+)
 - [x] Starting game. Level 1 is dark green grass. Get to level 2 - light green grass -> die -> Level 2 has now dark green grass. (fixed and play-tested 2026-10-31: `river_start` derives land colour from the bridge counter parity) 

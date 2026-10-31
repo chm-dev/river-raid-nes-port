@@ -96,14 +96,22 @@ def build(data, rows, m):
     return out
 
 
+BALLOON = 12
 for a in range(7, 16):
     rows = yoff[a] + 1
     rows_of[a] = rows
     m = cols_of[a] = SIZE_COLS.get(a, 1)
     data = [(shape[soff[a] + r], value_for(a, r)) for r in range(rows)]
     data.reverse()  # bottom-up -> top-down
+    if a == BALLOON:
+        # The basket (bottom 8 Atari rows, $22) is brown: pad the top by 4 so it
+        # is exactly the last tile row, which ent_draw_reg draws with sprite
+        # palette 1 (brown $08) from 4 px higher.
+        data = [(0, 0)] * 4 + [(b, 2 if i >= 12 else v) for i, (b, v) in enumerate(data)]
+        t = build(data, rows + 4, m)
+    else:
+        t = build(data, rows, m)
     first[a] = len(tiles)
-    t = build(data, rows, m)
     count[a] = len(t)
     tiles += t
 
