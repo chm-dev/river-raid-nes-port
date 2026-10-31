@@ -46,8 +46,9 @@ const ks = [];
 for (let f = 0; f < 80; f++) {
     await step(1);
     const scroll = (await readBytes(S('playfield_scroll_y'), 1))[0];
-    // find the depot's first sprite: lowest-numbered used entity slot (slot 6 on)
-    const oam = await readBytes(0x0200 + 24, 4);
+    // find the depot's first sprite: lowest-numbered used entity slot (slot 7 on;
+    // OAM 2-3 tank, 4-5 shell, 6 the helicopter missile)
+    const oam = await readBytes(0x0200 + 28, 4);
     ks.push({ scroll, y: oam[0], tile: oam[1] });
 }
 await callTool('mesen_input_override', { action: 'set', port: 0, buttons: '' });

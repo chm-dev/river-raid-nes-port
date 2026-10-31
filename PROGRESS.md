@@ -2139,3 +2139,12 @@ entity loop and the split-wait work are not needed for now; RAM 72 bytes free.
 - Playtest: the short-mode (93-step) noise version still sounded like a high pulse; the original is noise. Dropped `NOISE_SHORT`:
   the missile zap is now normal-mode noise at the same indices (14,13,13,13,13,12,12,11,11 by n-1), volume n+6. Same family
   as the engine hiss (idx 11..13). Build: ROM 65552, RAM 5 free, `_XINIT` ends `$FC68`. Not run in Mesen.
+
+### 2026-10-31 - Shooters confirmed; regression run (branch `main`)
+
+- User play-tested the side tank, the helicopter missile and its sound: all good. Bugs closed in `BUGS&FEATS.md`.
+- Regression: nes_smoke, nes_entity_hits (20/20), nes_gameplay, nes_sound, nes_menu, nes_hold, nes_scroll_hud, nes_river_cache,
+  nes_hud_blink, nes_start_clear all pass; `tests/host_river.ps1` matches 19999 rows. `nes_sprite_lock` printed a 1 px error
+  against the pre-session baseline (0 px): it read OAM slot 6, which is now the missile slot; the test reads slot 7 now
+  (locked on 80/80 frames again).
+- Build: ROM 65552, RAM 5 bytes free, `_XINIT` ends `$FC68`.
