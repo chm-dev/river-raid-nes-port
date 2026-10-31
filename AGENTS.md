@@ -5,6 +5,7 @@
 - **Do not read `PROGRESS.md` whole** (2,000+ lines, ~35k tokens). It is the append-only history and rationale log. Grep it for a keyword and read only the matching `### date - title` entry.
 - Phases 1-5 are complete; Phase 6 (sound, attract/menus, 2P, HUD polish) is in progress. The cart boots into attract, so tests call `startGame()` from `tests/mcp_client.mjs`.
 - `PORTING_PLAN.md` is the roadmap. This file holds stable rules only: update `HANDOFF.md` (rewrite) and `PROGRESS.md` (append, without reading it) as work progresses; the end-of-session steps are at the bottom of `HANDOFF.md`.
+- **Keep `HANDOFF.md` small** (target ~100 lines; may grow to ~150 when the extra text is clearly valuable). On every rewrite remove finished items and anything only historical; detail goes in a `PROGRESS.md` entry or `BUGS&FEATS.md`, with at most a one-line pointer in the handoff. Past ~150 lines, trim before adding.
 
 ## Project Overview
 Port of Atari 8-bit **River Raid** (`xex/River Raid (1983)(Activision)(US)[a3].xex`) to the **NES** in C using **GBDK-2020 v4.5.0** (`./gbdk`).

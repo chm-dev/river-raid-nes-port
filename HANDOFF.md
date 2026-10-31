@@ -27,6 +27,12 @@ The cart **boots into attract**; every Mesen test calls `startGame()` from `test
 
 ## Next steps (priority order)
 
+0. **Shooting helicopters / side tanks** (bugs list). The port has only the bridge tank's shell. The
+   Atari's helicopter shell is the spawner block `$ADA6-$AE92`; notes in PROGRESS.md
+   "Land colour after respawn; shooting enemies researched". Plan: a temporary playtest build (every
+   helicopter shoots, a few shooting tanks on the banks), then port the real conditions. The user
+   playtests; build the ROM and hand over a checklist, do not drive Mesen.
+
 1. **Check start levels 5/20/50** against the river model and `tests/nes_ring_integrity.mjs`.
    CHR-cache overflow (more visible 8x8 blocks than the 250 cache slots) is reachable from the first
    screen at high levels. Entry: PROGRESS.md "Known issues" 1d.
@@ -59,6 +65,7 @@ Consult the file.
 - **HUD art comes from `charset.bin`**; do not redraw it. Digits stay 8 px wide (width compromise).
 - **Sound** values come from live Atari captures, not estimates. Verify Atari behaviour by sampling over
   time, not static reads (see memory note on the attract freeze misread).
+- **The user playtests gameplay.** Mark a fix `[~]` in `BUGS&FEATS.md` until they confirm it.
 - **Work on `main`.** Branch only for special cases (what-if experiments, risky or throwaway changes),
   never a scratch copy of the tree. Merge back and delete the branch when done.
 
@@ -92,8 +99,15 @@ The full command list (profilers, Atari trace tools, asset regeneration) is unde
 
 ## End of session (keep this cheap)
 
-1. **Rewrite this file**: update the date, move finished items out of "Next steps", add new bugs,
-   correct the budgets. Keep it under ~130 lines; delete what is no longer true instead of annotating it.
+1. **Rewrite and trim this file.** Update the date, move finished items out of "Next steps", correct the
+   budgets. Target ~100 lines; it may reach ~150 when the extra text is clearly valuable. Remove finished items and anything that is only history;
+   detail belongs in a `PROGRESS.md` entry or `BUGS&FEATS.md`, with at most a one-line pointer here.
+   Delete what is no longer true instead of annotating it. Check the size and trim *before* adding:
+
+```powershell
+(Get-Content HANDOFF.md).Count      # ~100 is the target; past ~150 -> trim first
+```
+
 2. **Append one entry to `PROGRESS.md` without reading it** (a Read of that file costs ~35k tokens).
    The closing `'@` must stay at column 0:
 
