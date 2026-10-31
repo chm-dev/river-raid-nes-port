@@ -1,35 +1,16 @@
-# River Raid Atari 8bit to NES port
+# River Raid — Game Boy Color port
 
-No source code. Reverse engineered from xex binary and ported to nes via gbdk by DeepSeek v4.1 FLASH and Sonnet 5.5
-Mostly Altirra and AltirraBridge was used. REA with Ghidra for some minor extractions. 
+A port of the Atari 8-bit *River Raid* (1983, Activision) to the Game Boy Color, written in C with GBDK-2020. The game logic and the procedural river come from a reverse-engineered Atari binary; no Atari source code is used.
 
-WIP.
+**Status:** planned and benchmarked; no prototype yet. The branch is `gbc-port`. Read `HANDOFF.md` for the current state and `GBC_PORT_PLAN.md` for the plan.
 
-## Current state
+The earlier NES port is archived in `archive/nes/` (its README explains what is there). The NES build is on `main` until the two ports merge.
 
-Playable: the procedural river (exact Atari generator, bridges and roads), the jet,
-the shot, ships, helicopters, jets, fuel depots, the bridge tank and its shell, a
-source-faithful HUD, scoring and lives all work.  Still open: sound, respawn at the
-last bridge, exact fuel rate and some entity-placement details (see `PROGRESS.md`).
+<img width="508" height="476" alt="NES build, for reference" src="https://github.com/user-attachments/assets/382baff0-3d52-4f3e-8823-18b9decd1e3b" />
 
-Performance: the river scrolls at 60 Hz, the game logic runs at 30 Hz.  On NTSC
-the NES has about 29,780 CPU cycles per frame and the faked scanline split spends
-~5.4k of them, so the hot paths are hand-written 6502.  Cruise flight is smooth
-(about 0.5% late frames), fast flight (1.5 px/frame) is playable.
+## Docs
 
-## Build and test
-
-```powershell
-./build.ps1                      # roms/river_raid.nes (must be 65,552 bytes), .noi, .map
-node tests/nes_smoke.mjs         # Mesen checks (start MesenCE-MCP first, see AGENTS.md)
-./tests/host_river.ps1           # C generator vs. the Python model (needs zig)
-```
-
-`HANDOFF.md` is the short current status and next steps, `AGENTS.md` the toolchain
-rules, `info/LESSONS.md` the detailed lessons learned, `PROGRESS.md` the history
-log, `PORTING_PLAN.md` the roadmap.
-
-<img width="508" height="476" alt="river" src="https://github.com/user-attachments/assets/382baff0-3d52-4f3e-8823-18b9decd1e3b" />
-
-
-
+- `HANDOFF.md`: current status, next steps, decisions not to reopen.
+- `GBC_PORT_PLAN.md`: decisions, measurements, design, milestones, risks.
+- `AGENTS.md`: toolchain, coding rules, Gearboy emulator and tests.
+- `PROGRESS.md`: history log. `BUGS&FEATS.md`: bugs and feature ideas.

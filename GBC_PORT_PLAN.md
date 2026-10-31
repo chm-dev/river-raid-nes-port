@@ -6,7 +6,7 @@ Status as of 2026-10-31: planned and benchmarked; no prototype code exists yet. 
 - **GBC-only.** DMG is dropped. Original Game Boy and Game Boy Pocket are not targets. Adding DMG later would mean redoing the art for 4 shades, shrinking the tile cache and writing SM83 assembly.
 - **Cheap prototype first.** Use the existing C code with no new assembly, then decide from a playtest whether the port is worth finishing.
 - **Fast speed stays 1.5 px/frame**, as on the NES build.
-- **Work on a branch until the go decision.** Continue from `experiment/gb-feasibility`, or branch from it. `main` stays NES-only until milestone 5.
+- **Work on the `gbc-port` branch until the go decision.** It was branched from `experiment/gb-feasibility` with this plan merged from `main`. `main` stays NES-only until milestone 5.
 - **The user runs the playtests.** Build the ROM and hand over a checklist.
 
 ## Current state
@@ -15,7 +15,7 @@ Status as of 2026-10-31: planned and benchmarked; no prototype code exists yet. 
   - `<gb/gb.h>` replaces `<nes/nes.h>`.
   - palette calls stubbed and `.attr` changed to `.prop` in `src/entities.c`.
 - Benchmarks are in `tests/gb/bench/`; `tests/gb/gearboy_client.mjs` is the emulator client. The full numbers are in the branch's two commit messages.
-- View mockups are in `tests/gb/` on `main`: `gb_view_center.png`, `gb_view_3panel.png`, `sim_gb_view.py`. They use the existing same-size tiles at 1:1 pixels with a zoomed-in viewport.
+- View mockups are in `tests/gb/` (on `gbc-port` and `main`): `gb_view_center.png`, `gb_view_3panel.png`, `sim_gb_view.py`. They use the existing same-size tiles at 1:1 pixels with a zoomed-in viewport.
 
 ## Measurements
 Real river and entity code on the C paths, timed in Gearboy at 1.5 px/frame with 200 warm-up pass pairs. No player, HUD, sound or VRAM writes. The run was in DMG mode, so double speed is calculated from the cycle counts, not run. Budget at double speed: 35,112 M-cycles per frame.

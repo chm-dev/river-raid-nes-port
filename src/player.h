@@ -3,7 +3,7 @@
  *
  * Coordinates are playfield pixels: x = 0..255, y = 0..203 (scanline 36
  * is the top of the visible playfield).  Fuel is kept as two BCD-ish bytes;
- * the exact Atari gauge rate is still an open item in PROGRESS.md.
+ * the exact Atari gauge rate is still an open item in archive/nes/PROGRESS.md.
  */
 #ifndef PLAYER_H
 #define PLAYER_H
