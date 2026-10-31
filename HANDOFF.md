@@ -38,12 +38,8 @@ The cart **boots into attract**; every Mesen test calls `startGame()` from `test
 1. **Check start levels 5/20/50** against the river model and `tests/nes_ring_integrity.mjs`.
    CHR-cache overflow (more visible 8x8 blocks than the 250 cache slots) is reachable from the first
    screen at high levels. Entry: PROGRESS.md "Known issues" 1d.
-2. **P2 HUD colours:** while P2 flies, the Atari also turns BRIDGE, the bridge number and the lives
-   white. Needs ~8 more BG tiles and a white life sprite. Internal RAM is nearly out (see Budgets).
-3. **Attract extras:** the Atari's idle screen-saver blank (`$78`) and attract scroll speed (`$59`).
-4. Re-measure `ENT_WAIT_ROWS` if the playfield height or start scroll changes.
-5. Small fidelity items: road is 16 scanlines (Atari 20); PAL `$BF` has no NES counterpart; the
-   spawner uses its own RNG, so objects after a restart differ from the Atari's.
+2. **Attract extras:** the Atari's idle screen-saver blank (`$78`) and attract scroll speed (`$59`).
+3. Re-measure `ENT_WAIT_ROWS` if the playfield height or start scroll changes.
 
 ## Open bugs (`BUGS&FEATS.md` is the source)
 
