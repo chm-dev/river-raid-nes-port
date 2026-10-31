@@ -53,8 +53,15 @@
  *                 for $7F = n = 9..1 the VBI writes AUDC2 = $46 + n (distortion
  *                 $40, volume n + 6) and AUDF2 = ((($46 + n) ^ $0E) + 4 & $0F) * 4
  *                 = 20, 16, 28, 24, 36, 32, 44, 40, 52, one frame each, but only
- *                 while $29 bit 7 is clear (in the attract demo it is silent).
- *                 It overrides the channel's explosion.
+ *                 while $29 bit 7 is clear (in the attract demo it is silent;
+ *                 confirmed in a live game: AUDC2/AUDF2 = 4F/14 .. 47/34).
+ *                 It overrides the channel's explosion.  Distortion $40 is the
+ *                 5-bit poly gating the 4-bit poly: not a tone but a rough
+ *                 buzz.  A DFT of its 465-tick pattern puts the strongest line
+ *                 near tick/4.9 (620 Hz for AUDF2 = 20, 250 Hz for 52) with the
+ *                 energy spread like noise at the divider rate, so the port
+ *                 plays it on the 2A03 noise channel in short mode at the same
+ *                 bit rate (1789773 / period_cycles of Altirra's decoder).
  *
  *   (The old note here, "$7F is the shot passing a helicopter", was wrong: $7F
  *   is this missile's sound counter.)
@@ -162,15 +169,15 @@ static const uint8_t engine_idx[3] = { NOISE_SLOW, NOISE_CRUISE, NOISE_FAST };
 #define P2_OFF          0u
 #define P2_BONUS        2u
 #define P2_BLIP         3u
-#define P2_MISSILE      4u
 
-/* Helicopter missile zap: n = 9..1 frames left -> pulse period for POKEY
- * AUDF2 = 20,16,28,24,36,32,44,40,52 (p = 111861/(63920/(2*(AUDF+1))) - 1),
- * indexed by n - 1; volume is n + 6.  A quarter duty stands in for the poly
- * distortion ($40). */
+/* Helicopter missile zap: n = 9..1 frames left -> noise period index for POKEY
+ * AUDF2 = 20,16,28,24,36,32,44,40,52 (divider period 588, 476, 812, 700, 1036,
+ * 924, 1260, 1148, 1484 CPU cycles -> nearest of 508/762/1016/2034), indexed
+ * by n - 1; volume is n + 6; short (93-step) mode for the buzz. */
 #define MISSILE_FRAMES  9u
-static const uint8_t missile_period[MISSILE_FRAMES] = {
-    184u, 142u, 156u, 114u, 128u, 86u, 100u, 58u, 72u
+#define NOISE_SHORT     0x80u
+static const uint8_t missile_noise[MISSILE_FRAMES] = {
+    14u, 13u, 13u, 13u, 13u, 12u, 12u, 11u, 11u
 };
 
 static uint8_t snd_engine;      /* requested: 0..2 or SOUND_ENGINE_OFF */
@@ -192,6 +199,7 @@ static uint8_t snd_fuel_full;   /* 1 = gauge full: the note is an octave up */
 static uint8_t snd_warn;        /* the Atari's $7B: $3E .. $00 */
 static uint8_t snd_warn_on;     /* 1 while the warning tone owns pulse 1 */
 static uint8_t snd_shell;       /* the Atari's $50: 0 idle, 1..56 = playing */
+static uint8_t snd_msl;         /* the Atari's $7F: 9..1 = the missile zap is playing */
 static uint8_t snd_p2_on;       /* 1 while pulse 2 still holds a tone */
 static uint8_t snd_eng_idx;     /* the glide's current noise index */
 static uint8_t snd_eng_wait;    /* frames spent on the current glide step */
@@ -226,6 +234,7 @@ void sound_init(void) {
     snd_warn = 0;
     snd_warn_on = 0;
     snd_shell = 0;
+    snd_msl = 0;
     snd_p2_on = 0;
     snd_eng_idx = NOISE_CRUISE;
     snd_eng_wait = 0;
@@ -351,11 +360,6 @@ void sound_update(void) {
             snd_p2 = P2_OFF;
             snd_p2_on = 0u;
             APU_P2_CTRL = CONST_VOL;
-        } else if (snd_p2 == P2_MISSILE) {
-            APU_P2_LO = missile_period[(uint8_t)(snd_p2_t - 1u)];
-            APU_P2_HI = LEN_LOAD;
-            APU_P2_CTRL = PULSE(DUTY_25, (uint8_t)(snd_p2_t + 6u));
-            snd_p2_on = 1u;
         } else if (snd_p2 == P2_BONUS) {
             step = (uint8_t)(BONUS_FRAMES - snd_p2_t);
             p = bonus_period[step >> 4];
@@ -381,6 +385,16 @@ void sound_update(void) {
         if (snd_boom != 0u) {
             vol = (uint8_t)(((snd_boom >> 1) + 4u) & 0x0Fu);
             idx = (uint8_t)(12u + (snd_next_rand() & 3u));
+        }
+    }
+    if (snd_msl != 0u) {
+        /* The helicopter missile owns the noise channel (it beats the
+         * explosion on the Atari's channel 2 too); the engine hiss and the
+         * fireball come back afterwards. */
+        snd_msl = snd_tick(snd_msl);
+        if (snd_msl != 0u) {
+            vol = (uint8_t)(snd_msl + 6u);
+            idx = (uint8_t)(missile_noise[(uint8_t)(snd_msl - 1u)] | NOISE_SHORT);
         }
     }
     if (vol == 0u && snd_shell > SHELL_CHIRP) {
@@ -455,12 +469,11 @@ void sound_play_shell(void) {
 
 void sound_play_missile(void) {
     /* Called when the fast helicopter fires: the frame $7F = 9 is written now. */
-    snd_p2 = P2_MISSILE;
-    snd_p2_on = 1u;
-    snd_p2_t = MISSILE_FRAMES;
-    APU_P2_LO = missile_period[MISSILE_FRAMES - 1u];
-    APU_P2_HI = LEN_LOAD;
-    APU_P2_CTRL = PULSE(DUTY_25, 15u);
+    snd_msl = MISSILE_FRAMES;
+    snd_noise_idx = (uint8_t)(missile_noise[MISSILE_FRAMES - 1u] | NOISE_SHORT);
+    snd_noise_vol = 15u;
+    APU_NOISE_LO = snd_noise_idx;
+    APU_NOISE_CTRL = (uint8_t)(CONST_VOL | 15u);
 }
 
 void sound_play_bonus(void) {

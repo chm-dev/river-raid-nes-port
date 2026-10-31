@@ -470,7 +470,9 @@ static void ent_shell_init(void) {
     ent_y[e_src] = (uint8_t)(ent_y[e_slot] - 6u);
     ent_aux[e_src] = 0;
     shell_frac = 0;                     /* $A619 */
-    sound_play_shell();         /* $50 = 0: the ch4 chirp starts with the shell */
+    if (player_state != PLAYER_STATE_ATTRACT) {
+        sound_play_shell();     /* $50 = 0: the ch4 chirp starts with the shell */
+    }
 }
 
 /* The spawner met a bridge section: put the tank in a free slot.  It has no
@@ -1117,7 +1119,9 @@ static void ent_missile_tick(void) {
         msl_x = (uint8_t)(ent_x[e_t] + 7u);
     }
     msl_y = (uint8_t)(msl_y + MISSILE_ROW);
-    sound_play_missile();                   /* $7F = 9 ($A5E0) */
+    if (player_state != PLAYER_STATE_ATTRACT) {
+        sound_play_missile();               /* $7F = 9 ($A5E0), silent in the demo */
+    }
 }
 
 /* Sprite frame of the tank / shell in slot e_i (tiles per frame: 2). */

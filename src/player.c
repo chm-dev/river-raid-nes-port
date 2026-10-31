@@ -41,7 +41,6 @@ uint8_t player_invuln;
 #define PLAYER_STATE_OVER       2u
 #define PLAYER_STATE_WAIT       3u      /* game start: river still scrolling in */
 #define PLAYER_STATE_READY      4u      /* jet shown, river stopped until input */
-#define PLAYER_STATE_ATTRACT    5u      /* no jet; the river scrolls, the menu is live */
 #define PLAYER_STATE_PAUSE      6u      /* START pressed: frozen, RESUME / EXIT menu */
 #define PLAYER_START_INPUT      (J_A | J_LEFT | J_RIGHT | J_UP | J_DOWN)
 #define ATTRACT_REPEAT_FRAMES   30u     /* Atari $A6DA: Up/Down repeat while held */
@@ -99,7 +98,7 @@ static const palette_color_t player_palette[4] = {
  * Atari shapes become two stacked tiles. */
 #define player_tile_buf     (river_tile_pat)   /* boot-time scratch, see river.h */
 
-static uint8_t player_state;
+uint8_t player_state;
 static uint8_t player_timer;
 static uint8_t player_fuel_tick;
 static uint8_t player_prev_pad;

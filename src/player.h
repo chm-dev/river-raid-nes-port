@@ -30,6 +30,11 @@ typedef struct {
 
 extern player_state_t player;
 
+/* Game flow state (PLAYER_STATE_* in player.c); only the attract state is public:
+ * enemy shots stay silent while the demo scrolls, as on the Atari ($29 bit 7). */
+#define PLAYER_STATE_ATTRACT    5u      /* no jet; the river scrolls, the menu is live */
+extern uint8_t player_state;
+
 /* Test hook: freeze the jet (hidden, no fuel burn, no collisions). */
 extern uint8_t player_disable;
 extern uint8_t player_invuln;

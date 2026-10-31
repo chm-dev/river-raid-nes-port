@@ -2120,3 +2120,16 @@ entity loop and the split-wait work are not needed for now; RAM 72 bytes free.
   Pitch is a formula-based approximation (the poly distortion `$40` has no 2A03 equivalent): judge by ear.
 - Build: ROM 65552, RAM 7 bytes free, `_XINIT` ends `$FC71`. No tests run (user playtests; OAM slot shift is
   covered by `nes_entity_hits`/`nes_sprite_lock`, not yet run).
+
+### 2026-10-31 - Helicopter missile sound corrected; enemy shots silent in attract (branch `main`)
+
+- The first version played the missile on pulse 2 and sounded like the tank-shell chirp. Captured the **real game** (not
+  attract; `$29` = 0): ch2 plays AUDC2/AUDF2 = 4F/14, 4E/10, 4D/1C, 4C/18, 4B/24, 4A/20, 49/2C, 48/28, 47/34 for `$7F` = 9..1
+  (registers match the code). Altirra decodes it as distortion 2 (`$40`) with divider period_cycles 588, 476, 812, 700, 1036,
+  924, 1260, 1148 (1484 for AUDF 52). A pure-Python DFT of the 465-tick poly5/poly4 pattern shows a rough noise-like buzz
+  (strongest line ~ tick/4.9), not a tone, so the port now plays it on the **noise channel, short mode**, indices
+  14,13,13,13,13,12,12,11,11 (by n-1), volume n+6, overriding the explosion/fireball/engine for 9 frames (`snd_msl`).
+- Enemy shots (tank shell and helicopter missile) no longer make sound in attract (`player_state != PLAYER_STATE_ATTRACT`;
+  `player_state` is now exported from `player.c`, the define moved to `player.h`). The Atari gates `$7F` by `$29` bit 7.
+- Build: ROM 65552, RAM 5 bytes free, `_XINIT` ends `$FC6C`. Not run in Mesen. Pitch/timbre is a model: judge by ear;
+  tweak `missile_noise[]` / `NOISE_SHORT` in `src/sound.c` (try long mode by dropping `NOISE_SHORT` if it is too tonal).
