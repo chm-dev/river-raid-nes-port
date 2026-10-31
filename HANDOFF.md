@@ -2,18 +2,18 @@
 
 Short, current, rewritten every session. Rules are in `AGENTS.md`; the plan is `GBC_PORT_PLAN.md`; history is `PROGRESS.md` (grep it, do not read whole).
 
-**Last updated:** 2026-11-01 · **Branch:** `gbc-port` · **Phase:** milestone 2 built and mostly playtested; remaining checks, then the go/no-go gate
+**Last updated:** 2026-11-01 · **Branch:** `gbc-port` · **Phase:** milestone 2 built and playtested OK (the user passed the full checklist); the go/no-go gate is next
 
 ## Where we are
 
 - The port is GBC-only. The C prototype comes first, then a playtest go/no-go after milestone 2.
 - **Build:** `.\build_gbc.ps1` → `roms/river_raid.gb`, the only GB ROM; delete old trial ROMs rather than keeping versions. It checks the header (`$0143=$C0`, MBC5, 4 banks, checksum), every `.map` area against its bank window, and `.noi` symbols.
-- **Banks:** player.c is in bank 2 (`-Wf-bo2`, set in `build_gbc.ps1`), entities in bank 1. Bank 0 code ends at `$35A2` (~2.6 KB free). Bank 3 is empty; put the next banked module (sound) in 2 or 3 and keep `BANKED` on its public API.
+- **Banks:** player.c is in bank 2 (`-Wf-bo2`, set in `build_gbc.ps1`), entities in bank 1. Bank 0 code ends at `$3538` (~2.7 KB free). Bank 3 is empty; put the next banked module (sound) in 2 or 3 and keep `BANKED` on its public API.
 - **GBC code lives in `src/gbc/`** (`main.c`, `config_gbc.h`, `hud_gbc.c`, `stubs_m1.c`). Shared files carry `#ifdef __SDCC_sm83` branches next to the NES code, never replacements, so the milestone 5 merge stays cheap. `build.ps1` is still the NES build.
 - **Main loop** (`gbc/main.c`): river every pass; the player group (`player_update`, `collision_update`) runs at 30 Hz (`LOGIC_FRAMES` 2), the entity group (`entities_update`) on the other passes. On overrun passes `ent_skipped` forces `entities_update` after the player group, so it never starves.
 - **Drawing:** river ring is 32 rows in BG map 0 (`$9800`); the river scroll value is also `SCY` (256 px wrap), no split interrupt. `river_live` stays 0 on GBC so uploads take the direct `set_bkg_data` / `set_vram_byte` path.
 - **Sprites:** logic files compile with `-Dshadow_OAM=gbc_logic_oam` (48 slots, NES coordinates); `oam_camera()` converts them (camera, +16/+8, hide off-view), packs the visible ones into the 40 hardware sprites and sets the VRAM bank 1 bit. Sprite tiles are uploaded with `VBK_REG = 1`. Sprite palettes 0..3 are RGB in `gbc/main.c` (`spr_palette`); `player.c`/`entities.c` still pass NES colour numbers, so main overrides them last.
-- **Shot:** on SM83 it steps 6 px per elapsed tick and hit-tests each step (`player_test_shot`); one 12 px jump tested only at its end registered hits late.
+- **Shot:** on SM83 it steps 6 px per elapsed tick and hit-tests each step (`player_test_shot`).
 - **HUD:** `gbc/hud_gbc.c`, Window at WY=128, 20x2 cells, tiles in VRAM bank 1 ids 0..23, updated right after `vsync()`. Only sound is still stubbed (`stubs_m1.c`).
 - **Logic X stays the Atari HPOS**: `SOURCE_X_OFFSET` is 32 on GBC too; only the camera subtracts it.
 - Benchmarks (`GBC_PORT_PLAN.md` → Measurements): the DMG bench said river and entity passes fit the budget; the real ROM at fast speed does not (see next steps). Profiler units: 70,224 per frame, M = units / 2 at double speed. `tests/gb/profile_play.mjs` is the recipe (it finds `_player_invuln` in the `.noi`; build with `-ProfExport`).
@@ -21,13 +21,12 @@ Short, current, rewritten every session. Rules are in `AGENTS.md`; the plan is `
 
 ## Next steps
 
-1. **Fast speed still runs at ~0.75 passes per frame** (cruise 1.00). Done: `oam_camera` in 8-bit math (31k to 7-12k units per pass; the real win) and `river_run_job` split (`RIVER_JOB_COLS` 10). The split is insurance, not a measured win: scroll clamps (`river_clamps` in WRAM, 10 s at fast) were 26 at budget 6, 5 at 10, 3 unlimited, with `river_update` peaks of 81k / 92k / 104k. The `river_update` peak alone exceeds a 70k frame (3 generated rows at 13.5k each plus the job). The player and entity groups are only seen as `___sdcc_bcall_ehl` (max ~32k): their share is inferred, not measured. Levers: name the banked passes in the profile (`tests/gb/profile_play.mjs fast 40`); cut `oam_camera` further (7-12k); the player-pass generation budget (3 to 2: `river_update` peak 81k to 66k, pass rate unchanged); `LOGIC_FRAMES` 3.
-2. Measure HUD and uploads (the profile now covers play with HUD, not sound).
-3. **Later, separate tasks:** HUD rework, remove 2-player mode (both in `BUGS&FEATS.md`); sound port.
-4. Known unfinished drawing: bridge flash colour (`ent_water_color` is a no-op), HI score and blink not shown, per-row river colours (milestone 3).
-5. **Finish the m2 playtest** (user): fuel gauge, lives and score, crash/respawn/game over back to attract, pause menu (sprite letters, never checked), the late-shot fix, and the jet now 4 px lower (`PLAYER_START_Y` 222 on GBC, the sprite-cull limit; all `[~]` in `BUGS&FEATS.md`). If 4 px does not fix reaction time, the next lever is a thinner HUD Window (`HUD_WY`, +8 px view).
+1. **The go/no-go gate is the user's call.** Playtest passed, including fast speed, shots, jet position, fuel/lives/score and respawn. If go, milestone 3 (colour and polish) follows; the open items are in `BUGS&FEATS.md`.
+2. **Milestone 3 candidates** (open bugs, user-reported): road colour (grey, shows green), grass colour not alternating between bridges, bridge flash on a hit (`ent_water_color` is a no-op), per-row river colours, camera alignment when the river scrolls down, smarter vertical camera, pause menu (only "IT" visible), HI score and blink not shown.
+3. **Later, separate tasks:** HUD rework, remove 2-player mode, sound port (put it in bank 2 or 3, `BANKED` public API).
+4. **Pacing headroom** (optional): fast speed runs ~0.75 passes per frame, cruise 1.00. The `river_update` peak alone exceeds a 70k-unit frame (3 rows at 13.5k each plus the job). The player and entity groups show only as `___sdcc_bcall_ehl` (max ~32k), so name them in the profile first (`tests/gb/profile_play.mjs fast 40`). Then: trim `oam_camera` (7-12k), player-pass generation budget 3 to 2 (peak 81k to 66k, pass rate unchanged), `LOGIC_FRAMES` 3. `RIVER_JOB_COLS` 10 is a tested compromise (clamps in 10 s at fast: 26 at 6, 5 at 10, 3 unlimited). Re-measure HUD and sound cost once sound exists.
 
-**Use the advisor for step 1.** Call it before committing to a diagnosis or approach, again if a fix does not change the symptom, and once before declaring done. Measure first and pass it the evidence (map and tile rows, profiler numbers, what was ruled out): it only knows what is in the transcript. It is not needed for palettes, the HUD or bank moves, and it does not replace the user's playtest or the build checks.
+**Use the advisor before a performance diagnosis or approach**, with measured evidence in the transcript (profiler numbers, what was ruled out). It is not needed for palettes, the HUD or bank moves, and it does not replace the user's playtest or the build checks.
 
 ## Decisions not to reopen
 

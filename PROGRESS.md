@@ -54,3 +54,9 @@ The NES history is in `archive/nes/PROGRESS.md`.
 - `river_run_job`: budget of `RIVER_JOB_COLS` (10) non-solid columns per `river_update` (stripe worth 3), resumes via `river_job_col`; `river_start` runs it unlimited. `tests/host_river.ps1 -JobCols 10/6/3`: all rows match the model for the four start levels. Added `river_clamps` / `river_owed_max` counters (read by `profile_play.mjs`). Budget sweep at fast, 10 s: 6 = 26 clamps, 10 = 5, unlimited = 3; the split is insurance for heavy jobs, not a measured pacing win.
 - Result: fast 0.51 to ~0.75 passes per frame (nearly all from `oam_camera`), cruise 1.00. Player-pass generation budget 3 to 2 was tried and reverted (river_update peak 81k to 66k, pass rate unchanged).
 - Build: `.\build_gbc.ps1` passes all checks. Corrected the profiler unit note in AGENTS.md and the plan.
+
+### 2026-11-01 - Milestone 2 playtest passed; docs closed out (branch `gbc-port`)
+
+- The user ran the full m2 checklist at the end of the pacing work (fast speed, edges, crash/respawn, roads and bridges, fuel/lives/score, shot): all OK. Stutter bug marked `[x]`.
+- The user added open bugs (camera alignment, bridge flash, road colour, grass alternation, smarter camera) and the pause-menu note; kept as is.
+- HANDOFF rewritten: next is the go/no-go call, then milestone 3 colour work. Bank 0 ends at `$3538`. The shipped `roms/river_raid.gb` is the plain (non `-ProfExport`) build, `RIVER_JOB_COLS` 10.
