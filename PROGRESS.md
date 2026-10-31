@@ -36,3 +36,8 @@ The NES history is in `archive/nes/PROGRESS.md`.
 
 - Hypothesis (not measured): when a pass lasts >= 2 frames, `logic_acc` reaches LOGIC_FRAMES every pass, so `entities_update()` never ran (enemies slow/stuttering, stale entities, slow death animation in busy scenes). `gbc/main.c` now runs it after the player group when the previous pass skipped it (`ent_skipped`).
 - Build ok. If the symptoms stay, profile the busy-scene pass cost (player + entities + river in one pass) before anything else.
+
+### 2026-10-31 - Jet 4 px lower on GBC (branch `gbc-port`)
+
+- `PLAYER_START_Y` is 222 on SM83 (218 on NES). The view is bottom-anchored, so only the jet's logic Y can move it; 222 is the limit because sprites at y >= 232 are culled. Handoff, `BUGS&FEATS.md` (`[~]`) and the plan's risk note updated.
+- `.\build_gbc.ps1` passes all checks; bank 0 code ends at `$35A2`. Not playtested yet.

@@ -76,7 +76,7 @@ Session counts are rough guesses.
 - Is the panning camera comfortable or disorienting?
 - Are hidden enemies ambushing the player unfairly?
 
-If only reaction time fails, try a higher jet position, a slower top speed and a thinner HUD before stopping.
+If only reaction time fails, try a lower jet position (already 222, the sprite-cull limit), a slower top speed and a thinner HUD before stopping.
 
 ## Risks
 1. **Reaction time (the main one).** Look-ahead drops from 188 px to about 106 px: 1.2 s instead of 2.1 s at fast speed, 1.8 s instead of 3.1 s at cruise. Enemies also start moving before they're visible.

@@ -15,7 +15,7 @@ Found in the milestone 1 playtest (`roms/m1_jet.gb`, 2026-10-31). All expected a
 - [x] **Enemies move very slow and stutter a lot**
 
 # FEATURES
-- [ ] **Move the jet lower on screen.** The 128 px view anchored at logic scanline 112 leaves the jet too far from the bottom and the playfield too short ahead of it. Tune `GBC_VIEW_TOP_SCANLINE` / the jet's Y (`config_gbc.h`); it also sets reaction time, the plan's main risk.
+- [~] **Move the jet lower on screen.** The view is bottom-anchored (`GBC_VIEW_TOP_SCANLINE` 112), so only the jet's logic Y can move it: `PLAYER_START_Y` is 222 on GBC (was 218; sprites at y >= 232 are culled, so 222 is the limit). It also sets reaction time, the plan's main risk. If 4 px is not enough, thin the HUD Window (16 px) for look-ahead.
 - [x] **Bank 0 headroom.** Done: `player.c` moved to bank 2; bank 0 now has ~2.6 KB free (see HANDOFF).
 - [ ] **Sprite Y may be 1 px off** (NES draws at `y+1`). Check against the Atari after the jet is lowered.
 - [ ] **Rework the HUD (separate, later task).** `src/gbc/hud_gbc.c` is a minimal stand-in (score, fuel bar, lives, bridge number). Needs a proper layout and the original charset art; also HI score, blink, game number.

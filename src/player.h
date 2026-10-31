@@ -12,7 +12,13 @@
 #include <stdint.h>
 
 #define PLAYER_START_X          120u
+#ifdef __SDCC_sm83
+/* GBC: the 128 px view is short ahead of the jet, so sit 4 px lower.  The
+ * bottom sprite ends at 230; sprites at y >= 232 are culled. */
+#define PLAYER_START_Y          222u
+#else
 #define PLAYER_START_Y          218u    /* ~8 scanlines above the bottom of the playfield, like the Atari */
+#endif
 #define PLAYER_BANK_NONE        0u
 
 typedef struct {
