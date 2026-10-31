@@ -2198,3 +2198,7 @@ entity loop and the split-wait work are not needed for now; RAM 72 bytes free.
 - `tests/host_river.ps1` now checks all four start levels (the harness takes the variant as argv[2]); the model's initial `flags23` follows `$B16B-$B178` (odd 0x84, even 0x80), matching the C code. All four variants match 4000 rows.
 - Open: the model still diverges from that trace at row 264+ (27 rows of 300, cause not examined). The Atari's LFSR is already advanced (244 steps at level 1, 1132 at level 20 in the traces) when the first row is captured, whereas the NES starts from the unstepped seed, so rows from ~31 on differ from a given Atari run at every start level; the Atari count depends on the start path, not tabled.
 - Build: ROM 65552, `_XINIT` ends `$FC86`, RAM 4 bytes free. Screenshot at level 20: clean island with trees and no stray bars. Needs the user's playtest.
+
+### 2026-10-31 - Level 20 river edge play-tested
+
+- User play-tested the fix: the glitch is gone. The Atari start screen still has a different island (straight vertical sides) because its LFSR is already advanced before the first visible row; accepted as a known low-priority difference, no code change.
