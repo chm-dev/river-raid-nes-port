@@ -47,6 +47,7 @@ void hud_gbc_init(void);
 /* Read by tests through the .noi. */
 volatile uint16_t frame_counter;
 uint8_t game_ticks = 1u;
+static uint8_t ent_skipped;         /* 1 = last pass ran the player group only */
 static uint8_t main_last;
 static uint8_t logic_acc;       /* frames since the last logic pass */
 
@@ -199,11 +200,23 @@ void main(void) {
         if (logic_acc >= LOGIC_FRAMES) {
             game_ticks = logic_acc;
             logic_acc = 0;
-            entities_follow();
-            player_update();
-            collision_update();
+            /* An overrun pass (game_ticks >= LOGIC_FRAMES) takes this branch
+             * every time, which would starve the entity group: it moves,
+             * spawns and removes them.  Run it after the player in that case. */
+            if (ent_skipped) {
+                player_update();
+                collision_update();
+                entities_update();
+                ent_skipped = 0;
+            } else {
+                entities_follow();
+                player_update();
+                collision_update();
+                ent_skipped = 1;
+            }
         } else {
             entities_update();
+            ent_skipped = 0;
         }
         camera_follow();
         oam_camera();

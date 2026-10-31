@@ -31,3 +31,8 @@ The NES history is in `archive/nes/PROGRESS.md`.
 
 - Cause: at 30 Hz logic the shot jumped 12 px per pass and was tested only at the end, so hits registered up to 6 px late. `player_update_shot` now steps 6 px per elapsed tick and runs `player_test_shot` (river banks + `entities_hit_shot`) at each step; NES path unchanged.
 - Build: `.\build_gbc.ps1` ok, all checks pass. Not play-tested (user to confirm).
+
+### 2026-10-31 - Entity group starvation on overrun passes (branch `gbc-port`)
+
+- Hypothesis (not measured): when a pass lasts >= 2 frames, `logic_acc` reaches LOGIC_FRAMES every pass, so `entities_update()` never ran (enemies slow/stuttering, stale entities, slow death animation in busy scenes). `gbc/main.c` now runs it after the player group when the previous pass skipped it (`ent_skipped`).
+- Build ok. If the symptoms stay, profile the busy-scene pass cost (player + entities + river in one pass) before anything else.

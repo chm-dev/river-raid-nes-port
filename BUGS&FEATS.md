@@ -10,9 +10,9 @@ Found in the milestone 1 playtest (`roms/m1_jet.gb`, 2026-10-31). All expected a
 - [~] **Shots destroy enemies with a delay.** (fix built: `player_update_shot` now steps and tests the shot once per elapsed frame, 6 px each, instead of one 12 px jump; confirm in play.) Seen in the m2 playtest (shot and enemy colours confirmed fine): usually feels off, sometimes fine, as if the hit logic lagged the visuals. Suspect the 30 Hz logic (player/shot/collision every 2nd frame) against the 60 Hz scroll and sprite draw; the shot moves 6 px x ticks per logic pass, so it jumps 12 px and may be tested a frame after it is drawn. Check the shot/entity order and whether ntities_hit_shot uses the same positions that are drawn before changing LOGIC_FRAMES.
 - [ ] **Some side hills and trees glitch.** Most are fine. Not diagnosed; suspects: the unsplit tile job and the direct upload path writing while the display is on, or margin handling now that `RIVER_LEFT_COL` is 0. Check with `tests/compare_tile_rows.mjs` / `tests/host_river.ps1` before guessing.
 - [ ] **Occasional stutter at fast speed.** Smooth otherwise and acceptable. Expected: `river_run_job` is not split across frames yet (plan: columns-per-frame limit). Measure before fixing.
-- [ ] **Random entities remain and appear on screen**  
-- [ ] **Death animation gets very slow when scene becomes busy**
-- [ ] **Enemies move very slow and stutter a lot**
+- [x] **Random entities remain and appear on screen** (suspected cause, fix built: on overrun passes the main loop always took the player branch and `entities_update` starved; now it runs at least every 2nd pass. Same for the next two.)  
+- [x] **Death animation gets very slow when scene becomes busy**
+- [x] **Enemies move very slow and stutter a lot**
 
 # FEATURES
 - [ ] **Move the jet lower on screen.** The 128 px view anchored at logic scanline 112 leaves the jet too far from the bottom and the playfield too short ahead of it. Tune `GBC_VIEW_TOP_SCANLINE` / the jet's Y (`config_gbc.h`); it also sets reaction time, the plan's main risk.
