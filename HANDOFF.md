@@ -2,7 +2,7 @@
 
 Short, current, rewritten every session. Rules are in `AGENTS.md`; the plan is `GBC_PORT_PLAN.md`; history is `PROGRESS.md` (grep it, do not read whole).
 
-**Last updated:** 2026-10-31 · **Branch:** `gbc-port` · **Phase:** milestone 2 built (`roms/river_raid.gb`), waiting for the user playtest; not yet run by anyone
+**Last updated:** 2026-10-31 · **Branch:** `gbc-port` · **Phase:** milestone 2 built and partly playtested (shot visible, enemy colours right); remaining m2 checks below, then the go/no-go gate
 
 ## Where we are
 
@@ -19,12 +19,14 @@ Short, current, rewritten every session. Rules are in `AGENTS.md`; the plan is `
 
 ## Next steps
 
-1. **Playtest `roms/river_raid.gb`** (user): shot visible; enemy and fuel colours; fuel gauge drains/refills; lives and score update; crash, respawn and game over return to the attract menu; pause menu (sprite letters, never checked). Known unfinished: bridge flash colour (`ent_water_color` is a no-op), HI score and blink not shown, per-row river colours (milestone 3).
-2. Move the jet lower (`GBC_VIEW_TOP_SCANLINE`, `config_gbc.h`); the user found the playfield too short ahead of it. This also decides reaction time, the plan's main risk.
-3. Split `river_run_job` across frames (fast-speed stutter is acceptable for now); measure first. Check the glitching hills and trees with `tests/host_river.ps1` before guessing.
-4. Measure player, HUD and uploads once they exist.
+1. **Finish the m2 playtest** (user): fuel gauge, lives and score, crash/respawn/game over back to attract, pause menu (sprite letters, never checked). Known unfinished: bridge flash colour (`ent_water_color` is a no-op), HI score and blink not shown, per-row river colours (milestone 3).
+2. **Shots hit enemies late** (new bug, `BUGS&FEATS.md`): suspect 30 Hz logic vs 60 Hz draw. Fix before the go/no-go playtest, since it spoils the reaction-time judgement.
+3. **Later, separate tasks:** HUD rework, remove 2-player mode (both in `BUGS&FEATS.md`).
+4. Move the jet lower (`GBC_VIEW_TOP_SCANLINE`, `config_gbc.h`); the user found the playfield too short ahead of it. This also decides reaction time, the plan's main risk.
+5. Split `river_run_job` across frames (fast-speed stutter is acceptable for now); measure first. Check the glitching hills and trees with `tests/host_river.ps1` before guessing.
+6. Measure player, HUD and uploads once they exist.
 
-**Use the advisor for steps 2 and 3** (the glitching hills/trees and the `river_run_job` split). Call it before committing to a diagnosis or approach, again if a fix does not change the symptom, and once before declaring done. Measure first and pass it the evidence (map and tile rows, profiler numbers, what was ruled out): it only knows what is in the transcript. It is not needed for palettes, the HUD or the bank 0 move, and it does not replace the user's playtest or the build checks.
+**Use the advisor for steps 4 and 5** (the glitching hills/trees and the `river_run_job` split). Call it before committing to a diagnosis or approach, again if a fix does not change the symptom, and once before declaring done. Measure first and pass it the evidence (map and tile rows, profiler numbers, what was ruled out): it only knows what is in the transcript. It is not needed for palettes, the HUD or the bank 0 move, and it does not replace the user's playtest or the build checks.
 
 ## Decisions not to reopen
 
@@ -73,6 +75,7 @@ Add-Content -Path PROGRESS.md -Encoding utf8 -Value @'
 ```
 
 3. Do not edit `AGENTS.md` for status.
+
 
 
 
