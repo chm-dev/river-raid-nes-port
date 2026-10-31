@@ -2,21 +2,27 @@
 
 Short, current, rewritten every session. Rules are in `AGENTS.md`; the plan is `GBC_PORT_PLAN.md`; history is `PROGRESS.md` (grep it, do not read whole).
 
-**Last updated:** 2026-10-31 · **Branch:** `gbc-port` · **Phase:** milestone 1 not started; no prototype code yet
+**Last updated:** 2026-10-31 · **Branch:** `gbc-port` · **Phase:** milestone 1 played and accepted by the user (smooth, jet steers, camera pans); milestone 2 next
 
 ## Where we are
 
 - The port is GBC-only. The C prototype comes first, then a playtest go/no-go after milestone 2.
-- Benchmarks are done (`GBC_PORT_PLAN.md` → Measurements): river and entity passes fit in the GBC double-speed budget at 1.5 px/frame. Player, HUD, VRAM uploads and sound are **not measured**.
-- `src/` has the SM83 patches the benchmarks needed. It does **not** build the NES ROM, and there is no GBC build script yet.
+- **Build:** `.\build_gbc.ps1 -Name m1_jet -RequireSymbols _frame_counter,_gbc_logic_oam -Sources src/gbc/main.c,src/gbc/stubs_m1.c,src/atari_data.c,src/collision.c,src/river.c,src/entities.c,src/entity_gfx.c,src/player.c` → `roms/m1_jet.gb`. It checks the header (`-Wm-yC` confirmed: `$0143=$C0`, MBC5, 4 banks, checksum), every `.map` area against its bank window, and `.noi` symbols. Failure paths are tested only for a missing symbol.
+- **GBC code lives in `src/gbc/`** (`main.c`, `config_gbc.h`, `stubs_m1.c`). Shared files carry `#ifdef __SDCC_sm83` branches next to the NES code, never replacements, so the milestone 5 merge stays cheap. `build.ps1` is still the NES build.
+- **How it draws:** river ring is 32 rows in BG map 0 (`$9800`); the river scroll value is also `SCY` (256 px wrap), no split interrupt. `river_live` stays 0 on GBC so uploads take the direct `set_bkg_data` / `set_vram_byte` path (`river_put()` is a no-op on C paths).
+- **Sprites:** logic files compile with `-Dshadow_OAM=gbc_logic_oam` and keep NES coordinates; `oam_camera()` in `gbc/main.c` converts them (camera, +16/+8, hide off-view) and sets the VRAM bank 1 bit. Sprite tiles are uploaded with `VBK_REG = 1`.
+- **Logic X stays the Atari HPOS**: `SOURCE_X_OFFSET` is 32 on GBC too; only the camera subtracts it.
+- Linked but stubbed: HUD state and all sound (`stubs_m1.c`). `entities.c` is linked, so enemies already spawn.
+- Benchmarks (`GBC_PORT_PLAN.md` → Measurements): river and entity passes fit the double-speed budget. Player, HUD, uploads, sound still **not measured**.
 - `main` is NES-only. The NES project and its docs are in `archive/nes/`.
 
 ## Next steps
 
-1. **Milestone 1:** river, camera and jet on GBC, with the tile job split across frames. Done when scrolling is smooth, there are no tile glitches, and steering pans the view correctly.
-   - First: a GBC build and its checks (ROM size, `.map` bank windows, `-Wl-j` symbols). Confirm the header flag (believed `-Wm-yC`) and the MBC5 link.
-   - Confirm the river job overrun (about 25.5k M-cycles in `river_run_job`) on the real build.
-2. Measure what is not measured yet: player, HUD, uploads.
+1. **Before adding code: bank 0 is full.** Code ends at `$3F6B` of `$3FFF`. Move `player.c` or `river.c` to bank 2 or 3 (`-Wf-bo2`, and `-Wl-yo4` already gives 4 banks) before the HUD or sound ports.
+2. **Milestone 2:** shot visible, entity colours (`tools/gen_entity_gfx.py` GBC palettes), fuel, collisions, minimal HUD (Window layer, 16 px at the bottom), full game to game over, no sound. Open bugs are in `BUGS&FEATS.md`.
+3. Move the jet lower (`GBC_VIEW_TOP_SCANLINE`, `config_gbc.h`); the user found the playfield too short ahead of it. This also decides reaction time, the plan's main risk.
+4. Split `river_run_job` across frames (fast-speed stutter is acceptable for now); measure first. Check the glitching hills and trees with `tests/host_river.ps1` before guessing.
+5. Measure player, HUD and uploads once they exist.
 
 ## Decisions not to reopen
 
@@ -45,7 +51,9 @@ Short, current, rewritten every session. Rules are in `AGENTS.md`; the plan is `
 
 ## Known gaps
 
-- No GBC build script yet (`build.ps1` is NES-only).
+- `river.c` now emits harmless `always false` warnings (zero-width margin loops, `RIVER_LEFT_COL` is 0 on GBC).
+- The "GBC REQUIRED" screen (`_cpu != CGB_TYPE`) has never been run on a plain Game Boy.
+- The pause menu draws with sprites and has not been checked on GBC.
 - NES code is still in the tree: `build.ps1`, `tests/nes_*.mjs`, `tests/perf_*`, and NES parts of `src/`. Remove or move it when it gets in the way; `main` keeps it until milestone 5.
 
 ## End of session (keep this cheap)

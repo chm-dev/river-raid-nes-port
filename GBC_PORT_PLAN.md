@@ -1,6 +1,6 @@
 # Game Boy Color port plan
 
-Status as of 2026-10-31: planned and benchmarked; no prototype code exists yet. **Next step: milestone 1.**
+Status as of 2026-10-31: milestone 1 built and accepted in a playtest (river, camera, jet). **Next step: milestone 2** (see `HANDOFF.md`).
 
 ## Decisions
 - **GBC-only.** DMG is dropped. Original Game Boy and Game Boy Pocket are not targets. Adding DMG later would mean redoing the art for 4 shades, shrinking the tile cache and writing SM83 assembly.
