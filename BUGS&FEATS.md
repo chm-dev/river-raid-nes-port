@@ -13,6 +13,7 @@ Found in the milestone 1 playtest (`roms/m1_jet.gb`, 2026-10-31). All expected a
 - [x] **Random entities remain and appear on screen** (suspected cause, fix built: on overrun passes the main loop always took the player branch and `entities_update` starved; now it runs at least every 2nd pass. Same for the next two.)  
 - [x] **Death animation gets very slow when scene becomes busy**
 - [x] **Enemies move very slow and stutter a lot**
+- [ ] **Pause menu is broken. Is invisible only letter "IT" can be seen** It still is usable if you navigate blind.
 
 # FEATURES
 - [~] **Move the jet lower on screen.** The view is bottom-anchored (`GBC_VIEW_TOP_SCANLINE` 112), so only the jet's logic Y can move it: `PLAYER_START_Y` is 222 on GBC (was 218; sprites at y >= 232 are culled, so 222 is the limit). It also sets reaction time, the plan's main risk. If 4 px is not enough, thin the HUD Window (16 px) for look-ahead.

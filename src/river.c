@@ -2546,6 +2546,11 @@ static uint8_t ru_next;
 static uint8_t ru_rows;
 static uint8_t ru_gen;
 uint8_t river_gen_budget = RIVER_GEN_PER_PASS;  /* rows this pass may generate (main.c) */
+/* Pacing counters, read by tests/gb/profile_play.mjs through the .noi: scroll
+ * steps lost to the owed-rows clamp (each one is a visible hitch) and the
+ * deepest the owed rows got. */
+uint8_t river_clamps;
+uint8_t river_owed_max;
 
 /* Entity count from which the heavy entity pass keeps its one-row budget even
  * when behind: its two-row version ran late in about 4 of 10 passes at level 50. */
@@ -2602,6 +2607,7 @@ void river_update(void) {
         river_acc = (uint8_t)(ru_sum & 31u);
         if (ru_rows > (uint8_t)(RIVER_MAX_OWED - river_owed)) {
             ru_rows = (uint8_t)(RIVER_MAX_OWED - river_owed);
+            river_clamps++;
         }
         ru_next = playfield_scroll_y;
         for (ru_gen = 0; ru_gen < ru_rows; ru_gen++) {
@@ -2610,6 +2616,9 @@ void river_update(void) {
                 : (uint8_t)(ru_next - 1u);
         }
         river_owed = (uint8_t)(river_owed + ru_rows);
+        if (river_owed > river_owed_max) {
+            river_owed_max = river_owed;
+        }
         river_scrolled = (uint8_t)(river_scrolled + ru_rows);
         river_rows_last = ru_rows;
         if (ru_rows) {

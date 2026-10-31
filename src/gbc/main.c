@@ -116,6 +116,9 @@ static void apply_camera(void) {
 /* Translate the logic sprites (NES coordinates) to hardware OAM: subtract the
  * camera, add the +16/+8 hardware offsets and hide whatever is outside the
  * view.  Sprite tiles live in VRAM bank 1 (OAM attribute bit 3). */
+/* oam_camera's 8-bit range tests wrap correctly only with SOURCE_X_OFFSET + camera >= 8. */
+typedef char oam_camera_x_assert[(SOURCE_X_OFFSET >= 8u) ? 1 : -1];
+
 static void oam_camera(void) {
     uint8_t i, n = 0, y, x, xbase;
 

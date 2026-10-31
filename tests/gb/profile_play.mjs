@@ -35,6 +35,9 @@ await sleep(2500);
 await c.call('set_profiler', { action: 'reset' });
 await sleep(10000);
 const d = JSON.parse(txt(await c.call('get_profiler_data', { count, sort: 'max' })));
+const rd = name => c.call('read_memory', { area: 6, offset: (parseInt(new RegExp(`DEF ${name} 0x([0-9A-Fa-f]+)`).exec(noi)[1], 16) - 0xC000)
+    .toString(16).toUpperCase().padStart(4, '0'), size: 1 }).then(r => txt(r));
+console.log('river_clamps', await rd('_river_clamps'), 'river_owed_max', await rd('_river_owed_max'));
 const w = d.functions.find(f => f.name === '_wait_vbl_done');
 console.log(`mode ${mode}: frames ${d.frames}, passes ${w ? w.calls : '?'}, passes/frame ${w ? (w.calls / d.frames).toFixed(2) : '?'}`);
 for (const f of d.functions) {
