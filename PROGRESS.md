@@ -2176,3 +2176,7 @@ entity loop and the split-wait work are not needed for now; RAM 72 bytes free.
 ### 2026-10-31 - Pause from READY play-tested
 
 - User confirmed the READY-state pause fix (RESUME returns to READY, EXIT goes to attract). Marked `[x]` in `BUGS&FEATS.md`; HANDOFF RAM figure corrected to 4 bytes free.
+
+### 2026-10-31 - Extra-life fix play-tested
+
+- User confirmed the extra life every 10,000 pts fix (ten-thousands nibble) and the BG-tile lives icons. Marked play-tested in `BUGS&FEATS.md`.
