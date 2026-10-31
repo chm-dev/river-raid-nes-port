@@ -563,12 +563,64 @@ static const uint8_t river_black_lut[256] = {
 static const uint8_t *rt_src;
 static uint8_t *rt_dst;
 
-static void river_copy_template(void) {
-    uint8_t i;
+#ifdef __SDCC
+/* The copy loop, through zero-page pointers $FE (source) and $FC (destination),
+ * set from rt_src and rt_dst by river_copy_template().  Those bytes are free:
+ * the linker places SDCC's zero page at $20-$CE (see the .noi).  Asm kept in
+ * its own function, as LESSONS 8 requires. */
+static void river_copy_asm(void) {
+    __asm
+        lda     _rt_src
+        sta     0xfe
+        lda     _rt_src+1
+        sta     0xff
+        lda     _rt_dst
+        sta     0xfc
+        lda     _rt_dst+1
+        sta     0xfd
+        lda     _rg_bc
+        beq     cp_done
+        ldy     #0
+        cmp     #4
+        beq     cp_lut
+        cmp     #5
+        beq     cp_lut
+        cmp     #8
+        bcs     cp_lut
+    cp_copy:
+        .db     0xB1, 0xFE              ; lda (0xfe),y  (the assembler emits absolute)
+        .db     0x91, 0xFC              ; sta (0xfc),y
+        iny
+        cpy     _rg_bc
+        bne     cp_copy
+        rts
+    cp_lut:
+        .db     0xB1, 0xFE              ; lda (0xfe),y
+        tax
+        lda     _river_black_lut,x
+        .db     0x91, 0xFC              ; sta (0xfc),y
+        iny
+        cpy     _rg_bc
+        bne     cp_lut
+    cp_done:
+        rts
+    __endasm;
+}
 
+static void river_copy_template(void) {
     /* Large hills (widths 4, 5, 8, 9, 10: the ones with blue highlights) are
      * drawn black instead of brown; small hills keep brown + black.  Mirrors
      * NES_BLACK_HILLS in tools/river_model.py. */
+    rt_src = atari_river_templates + rg_tpl_off;
+    rt_dst = river_raw_row + rg_row_pos;
+    river_copy_asm();
+    rg_row_pos = (uint8_t)(rg_row_pos + rg_bc);
+    rg_tpl_off = (uint16_t)(rg_tpl_off + rg_bc);
+}
+#else
+static void river_copy_template(void) {
+    uint8_t i;
+
     rt_src = atari_river_templates + rg_tpl_off;
     rt_dst = river_raw_row + rg_row_pos;
     if (rg_bc == 4u || rg_bc == 5u || rg_bc >= 8u) {
@@ -583,6 +635,7 @@ static void river_copy_template(void) {
     rg_row_pos = (uint8_t)(rg_row_pos + rg_bc);
     rg_tpl_off = (uint16_t)(rg_tpl_off + rg_bc);
 }
+#endif
 
 /* nes_edge_black() of atari_bank_patterns + atari_bank_patterns_island. */
 static const uint8_t river_bank_black[32] = {
