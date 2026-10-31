@@ -59,7 +59,8 @@ Consult the file.
 - **HUD art comes from `charset.bin`**; do not redraw it. Digits stay 8 px wide (width compromise).
 - **Sound** values come from live Atari captures, not estimates. Verify Atari behaviour by sampling over
   time, not static reads (see memory note on the attract freeze misread).
-- What-if code changes go on a new git branch, not a scratch copy.
+- **Work on `main`.** Branch only for special cases (what-if experiments, risky or throwaway changes),
+  never a scratch copy of the tree. Merge back and delete the branch when done.
 
 ## Where to look (grep PROGRESS.md for the quoted title)
 
