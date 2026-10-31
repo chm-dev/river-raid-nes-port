@@ -72,6 +72,7 @@ end
 local inPass = false
 local t0, st0 = 0, 0
 local rows, renders, ups, jobs, grp, seq = 0, 0, 0, 0, 0, 0
+local feat, isl, pln = 0, 0, 0
 local CR = emu.memType.nesChrRam
 local function w16(a, v) if v > 65535 then v = 65535 end emu.write(a, v & 255, CR); emu.write(a + 1, v >> 8, CR) end
 emu.addMemoryCallback(function(address, value)
@@ -83,6 +84,7 @@ emu.addMemoryCallback(function()
   st0 = emu.read(${S('sys_time')}, emu.memType.nesMemory)
   for i = 0, 15 do cnt[i] = 0 end
   rows, renders, ups, jobs, grp = 0, 0, 0, 0, 0
+  feat, isl, pln = 0, 0, 0
   inPass = true
 end, emu.callbackType.exec, ${RETURN}, ${RETURN})
 emu.addMemoryCallback(function()
@@ -103,12 +105,23 @@ emu.addMemoryCallback(function()
   emu.write(${MAIL} + 40, emu.read(${S('entity_count')}, emu.memType.nesMemory), CR)
   emu.write(${MAIL} + 41, emu.read(${S('ent_oam_used')}, emu.memType.nesMemory), CR)
   emu.write(${MAIL} + 42, seq, CR)
+  emu.write(${MAIL} + 43, feat, CR)
+  emu.write(${MAIL} + 44, isl, CR)
+  emu.write(${MAIL} + 45, pln, CR)
 end, emu.callbackType.exec, ${VSYNC}, ${VSYNC})
 emu.addMemoryCallback(function() rows = rows + 1 end, emu.callbackType.exec, ${P('river_generate_raw_row')}, ${P('river_generate_raw_row')})
 emu.addMemoryCallback(function() renders = renders + 1 end, emu.callbackType.exec, ${P('river_render_row')}, ${P('river_render_row')})
 emu.addMemoryCallback(function() ups = ups + 1 end, emu.callbackType.exec, ${P('river_emit_pattern')}, ${P('river_emit_pattern')})
 emu.addMemoryCallback(function() jobs = jobs + 1 end, emu.callbackType.exec, ${P('river_run_job')}, ${P('river_run_job')})
 emu.addMemoryCallback(function() grp = 1 end, emu.callbackType.exec, ${P('entities_update')}, ${P('entities_update')})
+emu.addMemoryCallback(function()
+  if emu.read(${S('rg_feature')}, emu.memType.nesMemory) ~= 0 and emu.read(${S('rg_rowcount')}, emu.memType.nesMemory) < emu.read(${S('rg_be')}, emu.memType.nesMemory) then
+    feat = feat + 1
+  elseif (emu.read(${S('rg_island_flags')}, emu.memType.nesMemory) & 128) ~= 0 then
+    isl = isl + 1
+  end
+end, emu.callbackType.exec, ${P('river_render_row')}, ${P('river_render_row')})
+emu.addMemoryCallback(function() pln = pln + 1 end, emu.callbackType.exec, ${P('river_render_plain')}, ${P('river_render_plain')})
 emu.log("armed")
 `;
 
@@ -136,12 +149,12 @@ for (let k = 0; k < N / 20; k++) {
     await callTool('mesen_input_override', { action: 'set', port: 0, buttons: [k % 2 ? 'A' : '', buttons].filter(Boolean).join(',') });
     for (let i = 0; i < 20; i++) {
         await step(1);
-        const m = await readBytes(MAIL, 44, 'NesChrRam');
+        const m = await readBytes(MAIL, 46, 'NesChrRam');
         if (m[42] === prevSeq) continue;
         prevSeq = m[42];
         const u = o => m[o] | (m[o + 1] << 8);
         const g = []; for (let j = 0; j < 16; j++) g.push(u(2 + j * 2));
-        recs.push({ dt: u(0), g, nmis: m[34], rows: m[35], renders: m[36], ups: m[37], jobs: m[38], grp: m[39], ents: m[40], oam: m[41] });
+        recs.push({ dt: u(0), g, nmis: m[34], rows: m[35], renders: m[36], ups: m[37], jobs: m[38], grp: m[39], ents: m[40], oam: m[41], feat: m[43], isl: m[44], pln: m[45] });
     }
 }
 await callTool('mesen_input_override', { action: 'set', port: 0, buttons: '' });
@@ -152,6 +165,8 @@ const work = r => r.dt - r.nmis * NMI;
 const late = recs.filter(r => r.nmis > 0), ok = recs.filter(r => r.nmis === 0);
 const avg = (rs, f) => rs.length ? rs.reduce((s, r) => s + f(r), 0) / rs.length : 0;
 const maxOf = (rs, f) => rs.reduce((s, r) => Math.max(s, f(r)), 0);
+const kinds = `rows ${avg(recs, r => r.rows).toFixed(2)}  feature ${avg(recs, r => r.feat).toFixed(2)}  island ${avg(recs, r => r.isl).toFixed(2)}  plain ${avg(recs, r => r.pln).toFixed(2)}  same ${avg(recs, r => r.rows - r.feat - r.isl - r.pln).toFixed(2)}`;
+console.log(`row kinds per pass: ${kinds}`);
 console.log(`\n=== variant ${variant} ${buttons || 'cruise'}: ${recs.length} passes, late ${late.length} (${(100 * late.length / recs.length).toFixed(1)}%)`);
 console.log(`work cycles (true counter, NMI removed): on-time mean ${avg(ok, work).toFixed(0)} max ${maxOf(ok, work)}   late mean ${avg(late, work).toFixed(0)} max ${maxOf(late, work)}`);
 for (const [name, rs] of [['A player', recs.filter(r => !r.grp)], ['B entities', recs.filter(r => r.grp)]]) {
