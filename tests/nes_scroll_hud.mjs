@@ -277,7 +277,7 @@ async function main() {
         eq(row1.slice(25, 31), [0, 0, 0, 0, 0, TILE_DIGIT_BASE]),
         hexArray(row1.slice(25, 31)));
     check('bridge digit updates to 3',
-        row2[29] === 0 && row2[30] === TILE_DIGIT_YELLOW_BASE + 3,
+        row2[29] === 0 && row2[30] === 61,      // tile 61 is uploaded with the digit
         hexArray(row2.slice(29, 31)));
     check('game row keeps the gauge floor',
         eq(row3.slice(9, 19), [

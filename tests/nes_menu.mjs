@@ -32,10 +32,15 @@ async function tap(b) {
     await press('');
     await step(6);
 }
-const menu = async () => ({
-    game: await u8('hud_game'), lives: await u8('hud_lives'),
-    bridge: await u8('hud_bridge'), variant: await u8('river_variant'),
-});
+// variant = the start level picked in the menu, (GAME - 1) >> 1; river_variant is the
+// level whose river is on screen and only follows once the idle timer has run out.
+const menu = async () => {
+    const game = await u8('hud_game');
+    return {
+        game, lives: await u8('hud_lives'),
+        bridge: await u8('hud_bridge'), variant: (game - 1) >> 1,
+    };
+};
 
 await init();
 try {
@@ -73,6 +78,32 @@ try {
     for (let i = 0; i < 4; i++) await tap('Down');   // GAME 4 = level 5, two players
     m = await menu();
     check(m.game === 4 && m.variant === 1 && m.bridge === 5, 'level 5, two players: GAME 4', JSON.stringify(m));
+
+    // Atari ($A6D8, $A2F5, $A688): changing the game freezes the old river and its
+    // enemies; the picked level's river begins from black only after the idle timer
+    // ($2A = $25, one tick per 8 frames = 296 frames) runs out, and every change
+    // reloads the timer.
+    const frozenNow = async () => ({
+        rv: await u8('river_variant'), freeze: await u8('river_freeze'),
+        hold: await u8('ent_hold'), y: await u8('playfield_scroll_y'),
+    });
+    let fz = await frozenNow();
+    await step(90);
+    let fz2 = await frozenNow();
+    check(fz.rv === 0 && fz.freeze === 1 && fz.hold === 1 && fz2.y === fz.y && fz2.rv === 0,
+        'game changed: the old river and its enemies stand still', JSON.stringify([fz, fz2]));
+    await tap('Up');
+    await tap('Down');                  // net no change, but both presses reload the timer
+    await step(230);
+    fz2 = await frozenNow();
+    check(fz2.rv === 0 && fz2.freeze === 1 && fz2.y === fz.y,
+        'another change reloads the idle timer (still frozen 350 frames after the first change)', JSON.stringify(fz2));
+    await step(100);
+    fz2 = await frozenNow();
+    check(fz2.rv === 1 && fz2.freeze === 0 && fz2.hold === 0,
+        'idle timer out: the picked level (5) is built and scrolls', JSON.stringify(fz2));
+    await step(20);
+    check((await u8('playfield_scroll_y')) !== fz2.y, 'the new river scrolls', '');
 
     // Scoreboard: the right-hand label is P2 ($4F glyph tiles 58/59) for two
     // players and HI (29/30) for one.

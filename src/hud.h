@@ -35,6 +35,11 @@ extern uint8_t hud_two;             /* 1 = two players alternating */
 extern uint8_t hud_cur;             /* active player, 0 = P1 */
 extern uint8_t *hud_other_bcd;      /* idle player's score, 3 BCD bytes */
 
+/* The active player's label + score blink until the game really starts
+ * ($B69A: while $76 is 1..$7F the group is painted gray for 16 of every 64
+ * frames).  The player code sets this in WAIT/READY. */
+extern uint8_t hud_blink;
+
 /* Install the HUD and playfield background palettes in the PPU shadow.
  * Call this before DISPLAY_OFF so the blank screen uses the black backdrop. */
 void hud_init_palette(void) BANKED;

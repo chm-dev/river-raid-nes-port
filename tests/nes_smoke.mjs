@@ -167,15 +167,19 @@ async function main() {
 
     const digit0Chr = await readBytes(HUD_CHR + TILE_DIGIT_BASE * 16, 16, 'NesChrRam');
     check('black digit 0 is inverted glyph 0 on plane 0',
-        eq(digit0Chr, [0xff, 0xc3, 0x99, 0x99, 0x99, 0x99, 0xc3, 0xff,
+        eq(digit0Chr, [0x99, 0x99, 0x99, 0x99, 0xc3, 0xff, 0xff, 0xff,   // raised 2 px: glyph rows 2..6
                        ...zeros]),
         hexArray(digit0Chr));
 
     const yellow0Chr = await readBytes(HUD_CHR + TILE_DIGIT_YELLOW_BASE * 16, 16, 'NesChrRam');
     check('yellow digit 0 has the glyph on plane 1',
-        eq(yellow0Chr, [0xff, 0xc3, 0x99, 0x99, 0x99, 0x99, 0xc3, 0xff,
-                        0x00, 0x3c, 0x66, 0x66, 0x66, 0x66, 0x3c, 0x00]),
+        eq(yellow0Chr, [0x99, 0x99, 0x99, 0x99, 0xc3, 0xff, 0xff, 0xff,
+                        0x66, 0x66, 0x66, 0x66, 0x3c, 0x00, 0x00, 0x00]),
         hexArray(yellow0Chr));
+    const top0Chr = await readBytes(HUD_CHR + 248 * 16, 16, 'NesChrRam');
+    check('top tile 248 holds only the 3C top row of digits 0/2/6/8/9 (row 7, plane 1)',
+        eq(top0Chr, [0xff, 0xff, 0xff, 0xff, 0xff, 0xff, 0xff, 0xc3,
+                     0, 0, 0, 0, 0, 0, 0, 0x3c]), hexArray(top0Chr));
 
     const playerChr = await readBytes(0x1000 + SPRITE_TILE_BASE * 16, 16, 'NesChrRam');
     check('player sprite CHR is populated', playerChr.some(v => v !== 0),
@@ -193,8 +197,13 @@ async function main() {
 
     const SPACE = 0;
 
-    check('row 0 is blank padding', row0.every(v => v === SPACE),
+    // Row 0 is padding except for the "top" tiles above the raised score digits
+    // (the first line sits 2 px higher): 248..251 left, 252..255 right.
+    const row0Top = row0.map((v, i) => v === SPACE || (v >= 248 && ((i >= 11 && i <= 16) || (i >= 25 && i <= 30))));
+    check('row 0 is blank padding (plus the digit top tiles)', row0Top.every(Boolean),
         hexArray(row0));
+    check('row 0 top tiles sit above the last score digit and hi-score digit',
+        row0[16] === 248 && row0[30] === 252, hexArray([row0[16], row0[30]]));
     check('row 4 is blank padding', row4.every(v => v === SPACE),
         hexArray(row4));
     check('row 1 P1 (wide label, aligned with GAME)',
@@ -225,10 +234,19 @@ async function main() {
         eq(row2.slice(20, 28), [...Array(8)].map((_, i) => TILE_BRIDGE_WIDE + i)),
         hexArray(row2.slice(20, 28)));
     check('row 2 bridge number 1',
-        row2[29] === SPACE && row2[30] === TILE_DIGIT_YELLOW_BASE + 1,
+        row2[29] === SPACE && row2[30] === 61,        // tiles 60/61 hold the number, uploaded
         hexArray(row2.slice(29, 31)));
+    const bridgeChr = await readBytes(HUD_CHR + 61 * 16, 16, 'NesChrRam');
+    check('bridge number tile 1 is the unraised yellow glyph 1',
+        eq(bridgeChr, [0xff, 0xe7, 0xc7, 0xe7, 0xe7, 0xe7, 0x81, 0xff,
+                       0x00, 0x18, 0x38, 0x18, 0x18, 0x18, 0x7e, 0x00]), hexArray(bridgeChr));
 
-    check('row 3 game number 1', row3[5] === TILE_DIGIT_BASE + 1, `tile=${row3[5]}`);
+    // The GAME digit has its own unraised tile (47), uploaded when the number
+    // changes: tiles 1..10 are the raised right-field digits (black HI / white P2).
+    const gameDigit = await readBytes(HUD_CHR + 47 * 16, 16, 'NesChrRam');
+    check('row 3 game number 1',
+        row3[5] === 47 && eq(gameDigit, [0xff, 0xe7, 0xc7, 0xe7, 0xe7, 0xe7, 0x81, 0xff, ...zeros]),
+        `tile=${row3[5]} ${hexArray(gameDigit)}`);
 
     const attr0 = await readBytes(0x23C0, 8, 'NesPpuMemory');
     check('HUD attributes are all palette 0 (colour comes from tile art)',

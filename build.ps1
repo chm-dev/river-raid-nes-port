@@ -78,7 +78,9 @@ $linkFlags = @(
 
 # Modules placed in switchable ROM bank 1 (their public functions are BANKED);
 # the fixed bank ($C000-$FFFF) is full.
-$bankedSources = @('entities', 'entity_gfx', 'player', 'hud')
+$bankedSources = @('entities', 'entity_gfx', 'player')
+# Bank 1 is full (~150 bytes free); the HUD has its own bank.
+$bank2Sources = @('hud')
 $sources = Get-ChildItem -Path $srcRoot -Filter '*.c' -File | Sort-Object Name
 if (-not $sources) {
     throw "No C sources found under $srcRoot"
@@ -91,6 +93,7 @@ foreach ($src in $sources) {
     Write-Host "CC  $($src.Name)"
     [string[]]$bankFlags = @()
     if ($bankedSources -contains $name) { $bankFlags = @('-Wf-bo1') }
+    if ($bank2Sources -contains $name) { $bankFlags = @('-Wf-bo2') }
     & $lcc @compileFlags @bankFlags '-c' '-o' $obj $src.FullName
     if ($LASTEXITCODE -ne 0) {
         throw "Compilation failed: $($src.Name)"

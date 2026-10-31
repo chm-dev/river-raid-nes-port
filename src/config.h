@@ -88,7 +88,19 @@
  */
 
 #define TILE_BLANK              0u
-#define TILE_DIGIT_BASE         1u      /* 10 black digits: 1..10 */
+#define TILE_DIGIT_BASE         1u      /* 10 right-field digits: 1..10 (black for HI, white for P2) */
+#define TILE_GAME_DIGIT         47u     /* GAME number, black, uploaded when it changes */
+#define TILE_BRIDGE_DIGIT       60u     /* 2 tiles: the bridge number, uploaded when it changes */
+/* The first text line (P1 / score / HI / hi-score) is raised 2 px: the labels
+ * (two blank top glyph rows) just sit 2 rows higher in their tiles; the digits
+ * need their top pixel row on the blank nametable row above, in "top" tiles
+ * that hold only that row.  The digits have 4 distinct top rows (3C 18 7E 0C),
+ * so 4 top tiles per colour.  Sprites share the pattern table: entities use
+ * 88..228, the jet debris 229..238, the pause menu 240..247, so 248..255 are
+ * free (player.c has a compile-time guard). */
+#define TILE_TOP_YELLOW         248u    /* 4 tiles: left score */
+#define TILE_TOP_RIGHT          252u    /* 4 tiles: right field, black (HI) or white (P2) */
+#define TILE_TOP_COUNT          4u
 #define TILE_DIGIT_YELLOW_BASE  48u     /* 10 yellow digits: 48..57 */
 #define TILE_GAUGE_BASE         11u     /* 16 tiles: 8 glyphs x 2 halves */
 #define TILE_GAUGE_TL           (TILE_GAUGE_BASE + 0u)

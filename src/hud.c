@@ -22,10 +22,15 @@
  * sprites with a lower OAM index than the bar, so when the bar passes under
  * a label the sprite keeps the label visible on top.
  *
- * Tile memory layout (see config.h):
- *   0..127    Atari 8x8 character set (1bpp source expanded to NES 2bpp)
- *   128..209  Phase 3 river demo tiles
- *   210..255  fixed HUD artwork and yellow digits
+ * HUD pattern table ($1000, shared with the sprites; see config.h):
+ *   0 blank gray, 1..10 right-field digits (black HI / white P2, re-uploaded
+ *   when 1P/2P changes), 11..46 labels and gauge art, 47 GAME digit,
+ *   48..57 yellow score digits, 58/59 white P2 label, 60/61 bridge number,
+ *   64+ sprites, 248..255 "top" tiles.
+ * The first text line sits 2 px higher than its 8x8 grid: labels simply shift
+ * up inside their tiles, digits keep their first pixel row in a top tile on
+ * nametable row 0.  The active player's label + score blink from the start
+ * until the first input (Atari $B69A).
  *
  * The HUD is drawn once into nametable 0 and then only dirty dynamic fields
  * are rewritten.  Everything here uses GBDK's normal tile API; while the
@@ -52,6 +57,12 @@ uint8_t hud_bridge;
 uint8_t hud_two;
 uint8_t hud_cur;
 uint8_t *hud_other_bcd;
+uint8_t hud_blink;
+
+/* Label ink for hud_wide_glyph(). */
+#define INK_BLACK   0u
+#define INK_YELLOW  1u
+#define INK_WHITE   2u
 
 /* The backdrop is black (Atari COLBK, needed for the river's black pixels), so
  * the gray band is pixel value 1 of the HUD tiles: black ink is value 0 (the
@@ -107,7 +118,14 @@ static const uint8_t fuel_bar_x[16] = {
 /* Cached values; hud_update() writes a field only when it differs. */
 static uint8_t shown_score[6];
 static uint8_t shown_hi[6];
-static uint8_t shown_two;            /* right-field label: 0 = HI, 1 = P2 */
+static uint8_t shown_p1;             /* left label's first tile (blank while it blinks off) */
+static uint8_t shown_label;          /* right label's first tile: HI, P2 or blank */
+static uint8_t shown_white;          /* tiles 1..10 hold: 0 black digits, 1 white */
+#define RIGHT_TILES (10u + TILE_TOP_COUNT)  /* right-field digit tiles + their top tiles */
+static uint8_t digit_next = RIGHT_TILES;    /* next right-field tile to re-upload, RIGHT_TILES = idle */
+static uint8_t digit_white;          /* colour being uploaded */
+static uint8_t hid_field = 0xFFu;    /* field blanked by the start blink: 0 left, 1 right */
+static uint8_t digit_buf[16];        /* one digit tile for runtime uploads */
 static uint8_t shown_bridge[2];
 static uint8_t shown_game;
 static uint8_t shown_lives;
@@ -145,20 +163,82 @@ static uint8_t spread_right(uint8_t v) {
 /* Load one charset glyph as two 16x8 background tiles on the gray band
  * (value 1 = plane 0).  Black ink clears plane 0 (value 0, the backdrop);
  * yellow ink also sets plane 1 (value 2). */
-static void hud_wide_glyph(uint8_t dest, uint8_t code, uint8_t yellow) {
+/* Pixel row `row` of a glyph raised by `up` pixels inside its tile (rows that
+ * would come from below the glyph are blank).  The first HUD line is raised
+ * by 2: the labels' top two glyph rows are blank; a digit's top row moves to
+ * the "top" tile above (hud_upload_top). */
+static uint8_t glyph_row(const uint8_t *src, uint8_t row, uint8_t up) {
+    return ((uint8_t)(row + up) < 8u) ? src[row + up] : 0u;
+}
+
+/* Gray band + ink for one tile row: plane 0 / plane 1 bytes. */
+#define INK_PLANE0(g, ink)  (((ink) == INK_WHITE) ? 0xFFu : (uint8_t)~(g))
+#define INK_PLANE1(g, ink)  ((ink) ? (g) : 0u)
+
+/* One top-part tile per distinct digit top row (3C 18 7E 0C): the digit that
+ * represents each, and which top tile each digit uses. */
+static const uint8_t top_rep[TILE_TOP_COUNT] = { 0, 1, 3, 4 };
+static const uint8_t digit_top[10] = { 0, 1, 0, 2, 3, 2, 0, 2, 0, 0 };
+
+static void hud_wide_glyph(uint8_t dest, uint8_t code, uint8_t ink, uint8_t up) {
     const uint8_t *src = atari_charset + (uint16_t)(code & 0x7Fu) * 8u;
     uint8_t row;
 
     for (row = 0; row < 8u; row++) {
-        uint8_t l = spread_left(src[row]);
-        uint8_t r = spread_right(src[row]);
+        uint8_t g = glyph_row(src, row, up);
+        uint8_t l = spread_left(g);
+        uint8_t r = spread_right(g);
 
-        wide_tile_buf[row * 2u] = (uint8_t)~l;
-        wide_tile_buf[row * 2u + 1u] = yellow ? l : 0u;
-        wide_tile_buf[16u + row * 2u] = (uint8_t)~r;
-        wide_tile_buf[16u + row * 2u + 1u] = yellow ? r : 0u;
+        /* White ink is value 3: plane 0 stays set, plane 1 is the glyph. */
+        wide_tile_buf[row * 2u] = (ink == INK_WHITE) ? 0xFFu : (uint8_t)~l;
+        wide_tile_buf[row * 2u + 1u] = ink ? l : 0u;
+        wide_tile_buf[16u + row * 2u] = (ink == INK_WHITE) ? 0xFFu : (uint8_t)~r;
+        wide_tile_buf[16u + row * 2u + 1u] = ink ? r : 0u;
     }
     set_bkg_data(dest, 2, wide_tile_buf);
+}
+
+/* Upload one 8x8 digit (black, or white for P2) into the $1000 table while the
+ * game runs.  set_sprite_data() addresses that table directly, so PPUCTRL
+ * bit 4 does not matter here (sprites and the HUD share it). */
+static void hud_upload_digit(uint8_t tile, uint8_t digit, uint8_t ink, uint8_t up) {
+    const uint8_t *src = atari_charset + (uint16_t)(GLYPH_0 + digit) * 8u;
+    uint8_t row;
+
+    for (row = 0; row < 8u; row++) {
+        uint8_t g = glyph_row(src, row, up);
+
+        digit_buf[row * 2u] = INK_PLANE0(g, ink);
+        digit_buf[row * 2u + 1u] = INK_PLANE1(g, ink);
+    }
+    set_sprite_data(tile, 1, digit_buf);
+}
+
+/* Top part of a raised digit: only the glyph's first row, as the last pixel
+ * row of a tile on nametable row 0. */
+static void hud_upload_top(uint8_t tile, uint8_t digit, uint8_t ink) {
+    uint8_t g = atari_charset[(uint16_t)(GLYPH_0 + digit) * 8u + 1u];
+    uint8_t row;
+
+    for (row = 0; row < 8u; row++) {
+        uint8_t v = (row == 7u) ? g : 0u;
+
+        digit_buf[row * 2u] = INK_PLANE0(v, ink);
+        digit_buf[row * 2u + 1u] = INK_PLANE1(v, ink);
+    }
+    set_sprite_data(tile, 1, digit_buf);
+}
+
+/* Row-0 tiles above six digit tiles (blank above blanks). */
+static void hud_top_tiles(const uint8_t tiles[6], uint8_t base, uint8_t top_base,
+                          uint8_t out[6]) {
+    uint8_t i;
+
+    for (i = 0; i < 6u; i++) {
+        out[i] = (tiles[i] < base || tiles[i] >= (uint8_t)(base + 10u))
+            ? TILE_BLANK
+            : (uint8_t)(top_base + digit_top[tiles[i] - base]);
+    }
 }
 
 /* Load the ten charset digits (and a solid gray blank) as 8x8 tiles: black
@@ -173,17 +253,14 @@ static void hud_load_digits(void) {
     }
     set_bkg_data(TILE_BLANK, 1, wide_tile_buf);
 
+    /* First HUD line: digits raised 2 px, their top row in the tiles above. */
     for (d = 0; d < 10u; d++) {
-        const uint8_t *src = atari_charset + (uint16_t)(GLYPH_0 + d) * 8u;
-
-        for (row = 0; row < 8u; row++) {
-            wide_tile_buf[row * 2u] = (uint8_t)~src[row];
-            wide_tile_buf[row * 2u + 1u] = 0u;
-            wide_tile_buf[16u + row * 2u] = (uint8_t)~src[row];
-            wide_tile_buf[16u + row * 2u + 1u] = src[row];
-        }
-        set_bkg_data((uint8_t)(TILE_DIGIT_BASE + d), 1, wide_tile_buf);
-        set_bkg_data((uint8_t)(TILE_DIGIT_YELLOW_BASE + d), 1, wide_tile_buf + 16);
+        hud_upload_digit((uint8_t)(TILE_DIGIT_BASE + d), d, INK_BLACK, 2u);
+        hud_upload_digit((uint8_t)(TILE_DIGIT_YELLOW_BASE + d), d, INK_YELLOW, 2u);
+    }
+    for (d = 0; d < TILE_TOP_COUNT; d++) {
+        hud_upload_top((uint8_t)(TILE_TOP_YELLOW + d), top_rep[d], INK_YELLOW);
+        hud_upload_top((uint8_t)(TILE_TOP_RIGHT + d), top_rep[d], INK_BLACK);
     }
 }
 
@@ -339,14 +416,28 @@ static void hud_write_score(void) {
     /* The left field always belongs to P1 ($AF4B). */
     hud_bcd_tiles(hud_cur ? hud_other_bcd : hud_score_bcd, tiles,
                   TILE_DIGIT_YELLOW_BASE);
+    if (hid_field == 0u) {
+        memset(tiles, TILE_BLANK, 6);       /* blink phase: gray band only */
+    }
     for (i = 0; i < 6u; i++) {
         if (tiles[i] != shown_score[i]) {
             changed = 1u;
         }
     }
     if (changed) {
+        uint8_t top[6];
+
+        hud_top_tiles(tiles, TILE_DIGIT_YELLOW_BASE, TILE_TOP_YELLOW, top);
         set_bkg_tiles(HUD_SCORE_X, HUD_SCORE_ROW, 6, 1, tiles);
+        set_bkg_tiles(HUD_SCORE_X, (uint8_t)(HUD_SCORE_ROW - 1u), 6, 1, top);
         memcpy(shown_score, tiles, 6);
+    }
+    i = (hid_field == 0u) ? TILE_BLANK : TILE_P1_WIDE;
+    if (i != shown_p1) {
+        tiles[0] = i;
+        tiles[1] = i ? (uint8_t)(i + 1u) : TILE_BLANK;
+        set_bkg_tiles(HUD_P1_X, HUD_P1_ROW, 2, 1, tiles);
+        shown_p1 = i;
     }
 }
 
@@ -356,20 +447,25 @@ static void hud_write_hi(void) {
     uint8_t changed = 0;
 
     /* One player: "HI" + hi-score.  Two players: "P2" + P2's score, and the
-     * hi-score is not shown ($AF80: label $DB/$4F, digits $B06E/$B068). */
-    if (hud_two) {
-        hud_bcd_tiles(hud_cur ? hud_score_bcd : hud_other_bcd, tiles,
-                      TILE_DIGIT_YELLOW_BASE);
-    } else {
-        hud_bcd_tiles(hud_hi_bcd, tiles, TILE_DIGIT_BASE);
+     * hi-score is not shown ($AF80: label $DB/$4F, digits $B06E/$B068).  The
+     * digits are the right-field set (tiles 1..10): black for HI, re-uploaded
+     * white for P2 (hud_update); wait until they match the mode. */
+    if (hud_two != shown_white) {
+        return;
     }
-    if (hud_two != shown_two) {
+    hud_bcd_tiles(hud_two ? (hud_cur ? hud_score_bcd : hud_other_bcd) : hud_hi_bcd,
+                  tiles, TILE_DIGIT_BASE);
+    if (hid_field == 1u) {
+        memset(tiles, TILE_BLANK, 6);
+    }
+    i = (hid_field == 1u) ? TILE_BLANK : (hud_two ? TILE_P2_WIDE : TILE_HI_WIDE);
+    if (i != shown_label) {
         uint8_t label[2];
 
-        label[0] = hud_two ? TILE_P2_WIDE : TILE_HI_WIDE;
-        label[1] = (uint8_t)(label[0] + 1u);
+        label[0] = i;
+        label[1] = i ? (uint8_t)(i + 1u) : TILE_BLANK;
         set_bkg_tiles(HUD_HI_LABEL_X, HUD_HI_ROW, 2, 1, label);
-        shown_two = hud_two;
+        shown_label = i;
     }
     for (i = 0; i < 6u; i++) {
         if (tiles[i] != shown_hi[i]) {
@@ -377,7 +473,11 @@ static void hud_write_hi(void) {
         }
     }
     if (changed) {
+        uint8_t top[6];
+
+        hud_top_tiles(tiles, TILE_DIGIT_BASE, TILE_TOP_RIGHT, top);
         set_bkg_tiles(HUD_HI_X, HUD_HI_ROW, 6, 1, tiles);
+        set_bkg_tiles(HUD_HI_X, (uint8_t)(HUD_HI_ROW - 1u), 6, 1, top);
         memcpy(shown_hi, tiles, 6);
     }
 }
@@ -385,22 +485,30 @@ static void hud_write_hi(void) {
 static void hud_write_bridge(void) {
     uint8_t value = hud_bridge;
     uint8_t tiles[2];
+    uint8_t tens;
+    uint8_t ones;
 
     if (value > HUD_BRIDGE_DIGIT_MAX) {
         value = HUD_BRIDGE_DIGIT_MAX;
     }
-    if (value >= 10u) {
-        tiles[0] = (uint8_t)(TILE_DIGIT_YELLOW_BASE + value / 10u);
-        tiles[1] = (uint8_t)(TILE_DIGIT_YELLOW_BASE + value % 10u);
-    } else {
-        tiles[0] = TILE_BLANK;
-        tiles[1] = (uint8_t)(TILE_DIGIT_YELLOW_BASE + value);
+    tens = (uint8_t)(value / 10u);
+    ones = (uint8_t)(value % 10u);
+    if (tens == shown_bridge[0] && ones == shown_bridge[1]) {
+        return;
     }
-    if (tiles[0] != shown_bridge[0] || tiles[1] != shown_bridge[1]) {
-        set_bkg_tiles(HUD_BRIDGE_DIGIT_X, HUD_BRIDGE_ROW, 2, 1, tiles);
-        shown_bridge[0] = tiles[0];
-        shown_bridge[1] = tiles[1];
+    /* The number is not on the first line, so it keeps unraised glyphs: two
+     * dedicated tiles uploaded when it changes. */
+    if (tens != shown_bridge[0] && tens) {
+        hud_upload_digit(TILE_BRIDGE_DIGIT, tens, INK_YELLOW, 0u);
     }
+    if (ones != shown_bridge[1]) {
+        hud_upload_digit((uint8_t)(TILE_BRIDGE_DIGIT + 1u), ones, INK_YELLOW, 0u);
+    }
+    tiles[0] = tens ? TILE_BRIDGE_DIGIT : TILE_BLANK;
+    tiles[1] = (uint8_t)(TILE_BRIDGE_DIGIT + 1u);
+    set_bkg_tiles(HUD_BRIDGE_DIGIT_X, HUD_BRIDGE_ROW, 2, 1, tiles);
+    shown_bridge[0] = tens;
+    shown_bridge[1] = ones;
 }
 
 static void hud_write_game(void) {
@@ -410,8 +518,9 @@ static void hud_write_game(void) {
         digit = 9u;
     }
     if (digit != shown_game) {
-        set_bkg_tile_xy(HUD_GAME_DIGIT_X, HUD_GAME_DIGIT_ROW,
-                        (uint8_t)(TILE_DIGIT_BASE + digit));
+        /* Its own tile: tiles 1..10 change colour with the right field. */
+        hud_upload_digit(TILE_GAME_DIGIT, digit, INK_BLACK, 0u);
+        set_bkg_tile_xy(HUD_GAME_DIGIT_X, HUD_GAME_DIGIT_ROW, TILE_GAME_DIGIT);
         shown_game = digit;
     }
 }
@@ -460,31 +569,32 @@ static void hud_draw_static(void) {
     uint8_t i;
 
     /* Labels are the game's own 4-pixel HUD glyphs, doubled like mode 6. */
-    hud_wide_glyph(TILE_P1_WIDE, 0x5Au, 1u);          /* P1, yellow */
-    hud_wide_glyph(TILE_HI_WIDE, 0x5Bu, 0u);          /* HI, black */
-    hud_wide_glyph(TILE_P2_WIDE, 0x4Fu, 1u);          /* P2, yellow like P1 */
-    hud_wide_glyph(TILE_BRIDGE_WIDE + 0u, 0x43u, 1u); /* BR */
-    hud_wide_glyph(TILE_BRIDGE_WIDE + 2u, 0x44u, 1u); /* ID */
-    hud_wide_glyph(TILE_BRIDGE_WIDE + 4u, 0x45u, 1u); /* G */
-    hud_wide_glyph(TILE_BRIDGE_WIDE + 6u, 0x46u, 1u); /* E */
+    /* The three first-line labels are raised 1 px in their tiles. */
+    hud_wide_glyph(TILE_P1_WIDE, 0x5Au, INK_YELLOW, 2u);  /* P1 ($1A: COLPF0) */
+    hud_wide_glyph(TILE_HI_WIDE, 0x5Bu, INK_BLACK, 2u);   /* HI, black */
+    hud_wide_glyph(TILE_P2_WIDE, 0x4Fu, INK_WHITE, 2u);   /* P2 ($4F: COLPF1 = $8E) */
+    hud_wide_glyph(TILE_BRIDGE_WIDE + 0u, 0x43u, INK_YELLOW, 0u); /* BR */
+    hud_wide_glyph(TILE_BRIDGE_WIDE + 2u, 0x44u, INK_YELLOW, 0u); /* ID */
+    hud_wide_glyph(TILE_BRIDGE_WIDE + 4u, 0x45u, INK_YELLOW, 0u); /* G */
+    hud_wide_glyph(TILE_BRIDGE_WIDE + 6u, 0x46u, INK_YELLOW, 0u); /* E */
 
     /* GAME uses the ordinary uppercase glyphs, doubled. */
-    hud_wide_glyph(TILE_GAME_WIDE + 0u, 7u, 0u);      /* G */
-    hud_wide_glyph(TILE_GAME_WIDE + 2u, 1u, 0u);      /* A */
-    hud_wide_glyph(TILE_GAME_WIDE + 4u, 13u, 0u);     /* M */
-    hud_wide_glyph(TILE_GAME_WIDE + 6u, 5u, 0u);      /* E */
+    hud_wide_glyph(TILE_GAME_WIDE + 0u, 7u, INK_BLACK, 0u);       /* G */
+    hud_wide_glyph(TILE_GAME_WIDE + 2u, 1u, INK_BLACK, 0u);       /* A */
+    hud_wide_glyph(TILE_GAME_WIDE + 4u, 13u, INK_BLACK, 0u);      /* M */
+    hud_wide_glyph(TILE_GAME_WIDE + 6u, 5u, INK_BLACK, 0u);       /* E */
 
     /* Gauge frame comes from the charset's 5-cell assembly:
      *   top    47 48 49 48 4A
      *   bottom 4B 4C 4D 4C 4E */
-    hud_wide_glyph(TILE_GAUGE_TL, 0x47u, 0u);
-    hud_wide_glyph(TILE_GAUGE_T, 0x48u, 0u);
-    hud_wide_glyph(TILE_GAUGE_TC, 0x49u, 0u);
-    hud_wide_glyph(TILE_GAUGE_TR, 0x4Au, 0u);
-    hud_wide_glyph(TILE_GAUGE_BL, 0x4Bu, 0u);
-    hud_wide_glyph(TILE_GAUGE_B, 0x4Cu, 0u);
-    hud_wide_glyph(TILE_GAUGE_BC, 0x4Du, 0u);
-    hud_wide_glyph(TILE_GAUGE_BR, 0x4Eu, 0u);
+    hud_wide_glyph(TILE_GAUGE_TL, 0x47u, INK_BLACK, 0u);
+    hud_wide_glyph(TILE_GAUGE_T, 0x48u, INK_BLACK, 0u);
+    hud_wide_glyph(TILE_GAUGE_TC, 0x49u, INK_BLACK, 0u);
+    hud_wide_glyph(TILE_GAUGE_TR, 0x4Au, INK_BLACK, 0u);
+    hud_wide_glyph(TILE_GAUGE_BL, 0x4Bu, INK_BLACK, 0u);
+    hud_wide_glyph(TILE_GAUGE_B, 0x4Cu, INK_BLACK, 0u);
+    hud_wide_glyph(TILE_GAUGE_BC, 0x4Du, INK_BLACK, 0u);
+    hud_wide_glyph(TILE_GAUGE_BR, 0x4Eu, INK_BLACK, 0u);
 
     tiles[0] = TILE_P1_WIDE;
     tiles[1] = TILE_P1_WIDE + 1u;
@@ -583,6 +693,12 @@ void hud_init_graphics(void) BANKED {
     hud_game = 1;
     hud_bridge = 1;
     shown_fuel_step = 0xFFu; /* force the first marker write */
+    shown_p1 = TILE_P1_WIDE;
+    shown_label = TILE_HI_WIDE;
+    shown_white = 0;
+    digit_next = RIGHT_TILES;
+    hid_field = 0xFFu;
+    hud_blink = 0;
 
     hud_refresh_all();
 }
@@ -592,6 +708,56 @@ void hud_init_graphics(void) BANKED {
 static uint8_t hud_phase;
 
 void hud_update(void) BANKED {
+    uint8_t hide;
+    uint8_t n;
+
+    /* A game-mode change (attract Up/Down) flips 1P/2P, which recolours the
+     * right-field digit tiles.  Do it in a burst of 7 tiles per pass and
+     * refresh the whole scoreboard with it, so the numbers change right after
+     * the button instead of trickling through the round-robin below. */
+    if (digit_next < RIGHT_TILES || hud_two != shown_white) {
+        uint8_t ink;
+
+        if (digit_next >= RIGHT_TILES) {
+            digit_white = hud_two;
+            digit_next = 0;
+        }
+        ink = digit_white ? INK_WHITE : INK_BLACK;
+        for (n = 0; n < 7u && digit_next < RIGHT_TILES; n++) {
+            if (digit_next < 10u) {
+                hud_upload_digit((uint8_t)(TILE_DIGIT_BASE + digit_next), digit_next, ink, 2u);
+            } else {
+                hud_upload_top((uint8_t)(TILE_TOP_RIGHT + digit_next - 10u),
+                               top_rep[digit_next - 10u], ink);
+            }
+            digit_next++;
+        }
+        hud_write_game();
+        hud_write_bridge();
+        if (digit_next == RIGHT_TILES) {
+            shown_white = digit_white;
+            hud_write_score();
+            hud_write_hi();
+        }
+        return;
+    }
+
+    /* Start blink ($B69A): the active player's label + score vanish for 16 of
+     * every 64 frames.  Checked every pass, not through the round-robin below,
+     * so the off window keeps its length. */
+    hide = (hud_blink && !((uint8_t)sys_time & 0x30u)) ? hud_cur : 0xFFu;
+    if (hide != hid_field) {
+        uint8_t field = (hide != 0xFFu) ? hide : hid_field;
+
+        hid_field = hide;
+        if (field) {
+            hud_write_hi();
+        } else {
+            hud_write_score();
+        }
+        return;
+    }
+
     switch (hud_phase) {
     case 0: hud_write_score(); break;
     case 1: hud_write_hi(); break;

@@ -65,9 +65,9 @@
   scroll steps spread over 1-2 rows instead of 0/3.  Details and the per-group
   cost table are in the performance entry of the Session log.
 - **Memory layout (fixed bank / bank 1 / RAM):** ROM is 4 x 16 KiB (mapper 30).
-  The **fixed bank has ~2.9 KB free** and **bank 1 ~3 KB free** (`hud.c`,
-  `entities.c`, `entity_gfx.c`, `player.c` are built with `-Wf-bo1`; their public
-  functions are `BANKED`).  **Internal RAM: 96 bytes free** (2026-10-30 after the menu/2P state and spawn clearance; 140 after the
+  The **fixed bank has ~2.9 KB free** and **bank 1 ~3 KB free** (`entities.c`,
+  `entity_gfx.c`, `player.c` are built with `-Wf-bo1`, `hud.c` with `-Wf-bo2` since 2026-10-31; their public
+  functions are `BANKED`).  **Internal RAM: 13 bytes free as of 2026-10-31** (HUD blink/recolour/raise work; was 96 on 2026-10-30 after the menu/2P state and spawn clearance; 140 after the
   sound rewrite; `build.ps1` throws if `_BSS` passes `$07FF`).  The linker does *not*
   fail when the fixed bank overflows into the vectors at `$FFFA`: the ROM silently
   grows to 128 KiB - always check the `ROM` line of `build.ps1` (must be 65,552).
@@ -518,10 +518,12 @@ These are documented in full in `docs/ATARI_RE_SPEC.md`; don't re-derive them.
    `P1 0`, `HI`, `BRIDGE 1`, `GAME n`; SELECT steps `$09` 0..7 (game 1..8); START plays.
    **Still open from this item (priority order):** (a) check start levels 5/20/50 against the
    model and `nes_ring_integrity` (CHR-cache overflow, Known issue 1d, is reachable from the first
-   screen); (b) HUD label `P2` (Atari `$4F`) while player 2 flies, and the idle player's score in the HI
-   field in 2P; (c) attract screen-saver blank (`$78`) and the attract scroll speed (`$59`);
+   screen); (b) DONE 2026-10-31: P2 label/score (white) in the right field, start blink, game select
+   freeze + timer.  Still open: while P2 flies the Atari also turns BRIDGE, the bridge number and the lives
+   white (COLPF2 = `$8E`, `$B68E`), which needs 8 more BG tiles + a white life sprite; (c) attract
+   screen-saver blank (`$78`) and the attract scroll speed (`$59`);
    (d) re-measure `ENT_WAIT_ROWS` if the playfield or start scroll changes.
-3. **Budget:** internal RAM has **96 bytes free** (was 140 before the menu/2P state) (2026-10-30: the HUD/player boot-time tile buffers
+3. **Budget:** internal RAM has **13 bytes free** (2026-10-31; 96 before the HUD work, 140 before the menu/2P state) (2026-10-30: the HUD/player boot-time tile buffers
    now alias `river_tile_pat`, see `river.h`; do not call `hud_init_graphics`/`player_init_graphics`
    after `river_init()` without that in mind), the fixed bank ~2.9 KB, bank 1 ~3 KB.
 4. Open fidelity items (small): road is 16 scanlines (Atari 20); balloon basket colour
@@ -550,6 +552,7 @@ node tests/nes_entity_hits.mjs          # 20 hit-box boundary cases
 node tests/nes_sound.mjs                # live 2A03 pitch/volume/repeat checks (34)
 node tests/nes_gameplay.mjs            # steering, throttle, fuel, refuel, shot score
 node tests/nes_menu.mjs                # attract, Up/Down start level, SELECT 1P/2P, START, 2P turn swap (needs --nes.port2.type=NesController)
+node tests/nes_hud_blink.mjs           # start blink (16/64 frames), white P2 field, blink after the 2P turn swap
 node tests/nes_hold.mjs                # entities stand still until the player starts (with a negative control)
 node tests/nes_start_clear.mjs         # no object within 48 px above the jet at the start, on all four start levels
 # every Mesen test calls startGame() (tests/mcp_client.mjs): the cart boots into attract, not into play
@@ -1976,3 +1979,64 @@ from before part 1: 0 of 846 rows differ.  All Mesen suites and `host_river.ps1`
 `host_river` only runs the C paths, so the asm is covered by `nes_river`,
 `nes_river_cache` and the diff.  Not yet play-tested on hardware.  The hand-written
 entity loop and the split-wait work are not needed for now; RAM 72 bytes free.
+
+### 2026-10-31 - HUD: start blink and white P2 field (Atari ground truth)
+
+- **Atari logic (read from the disassembly, confirmed live in Altirra):**
+  - `$AF80`/`$AF4B` build the scoreboard in screen RAM at `$1000`.  Mode-6 char bits 7-6 pick the
+    colour: P1 label `$1A` + P1 digits `$10+d` = COLPF0 (`$1E` yellow); P2 label `$4F` + digits `$50+d` =
+    COLPF1 (`$8E`, white on screen); HI `$DB` / `$D0+d` = COLPF3.  The left field is always P1 and the
+    right always P2 (2P) or HI (1P), whoever is flying.
+  - Blink = DLI at `$B684-$B6AA`: if `$76 != 0` and `($76 | $29)` has bit 7 clear and `($18 & $30) == 0`,
+    `COLPF0+Y` is set to `$06` (the band's gray), `Y = $77` (current player).  So the active player's
+    label **and** score vanish together for 16 of every 64 frames.
+  - `$76` is `$80` after every (re)start (`$B0F1` copies table `$BAE1` over `$4D..$76`), counts down
+    to `$2F` while the jet scrolls in, holds at `$2F` until the first stick/fire input, then 0.
+    `$FF`/`$FE`/attract (`$29` bit 7) never blink.  Hence it also blinks before every respawn.
+  - Also in that DLI (`$B68E`): while P2 is flying COLPF2 becomes `$8E`, so BRIDGE, the bridge number
+    and the lives go white.  **Not ported** (needs 8 more BG tiles + a white life sprite); open item.
+- **NES:** `hud_blink` (set in `player_update()` for WAIT/READY) + `hud_update()` blank the active
+  field (`hid_field`) with `TILE_BLANK` when `(sys_time & $30) == 0`.  The check runs every
+  `hud_update()` pass, not through the 6-phase round robin, so the off window stays 16 frames.
+  P1 and HI/P2 labels are rewritten too (`shown_p1`, `shown_label`).
+- **White P2:** no free palette (1 and 3 are playfield palettes) and no 10 free tile IDs, so the
+  right-field digits are tiles 1..10 re-uploaded at runtime (`set_sprite_data`, which addresses
+  `$1000` directly) as black for HI / white for P2, one tile per `hud_update()` pass.  The P2 label
+  (tiles 58/59) is built white (plane 0 solid, plane 1 = glyph).  The GAME digit moved to its own
+  tile `TILE_GAME_DIGIT` (47), uploaded when it changes.
+- **Bank:** this grew `_CODE_1` by 558 bytes past the 16 KiB bank, so `hud` now builds into the unused
+  bank 2 (`$bank2Sources` in `build.ps1`); bank 1 has ~3.3 KB free again.  Build: ROM 65552, `_XINIT`
+  ends `$FC0E`, 46 bytes RAM free.
+- Tests: `node tests/nes_hud_blink.mjs` (new, 22 checks: 16-frame runs, phase vs `sys_time`, idle field
+  never blinks, white tiles in 2P, black again in 1P, P2 blink after the turn swap); `nes_smoke` now
+  expects the GAME digit on tile 47.  smoke, scroll_hud, menu, hold, gameplay, sound, start_clear pass.
+
+### 2026-10-31 - HUD: first line raised 2 px; attract game select freezes the world (Atari timer)
+
+- **First text line (P1 / score / HI / hi-score) is 2 px higher.**  An early scroll split (scanline 10,
+  repeating the blank row y=15) was tried and rejected: the NMI's OAM DMA + VRAM-buffer flush before
+  it vary, so the entry sometimes landed a line late and scanline 10 flickered (the main split at 30
+  has enough margin).  Final version is pure tile art: the labels (two blank top glyph rows) sit 2 rows
+  higher in their tiles; the digits (rows 1..6) are shifted 2 up and their first pixel row lives in
+  "top" tiles on the blank nametable row 0 (`TILE_TOP_YELLOW` 248..251 left, `TILE_TOP_RIGHT` 252..255
+  right; the digits have 4 distinct top rows 3C/18/7E/0C, `top_rep`/`digit_top` in `hud.c`).  IDs 248..255
+  are free in the shared pattern table (entities 88..228, debris 229..238, pause 240..247; compile-time
+  guard in `player.c`).  The bridge number keeps unraised glyphs in its own runtime tiles 60/61
+  (`TILE_BRIDGE_DIGIT`), the GAME digit tile 47.  The blink blanks both rows.
+- **Right-field recolouring is a burst, not a trickle:** a 1P/2P change re-uploads tiles 1..10 + 252..255
+  (black/white), 7 per `hud_update()` pass, and refreshes GAME/BRIDGE/score/HI in the same passes
+  (the first version returned early per tile and left the HUD stale for ~28 frames).
+- **Attract game select now works like the Atari** (checked live: `$76=$FF`, `$29=0` after SELECT, `$2A`
+  reloaded to `$25` by every press, counted down every 8 frames at `$A2F5`, restart at `$A688`):
+  Up/Down only edit the scoreboard (game number, bridge, per-level hi-score), freeze the river and its
+  enemies (`river_freeze`, `ent_hold`) and (re)arm a 296-frame timer; the picked level's river is built
+  from black only when it runs out (`player_attract(pl_sel)`), or at START.  `pl_sel` is the picked level,
+  `river_variant` the one on screen.  Before this, every level change rebuilt the world at once (display
+  off + black ring), which looked like a scroll pause.  Not ported: the Atari's idle attract screen saver.
+- Build: ROM 65552, `_XINIT` ends `$FC0E`, **13 bytes internal RAM free** (was 70): `digit_buf` 16 B,
+  the blink/upload state, `pl_sel`/`pl_frozen`/`pl_wait_end`.  Reclaim before adding state (`digit_buf` can
+  alias a shared scratch if needed).
+- Tests: `nes_menu` checks freeze, timer reload and delayed rebuild; `nes_smoke` expects the raised digit
+  art, the row-0 top tiles and the bridge/game digit tiles; `nes_hud_blink` also covers the top row.
+  All Mesen suites pass (smoke, scroll_hud, hud_blink, menu, hold, start_clear, gameplay, sound,
+  entity_hits, sprite_lock, jet_hitbox).

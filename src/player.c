@@ -72,6 +72,9 @@ uint8_t player_invuln;
  * has more than 7 of them. */
 #define PAUSE_TILE_BASE         240u
 #define PAUSE_GLYPHS            8u
+/* The HUD's raised-digit "top" tiles (config.h) sit right after the pause glyphs. */
+typedef char hud_top_tiles_clear[(TILE_TOP_YELLOW >= PAUSE_TILE_BASE + PAUSE_GLYPHS
+                                  && TILE_TOP_RIGHT + TILE_TOP_COUNT <= 256u) ? 1 : -1];
 #define PAUSE_PARTS             10u     /* letters; the cursor is slot PAUSE_CURSOR_SLOT */
 #define PAUSE_CURSOR_SLOT       2u
 #define PAUSE_ROW1_Y            112u
@@ -111,6 +114,9 @@ static uint8_t pl_cur;                  /* active player (joypad index) */
 static uint8_t pl_other[10];
 static uint8_t pl_hi[4][3];             /* hi-score per start level */
 static uint8_t pl_hi_idx;               /* start level hud_hi_bcd belongs to */
+static uint8_t pl_sel;                  /* start level picked in the menu (river_variant once built) */
+static uint8_t pl_frozen;               /* menu changed: the old river stands still until pl_wait_end */
+static uint16_t pl_wait_end;            /* sys_time at which the picked level's river starts */
 static uint8_t pl_nocol;                /* debug start (SELECT): the jet cannot crash */
 static uint8_t pl_rep;                  /* attract: frames until Up/Down repeats */
 static uint8_t pause_sel;               /* 0 = RESUME, 1 = EXIT */
@@ -155,6 +161,8 @@ void player_init(void) BANKED {
     hud_two = 0;
     hud_cur = 0;
     pl_hi_idx = river_variant;
+    pl_sel = river_variant;
+    pl_frozen = 0;
     hud_game = 1u;
     hud_lives = 0;
 }
@@ -428,7 +436,7 @@ static void player_swap_players(void) {
 
 /* Game number (the Atari's $09 + 1) and the scoreboard layout that goes with it. */
 static void player_show_game(void) {
-    hud_game = (uint8_t)(1u + (river_variant << 1) + pl_two);
+    hud_game = (uint8_t)(1u + (pl_sel << 1) + pl_two);
     hud_two = pl_two;
     hud_cur = pl_cur;
 }
@@ -490,6 +498,9 @@ static void player_attract(uint8_t variant) {
     DISPLAY_OFF;
     hud_bridge = river_init(variant);
     DISPLAY_ON;
+    pl_sel = river_variant;
+    pl_frozen = 0;
+    ent_hold = 0;                       /* the demo world moves again */
     pl_hi_idx = river_variant;
     hud_hi_bcd[0] = pl_hi[pl_hi_idx][0];
     hud_hi_bcd[1] = pl_hi[pl_hi_idx][1];
@@ -532,16 +543,34 @@ static void player_pause_update(void) {
 }
 
 /* Atari $A69D: the game number steps 0..7 and wraps; bit 0 is "two players" and
- * bits 1-2 the start level.  Up = next, Down = previous.  Only a change of start
- * level needs a new river; 1P <-> 2P is a scoreboard change. */
+ * bits 1-2 the start level.  Up = next, Down = previous.
+ *
+ * Like the Atari, a change only edits the scoreboard and freezes the old river
+ * (and its enemies: $76 = $FF, $29 = 0) and (re)loads the idle timer $2A = $25,
+ * counted down every 8 frames ($A2F5).  The picked level's river starts from
+ * black only when that timer runs out ($A688), or at START. */
+#define ATTRACT_SELECT_FRAMES   (0x25u * 8u)
+
 static void player_step_game(uint8_t pad) {
-    pl_t = (uint8_t)(((river_variant << 1) | pl_two) + ((pad & J_UP) ? 1u : 7u)) & 7u;
+    pl_t = (uint8_t)(((pl_sel << 1) | pl_two) + ((pad & J_UP) ? 1u : 7u)) & 7u;
     pl_two = (uint8_t)(pl_t & 1u);
-    if ((uint8_t)(pl_t >> 1) != river_variant) {
-        player_attract((uint8_t)(pl_t >> 1));
-    } else {
-        player_show_game();
+    if ((uint8_t)(pl_t >> 1) != pl_sel) {
+        /* New start level: its hi-score and first bridge number. */
+        pl_hi[pl_hi_idx][0] = hud_hi_bcd[0];
+        pl_hi[pl_hi_idx][1] = hud_hi_bcd[1];
+        pl_hi[pl_hi_idx][2] = hud_hi_bcd[2];
+        pl_sel = (uint8_t)(pl_t >> 1);
+        pl_hi_idx = pl_sel;
+        hud_hi_bcd[0] = pl_hi[pl_sel][0];
+        hud_hi_bcd[1] = pl_hi[pl_sel][1];
+        hud_hi_bcd[2] = pl_hi[pl_sel][2];
+        hud_bridge = atari_level_descriptors[pl_sel * 6u + 4u];
     }
+    river_freeze = 1u;
+    ent_hold = 1u;
+    pl_frozen = 1u;
+    pl_wait_end = (uint16_t)(sys_time + ATTRACT_SELECT_FRAMES);
+    player_show_game();
     sound_play_blip();
 }
 
@@ -552,16 +581,17 @@ static void player_respawn(uint8_t new_game);
 static void player_start_game(void) {
     hud_lives = 3u;
     pl_cur = 0;
+    pl_frozen = 0;
     pl_other[0] = 0;
     pl_other[1] = 0;
     pl_other[2] = 0;
     pl_other[3] = 3u;
-    pl_other[4] = atari_level_descriptors[river_variant * 6u + 4u];
+    pl_other[4] = atari_level_descriptors[pl_sel * 6u + 4u];
     pl_other[5] = pl_other[4];                  /* level */
-    pl_other[6] = atari_level_descriptors[river_variant * 6u + 0u];
-    pl_other[7] = atari_level_descriptors[river_variant * 6u + 1u];
-    pl_other[8] = atari_level_descriptors[river_variant * 6u + 2u];
-    pl_other[9] = atari_level_descriptors[river_variant * 6u + 3u];
+    pl_other[6] = atari_level_descriptors[pl_sel * 6u + 0u];
+    pl_other[7] = atari_level_descriptors[pl_sel * 6u + 1u];
+    pl_other[8] = atari_level_descriptors[pl_sel * 6u + 2u];
+    pl_other[9] = atari_level_descriptors[pl_sel * 6u + 3u];
     player_show_game();
     sound_play_blip();
     player_respawn(1);
@@ -590,7 +620,7 @@ static void player_respawn(uint8_t new_game) {
     player_kill_shot();
     DISPLAY_OFF;
     if (new_game) {
-        hud_bridge = river_init(river_variant);
+        hud_bridge = river_init(pl_sel);
     } else {
         river_restart(hud_bridge);
     }
@@ -609,6 +639,10 @@ static void player_respawn(uint8_t new_game) {
 }
 
 void player_update(void) BANKED {
+    /* The Atari blinks the active player's label + score from the (re)start
+     * until the first input ($76 in 1..$7F). */
+    hud_blink = (player_state == PLAYER_STATE_WAIT || player_state == PLAYER_STATE_READY);
+
     if (player_disable) {
         sound_set_engine(SOUND_ENGINE_OFF);
         river_speed = 1u;       /* tests expect 1 px/frame */
@@ -623,6 +657,9 @@ void player_update(void) BANKED {
     }
 
     if (player_state == PLAYER_STATE_ATTRACT) {
+        if (pl_frozen && (int16_t)((uint16_t)sys_time - pl_wait_end) >= 0) {
+            player_attract(pl_sel);     /* idle timer out: the picked level begins ($A688) */
+        }
         pl_pad = joypad();
         pl_new = (uint8_t)(pl_pad & ~player_prev_pad);
         player_prev_pad = pl_pad;
