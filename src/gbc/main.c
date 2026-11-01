@@ -40,7 +40,7 @@ volatile uint8_t playfield_scroll_y;
 /* The logic sprites; this file is compiled without the shadow_OAM rename.  The
  * NES code addresses 48 slots (the shot is slot 47, entities use up to 43), but
  * the GBC has 40 hardware sprites: oam_camera() packs the visible ones. */
-#define LOGIC_OAM_SLOTS     48u
+#define LOGIC_OAM_SLOTS     64u     /* NES slots 0..63: the pause menu letters use 56..63 */
 volatile struct OAM_item_t gbc_logic_oam[LOGIC_OAM_SLOTS];
 
 void hud_gbc_init(void);

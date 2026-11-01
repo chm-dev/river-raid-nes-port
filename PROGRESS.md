@@ -72,3 +72,8 @@ The NES history is in `archive/nes/PROGRESS.md`.
 - Build: `.\build_gbc.ps1` passes all checks; bank 3 `_CODE_3` $4000-$44D6. Not play-tested.
 
 - Follow-up 2026-11-01: explosion and crash noise raised one octave (`NOISE_UP`, a second `nr43_for` half). User play-tested the full sound set and passed it. `stubs_m1.c` removed.
+
+### 2026-11-01 - Fix invisible pause menu (branch `gbc-port`)
+
+- Cause: player.c draws the pause letters in NES OAM slots 56..63, but `gbc_logic_oam` had 48 slots (LOGIC_OAM_SLOTS), so those writes went past the array and oam_camera never saw them; only slots 2..4 (cursor, "I", "T") showed. Fix: LOGIC_OAM_SLOTS 64 in src/gbc/main.c (also removes the stray writes past the array).
+- `.\build_gbc.ps1` passes all checks. Awaiting user playtest.
