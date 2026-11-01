@@ -232,6 +232,16 @@ void player_init_graphics(void) BANKED {
         }
         set_sprite_data((uint8_t)(PAUSE_TILE_BASE + pl_step), 1, player_tile_buf);
     }
+#ifdef __SDCC_sm83
+    /* The cursor's plane icon ($5C).  The NES hud.c uploads HUD_LIFE_TILE; the
+     * GBC HUD keeps its plane in the window tiles, so this sprite tile would
+     * stay blank (an invisible cursor).  Plane 0: yellow, like the letters. */
+    for (pl_i = 0; pl_i < 8u; pl_i++) {
+        player_tile_buf[pl_i * 2u] = atari_charset[0x5Cu * 8u + pl_i];
+        player_tile_buf[pl_i * 2u + 1u] = 0x00u;
+    }
+    set_sprite_data(HUD_LIFE_TILE, 1, player_tile_buf);
+#endif
 }
 
 /*
