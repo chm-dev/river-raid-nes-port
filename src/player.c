@@ -438,7 +438,7 @@ static void player_update_shot(void) {
         }
 #endif
     }
-    /* The bar sits at columns 3..4 of its tile; shot_x is the box's left edge. */
+    /* The 1 px bar sits at column 3 of its tile; shot_x is the box's left edge (the hit box stays 2 px). */
     move_sprite(PLAYER_SHOT_SLOT, (uint8_t)(player.shot_x - 3u), player.shot_y);
     set_sprite_tile(PLAYER_SHOT_SLOT, entities_shot_tile());
     set_sprite_prop(PLAYER_SHOT_SLOT, S_PAL(0));

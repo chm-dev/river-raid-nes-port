@@ -92,3 +92,7 @@ The NES history is in `archive/nes/PROGRESS.md`.
 
 - Bugs: road green, grass not alternating between bridges. Cause: one BG palette on GBC; the NES per-row palette logic (`river_job_pal`, `river_land_alt`) had no GBC output. Fix: per-map-row BG attribute (VRAM bank 1) written in `river_emit_stripe` only when it changes (`river_slot_attr`), cleared in `river_start`; palettes 0 dark land, 2 bright land, 3 road (grey, yellow line), 1 stays the HUD. `ent_water_color` writes water into all three, only on state change.
 - Build: `.\build_gbc.ps1` passes all checks. Not play-tested.
+
+### 2026-11-01 - Player shot drawn 1 px wide (branch `gbc-port`)
+
+- Shot tile in `tools/gen_entity_gfx.py` is now one pixel column (0x10, was 0x18); regenerated `src/entity_gfx.c` (shared with NES). Draw x offset (shot_x - 3) still puts the column at shot_x; hit box unchanged. `.\build_gbc.ps1` passes all checks. Not playtested.
