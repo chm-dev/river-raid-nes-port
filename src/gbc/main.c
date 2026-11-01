@@ -70,9 +70,9 @@ static uint8_t cam_spawn_set;       /* camera_x holds this river's spawn view */
  * 3 water; 2 is spare (road line).  One palette for now; per-row colour is
  * milestone 3. */
 static const palette_color_t bkg_palette[4][4] = {
-    { GBC_RGB_BLACK, GBC_RGB_LAND, GBC_RGB_YELLOW, GBC_RGB_WATER },     /* 0 land */
+    { GBC_RGB_BLACK, GBC_RGB_LAND, GBC_RGB_BROWN, GBC_RGB_WATER },     /* 0 land */
     { GBC_RGB_BLACK, GBC_RGB_BLACK, GBC_RGB_BLACK, GBC_RGB_BLACK },     /* 1 HUD (hud_gbc_init) */
-    { GBC_RGB_BLACK, GBC_RGB_ALT, GBC_RGB_YELLOW, GBC_RGB_WATER },      /* 2 bright land */
+    { GBC_RGB_BLACK, GBC_RGB_ALT, GBC_RGB_BROWN, GBC_RGB_WATER },      /* 2 bright land */
     { GBC_RGB_BLACK, GBC_RGB_ROAD, GBC_RGB_YELLOW, GBC_RGB_WATER }      /* 3 road */
 };
 

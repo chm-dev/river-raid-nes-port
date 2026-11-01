@@ -117,8 +117,8 @@ static uint8_t ent_random(void) {
  * colour 3.  The NES palette macro above is a no-op here, so write the whole
  * palette.  c is 0 for normal water, nonzero for the flash colour. */
 static const palette_color_t ent_gbc_pal[3][4] = {
-    { GBC_RGB_BLACK, GBC_RGB_LAND, GBC_RGB_YELLOW, GBC_RGB_WATER },
-    { GBC_RGB_BLACK, GBC_RGB_ALT, GBC_RGB_YELLOW, GBC_RGB_WATER },
+    { GBC_RGB_BLACK, GBC_RGB_LAND, GBC_RGB_BROWN, GBC_RGB_WATER },
+    { GBC_RGB_BLACK, GBC_RGB_ALT, GBC_RGB_BROWN, GBC_RGB_WATER },
     { GBC_RGB_BLACK, GBC_RGB_ROAD, GBC_RGB_YELLOW, GBC_RGB_WATER }
 };
 static uint8_t ent_flash_cur;

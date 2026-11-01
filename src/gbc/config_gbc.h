@@ -28,7 +28,7 @@
 #define GBC_VIEW_TOP_SCANLINE   (240u - GBC_VIEW_LINES)
 
 /* River BG palettes (BG attribute map, VRAM bank 1, bit 3 clear).  Index 0
- * outline black, 1 land / road grey, 2 hills / road line yellow, 3 water.
+ * outline black, 1 land / road grey, 2 hills brown / road line yellow, 3 water.
  * Palette 1 is the HUD's.  Palette 0 is also the default of a cleared map.
  * Used by gbc/main.c (load) and entities.c (bridge-hit water flash). */
 #define GBC_PAL_LAND            0u      /* dark green land ($D2) */
@@ -37,7 +37,8 @@
 #define GBC_RIVER_PALS          4u
 #define GBC_RGB_BLACK           RGB(0, 0, 0)
 #define GBC_RGB_YELLOW          RGB(28, 26, 6)
-#define GBC_RGB_WATER           RGB(6, 12, 26)
+#define GBC_RGB_BROWN           RGB(15, 9, 3)   /* hills / trees: land palettes' index 2 */
+#define GBC_RGB_WATER          RGB(6, 12, 26)
 #define GBC_RGB_FLASH           RGB(24, 5, 3)
 #define GBC_RGB_LAND            RGB(5, 17, 5)
 #define GBC_RGB_ALT             RGB(3, 24, 3)
