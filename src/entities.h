@@ -20,6 +20,7 @@
 #define ENT_AUX_EXPLODE_FIRST   2u
 #define ENT_AUX_EXPLODE_LAST    6u
 #define ENT_AUX_JET             7u
+#define ENT_AUX_BALLOON         12u
 #define ENT_AUX_SHIP            13u
 #define ENT_AUX_BRIDGE          14u
 #define ENT_AUX_FUEL            15u

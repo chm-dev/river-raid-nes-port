@@ -1481,6 +1481,9 @@ static void ent_draw(void) {
     e_prop = (uint8_t)(ent_gfx_pal[e_src] | e_flip);
     e_rows = ent_gfx_rows[e_src];
     e_y = ent_y[e_i];
+    if (e_type == ENT_AUX_BALLOON) {
+        e_y = (uint8_t)(e_y - 4u);  /* the tiles are padded 4 rows at the top */
+    }
     e_ex = ent_x[e_i];
     if (e_flip) {
         e_ex = (uint8_t)(e_ex + ((e_cols - 1u) << 3));
@@ -1499,6 +1502,10 @@ static void ent_draw(void) {
             continue;
         }
         e_px = e_ex;
+        if (e_type == ENT_AUX_BALLOON && (uint8_t)(e_t + 8u) >= e_rows) {
+            /* The last tile row is the brown basket: sprite palette 1. */
+            e_prop = (uint8_t)((e_prop & ~3u) | 1u);
+        }
         ent_emit_row();
     }
     if (e_type < ENT_AUX_TANK) {

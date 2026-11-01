@@ -82,7 +82,7 @@ static const palette_color_t bkg_palette[4][4] = {
  * transparent. */
 static const palette_color_t spr_palette[4][4] = {
     { RGB(0, 0, 0), RGB(31, 28, 6), RGB(31, 31, 31), RGB(30, 6, 4) },
-    { RGB(0, 0, 0), RGB(3, 14, 4), RGB(18, 11, 4), RGB(20, 20, 6) },
+    { RGB(0, 0, 0), RGB(3, 14, 4), GBC_RGB_BROWN, RGB(20, 20, 6) },
     { RGB(0, 0, 0), RGB(0, 0, 0), RGB(31, 28, 6), RGB(4, 6, 18) },
     { RGB(0, 0, 0), RGB(0, 0, 0), RGB(22, 4, 4), RGB(6, 28, 28) }
 };
