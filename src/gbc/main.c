@@ -28,6 +28,7 @@
 #include "player.h"
 #include "entities.h"
 #include "collision.h"
+#include "sound.h"
 
 #ifndef LOGIC_FRAMES
 #define LOGIC_FRAMES 2u             /* player/entities every n-th frame: 2 = 30 Hz */
@@ -172,6 +173,7 @@ void main(void) {
      * no-op in entities.c, garbage in player.c); set the real ones last. */
     set_sprite_palette(0, 4, &spr_palette[0][0]);
     hud_gbc_init();
+    sound_init();
 
     river_init(0);
     player_init();
@@ -197,6 +199,7 @@ void main(void) {
             game_ticks = 4u;
         }
         frame_counter++;
+        sound_update();                 /* real frame count, before game_ticks is merged */
         if ((uint8_t)(logic_acc + game_ticks) < LOGIC_FRAMES) {
             hud_update();               /* VRAM writes, still in VBlank */
         }

@@ -56,7 +56,7 @@ Real river and entity code on the C paths, timed in Gearboy at 1.5 px/frame with
 | `entity_gfx` | 181 | Reuse the tiles after checking their byte order; replace palette data |
 | `hud.c` | 663 | Rewrite the layout |
 | `main.c` | 130 | Rewrite; simpler without the split |
-| `sound.c` | 460 | Rewrite for the GB sound chip; stub in the prototype |
+| `sound.c` | 460 | Done: `src/gbc/sound_gbc.c` (bank 3), play-tested 2026-11-01 |
 | 6502 assembly (~1,070 lines), NES tests | | Not reusable. `tests/host_river.ps1` still checks the generator |
 
 ## Milestones

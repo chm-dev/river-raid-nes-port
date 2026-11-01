@@ -13,7 +13,7 @@
 #   - the .noi exists and holds the symbols tests read.
 param(
     [string[]]$Sources = @(
-        'src/gbc/main.c', 'src/gbc/stubs_m1.c', 'src/gbc/hud_gbc.c', 'src/atari_data.c',
+        'src/gbc/main.c', 'src/gbc/sound_gbc.c', 'src/gbc/hud_gbc.c', 'src/atari_data.c',
         'src/collision.c', 'src/river.c', 'src/entities.c', 'src/entity_gfx.c', 'src/player.c'),
     [string]$Name = 'river_raid',
     [int]$Banks = 4,
@@ -41,6 +41,7 @@ foreach ($src in $Sources) {
     $a = @('-msm83:gb', '-Isrc')
     if ($base -in 'entities', 'entity_gfx') { $a += '-Wf-bo1' }
     if ($base -eq 'player') { $a += '-Wf-bo2' }
+    if ($base -eq 'sound_gbc') { $a += '-Wf-bo3' }
     if ($ProfExport) { $a += '-DPROF_EXPORT_STATICS' }
     # Game logic writes sprites in NES coordinates into gbc_logic_oam; only
     # gbc/main.c sees the real shadow_OAM and translates (camera, +16/+8).
