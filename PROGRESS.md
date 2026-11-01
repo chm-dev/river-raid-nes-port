@@ -96,3 +96,8 @@ The NES history is in `archive/nes/PROGRESS.md`.
 ### 2026-11-01 - Player shot drawn 1 px wide (branch `gbc-port`)
 
 - Shot tile in `tools/gen_entity_gfx.py` is now one pixel column (0x10, was 0x18); regenerated `src/entity_gfx.c` (shared with NES). Draw x offset (shot_x - 3) still puts the column at shot_x; hit box unchanged. `.\build_gbc.ps1` passes all checks. Not playtested.
+
+### 2026-11-01 - Pause menu centred on the GBC screen (branch `gbc-port`)
+
+- Bug: the pause menu was horizontally centred only for one camera position and sat too high (rows at screen y -1 and 15, i.e. half off the top). Cause: the menu sprites were NES logic coordinates run through the camera. Fix: while `player_state` is PAUSE, `oam_camera()` copies logic slots 56..63 and 2..4 to hardware OAM untranslated; under `__SDCC_sm83` `src/player.c` uses hardware coordinates (rows at screen y 60 and 76, columns 48..112: centre 72 of 144 and 80 of 160) and the hide band moves to logic scanlines 172..197. NES unchanged.
+- Build: `.\build_gbc.ps1` passes all checks. Not playtested (marked [~]).

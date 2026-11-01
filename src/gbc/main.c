@@ -58,6 +58,7 @@ static uint8_t logic_acc;       /* frames since the last logic pass */
 #define GBC_CAM_STEP        2u      /* px per frame the camera may move */
 static uint8_t camera_x;
 #define GBC_PLAYER_STATE_WAIT 3u    /* = PLAYER_STATE_WAIT in player.c */
+#define GBC_PLAYER_STATE_PAUSE 6u   /* = PLAYER_STATE_PAUSE in player.c */
 #define GBC_PLAYER_WIDTH      8u    /* = PLAYER_WIDTH in player.c */
 
 /* Index meaning is set by the river tiles: 0 outline (black), 1 land,
@@ -146,6 +147,15 @@ static void oam_camera(void) {
     for (i = 0; i < LOGIC_OAM_SLOTS && n < 40u; i++) {
         y = gbc_logic_oam[i].y;
         if (y >= 232u) {
+            continue;
+        }
+        /* Pause menu slots (player.c) hold hardware coordinates: no camera. */
+        if (player_state == GBC_PLAYER_STATE_PAUSE && (i >= 56u || (i >= 2u && i <= 4u))) {
+            shadow_OAM[n].y = y;
+            shadow_OAM[n].x = gbc_logic_oam[i].x;
+            shadow_OAM[n].tile = gbc_logic_oam[i].tile;
+            shadow_OAM[n].prop = (uint8_t)(gbc_logic_oam[i].prop | S_BANK);
+            n++;
             continue;
         }
         y = (uint8_t)(y - (GBC_VIEW_TOP_SCANLINE - 8u));        /* vy + 8 */

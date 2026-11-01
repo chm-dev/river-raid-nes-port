@@ -76,11 +76,24 @@ typedef char hud_top_tiles_clear[(TILE_TOP_YELLOW >= PAUSE_TILE_BASE + PAUSE_GLY
                                   && TILE_TOP_RIGHT + TILE_TOP_COUNT <= 256u) ? 1 : -1];
 #define PAUSE_PARTS             10u     /* letters; the cursor is slot PAUSE_CURSOR_SLOT */
 #define PAUSE_CURSOR_SLOT       2u
+#ifdef __SDCC_sm83
+/* GBC: oam_camera() copies the menu slots to the hardware OAM untranslated while
+ * paused, so these are hardware coordinates (screen px + 16 / + 8).  Menu block:
+ * screen rows 60..84 (centre 72 of 144), columns 48..112 (centre 80 of 160).
+ * The band is the same rows in logic scanlines (screen row + 112). */
+#define PAUSE_ROW1_Y            77u
+#define PAUSE_ROW2_Y            93u
+#define PAUSE_BAND_TOP          172u
+#define PAUSE_BAND_BOT          197u
+#define PAUSE_X_SHIFT           32u
+#else
 #define PAUSE_ROW1_Y            112u
 #define PAUSE_ROW2_Y            128u
 #define PAUSE_BAND_TOP          104u    /* sprites overlapping these scanlines are hidden */
 #define PAUSE_BAND_BOT          144u
-#define PAUSE_CURSOR_X          88u
+#define PAUSE_X_SHIFT           0u
+#endif
+#define PAUSE_CURSOR_X          (88u - PAUSE_X_SHIFT)
 
 /* Charset codes; the game only patches the letters its own text uses, so X is
  * the OS-font glyph at 120, not the alphabetical 24 (that is a comma). */
@@ -502,7 +515,7 @@ static void player_pause_draw(void) {
         pl_slot = pause_slot[pl_i];
         set_sprite_tile(pl_slot, (uint8_t)(PAUSE_TILE_BASE + pause_tile[pl_i]));
         set_sprite_prop(pl_slot, S_PAL(0));
-        move_sprite(pl_slot, pause_x[pl_i],
+        move_sprite(pl_slot, (uint8_t)(pause_x[pl_i] - PAUSE_X_SHIFT),
                     (uint8_t)((pl_i < 6u ? PAUSE_ROW1_Y : PAUSE_ROW2_Y) - 1u));
     }
     set_sprite_tile(PAUSE_CURSOR_SLOT, HUD_LIFE_TILE);     /* the plane icon */
