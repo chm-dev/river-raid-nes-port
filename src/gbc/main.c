@@ -217,6 +217,17 @@ static void oam_camera(void) {
     }
 }
 
+/* The HUD Window starts at screen line GBC_VIEW_LINES and sprites draw over it,
+ * so entities would stay visible on the HUD until culled.  LYC fires on the last
+ * playfield line; once its HBlank is reached (the line's sprites are drawn) the
+ * sprite layer is switched off, and the main loop switches it on again in VBlank.
+ * Short on purpose, no banked calls (rule 2). */
+static void hud_hide_sprites_isr(void) {
+    while ((STAT_REG & STATF_BUSY) != 0u) {
+    }
+    LCDC_REG &= (uint8_t)~LCDCF_OBJON;
+}
+
 void main(void) {
     uint8_t i;
 
@@ -252,6 +263,10 @@ void main(void) {
     oam_camera();
     SHOW_BKG;
     SHOW_SPRITES;
+    LYC_REG = (uint8_t)(GBC_VIEW_LINES - 1u);
+    STAT_REG |= STATF_LYC;
+    add_LCD(hud_hide_sprites_isr);
+    set_interrupts(VBL_IFLAG | LCD_IFLAG);
     DISPLAY_ON;
 
     main_last = (uint8_t)sys_time;
@@ -259,6 +274,7 @@ void main(void) {
         /* Wait for a new frame, but only if none passed during the last
          * pass: an overrun pass starts the next one at once (catch-up). */
         vsync();
+        SHOW_SPRITES;                   /* hud_hide_sprites_isr turned them off */
         apply_camera();
 
         game_ticks = (uint8_t)((uint8_t)sys_time - main_last);
