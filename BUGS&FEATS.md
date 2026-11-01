@@ -18,6 +18,7 @@ Found in the milestone 1 playtest (`roms/m1_jet.gb`, 2026-10-31). All expected a
 - [ ] **Flash after hitting bridge with tank on it is not present**
 - [ ] **Road color should be gray and is green**
 - [ ] **Grass color does not alternate between bridges**
+- [ ] **Plane's projectile should be 1px in width (is 2px)**[All platforms]
 - [ ] 
 # FEATURES
 - [x] **Move the jet lower on screen.** The view is bottom-anchored (`GBC_VIEW_TOP_SCANLINE` 112), so only the jet's logic Y can move it: `PLAYER_START_Y` is 222 on GBC (was 218; sprites at y >= 232 are culled, so 222 is the limit). It also sets reaction time, the plan's main risk. If 4 px is not enough, thin the HUD Window (16 px) for look-ahead.
