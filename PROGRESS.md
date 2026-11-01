@@ -87,3 +87,8 @@ The NES history is in `archive/nes/PROGRESS.md`.
 
 - Bug: no flash after shooting a bridge with the tank on it. The flash logic (`bridge_flash`, `ent_flash_tick`) was shared, but `ent_water_color` used `set_bkg_palette_entry`, which `entities.c` defines away. Added a `__SDCC_sm83` branch that rewrites BG palette 0 colour 3 (water) with `set_bkg_palette`: dark red RGB(24,5,3) on odd remaining frames for 23 frames, else RGB(6,12,26). NES path unchanged.
 - Build: `.\build_gbc.ps1` passes all checks. Not play-tested (marked [~]).
+
+### 2026-11-01 - GBC road and grass colours (branch `gbc-port`)
+
+- Bugs: road green, grass not alternating between bridges. Cause: one BG palette on GBC; the NES per-row palette logic (`river_job_pal`, `river_land_alt`) had no GBC output. Fix: per-map-row BG attribute (VRAM bank 1) written in `river_emit_stripe` only when it changes (`river_slot_attr`), cleared in `river_start`; palettes 0 dark land, 2 bright land, 3 road (grey, yellow line), 1 stays the HUD. `ent_water_color` writes water into all three, only on state change.
+- Build: `.\build_gbc.ps1` passes all checks. Not play-tested.

@@ -63,8 +63,11 @@ static uint8_t camera_x;
 /* Index meaning is set by the river tiles: 0 outline (black), 1 land,
  * 3 water; 2 is spare (road line).  One palette for now; per-row colour is
  * milestone 3. */
-static const palette_color_t bkg_palette[4] = {
-    RGB(0, 0, 0), RGB(5, 17, 5), RGB(28, 26, 6), RGB(6, 12, 26)
+static const palette_color_t bkg_palette[4][4] = {
+    { GBC_RGB_BLACK, GBC_RGB_LAND, GBC_RGB_YELLOW, GBC_RGB_WATER },     /* 0 land */
+    { GBC_RGB_BLACK, GBC_RGB_BLACK, GBC_RGB_BLACK, GBC_RGB_BLACK },     /* 1 HUD (hud_gbc_init) */
+    { GBC_RGB_BLACK, GBC_RGB_ALT, GBC_RGB_YELLOW, GBC_RGB_WATER },      /* 2 bright land */
+    { GBC_RGB_BLACK, GBC_RGB_ROAD, GBC_RGB_YELLOW, GBC_RGB_WATER }      /* 3 road */
 };
 
 /* Sprite palettes: 0 jet / fuel depot / shot, 1 bridge, 2 helicopters, 3 ships
@@ -171,7 +174,7 @@ void main(void) {
     cpu_fast();
 
     DISPLAY_OFF;
-    set_bkg_palette(0, 1, bkg_palette);
+    set_bkg_palette(0, GBC_RIVER_PALS, &bkg_palette[0][0]);
     for (i = 0; i < LOGIC_OAM_SLOTS; i++) {
         gbc_logic_oam[i].y = 240u;
     }

@@ -1818,6 +1818,9 @@ static uint8_t river_road_slot;       /* first (odd) slot of the road, or 0xFF *
 static uint8_t river_road_stage;      /* margin/attribute writes done for the job */
 static uint8_t river_land_alt;        /* land colour: 0 = $D2, 1 = $D6 */
 static uint8_t river_job_pal;         /* BG palette of the pending tile row */
+#ifdef __SDCC_sm83
+static uint8_t river_slot_attr[RIVER_RING_ROWS];   /* BG attribute last written per map row */
+#endif
 static uint8_t river_flip_age;        /* tile rows since the land colour flipped (255 = long ago) */
 static uint8_t river_pending_slot;
 static uint8_t river_job;             /* tile row waiting for classification */
@@ -1965,6 +1968,20 @@ static uint8_t river_emit_stripe(void) {
         for (rj_n = 0; rj_n < RIVER_TILE_COLS; rj_n++) {
             set_vram_byte((uint8_t *)(rj_addr + rj_n), river_row_ids[rj_n]);
         }
+#ifdef __SDCC_sm83
+        /* Colour: the BG attribute (VRAM bank 1) of this map row, written only
+         * when it changes (land flips and road rows are rare). */
+        rj_c = (river_job_pal == ROAD_PALETTE) ? GBC_PAL_ROAD :
+               (river_job_pal == PLAYFIELD_ALT_PALETTE) ? GBC_PAL_ALT : GBC_PAL_LAND;
+        if (river_slot_attr[river_pending_slot] != rj_c) {
+            river_slot_attr[river_pending_slot] = rj_c;
+            VBK_REG = 1;
+            for (rj_n = 0; rj_n < RIVER_TILE_COLS; rj_n++) {
+                set_vram_byte((uint8_t *)(rj_addr + rj_n), rj_c);
+            }
+            VBK_REG = 0;
+        }
+#endif
         return 1u;
     }
     vp_hi = (uint8_t)(rj_addr >> 8);
@@ -2386,6 +2403,14 @@ static void river_start(uint8_t restart, uint8_t bridges) {
     /* Playfield attributes: palette 2 (all four 16x16 blocks in each byte). */
     for (i = 0; i < 64u; i++) {
         set_vram_byte((uint8_t *)(PPU_NT1_ATTR + i), 0xAAu);
+    }
+#else
+    /* Clear the BG attribute map (VRAM bank 1): palette 0, tile bank 0. */
+    VBK_REG = 1;
+    fill_bkg_rect(0, 0, 32, 32, 0);
+    VBK_REG = 0;
+    for (i = 0; i < RIVER_RING_ROWS; i++) {
+        river_slot_attr[i] = 0u;
     }
 #endif
 

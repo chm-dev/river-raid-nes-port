@@ -116,12 +116,30 @@ static uint8_t ent_random(void) {
 /* GBC: the river uses BG palette 0 only (gbc/main.c bkg_palette); water is
  * colour 3.  The NES palette macro above is a no-op here, so write the whole
  * palette.  c is 0 for normal water, nonzero for the flash colour. */
-static palette_color_t ent_gbc_pal[4] = {
-    RGB(0, 0, 0), RGB(5, 17, 5), RGB(28, 26, 6), RGB(6, 12, 26)
+static const palette_color_t ent_gbc_pal[3][4] = {
+    { GBC_RGB_BLACK, GBC_RGB_LAND, GBC_RGB_YELLOW, GBC_RGB_WATER },
+    { GBC_RGB_BLACK, GBC_RGB_ALT, GBC_RGB_YELLOW, GBC_RGB_WATER },
+    { GBC_RGB_BLACK, GBC_RGB_ROAD, GBC_RGB_YELLOW, GBC_RGB_WATER }
 };
+static uint8_t ent_flash_cur;
+static palette_color_t ent_flash_pal[3][4];
+static uint8_t ent_flash_k;
 static void ent_water_color(uint8_t flash) {
-    ent_gbc_pal[3] = flash ? RGB(24, 5, 3) : RGB(6, 12, 26);
-    set_bkg_palette(0, 1, ent_gbc_pal);
+    if (flash == ent_flash_cur) {
+        return;
+    }
+    ent_flash_cur = flash;
+    for (ent_flash_k = 0; ent_flash_k < 12u; ent_flash_k++) {
+        ((palette_color_t *)ent_flash_pal)[ent_flash_k] =
+            ((const palette_color_t *)ent_gbc_pal)[ent_flash_k];
+    }
+    for (ent_flash_k = 0; ent_flash_k < 3u; ent_flash_k++) {
+        ent_flash_pal[ent_flash_k][3] = flash ? GBC_RGB_FLASH : GBC_RGB_WATER;
+    }
+    /* Palette numbers GBC_PAL_LAND/ALT/ROAD are 0, 2, 3. */
+    set_bkg_palette(GBC_PAL_LAND, 1, ent_flash_pal[0]);
+    set_bkg_palette(GBC_PAL_ALT, 1, ent_flash_pal[1]);
+    set_bkg_palette(GBC_PAL_ROAD, 1, ent_flash_pal[2]);
 }
 #else
 static void ent_water_color(palette_color_t c) {
