@@ -680,7 +680,14 @@ static void player_start_game(void) {
 
 /* Put the jet at the centre of the river under it. */
 static void player_center(void) {
+#ifdef __SDCC_sm83
+    /* A fixed slot, not the one at player.y: the scroll-in may stop up to a
+     * few px late, which moves player.y onto the slot above (3 px off centre)
+     * and the camera, aimed at this slot all along, would jump. */
+    pl_slot = RIVER_SPAWN_SLOT;
+#else
     pl_slot = river_slot_at_scanline(player.y);
+#endif
     pl_l = river_left_x[pl_slot];
     pl_r = river_right_x[pl_slot];
     if (pl_r == 0u) {

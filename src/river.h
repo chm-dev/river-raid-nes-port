@@ -20,6 +20,15 @@
 #endif
 #define RIVER_COLS              32u
 
+#ifdef __SDCC_sm83
+/* Ring slot of the third tile row river_start() generates (the first is
+ * RIVER_RING_ROWS - 2): it lies under the jet when the scroll-in stops.  The
+ * jet spawns on its centre (player_center) and the camera aims there during
+ * attract and the scroll-in (gbc/main.c), so the view never jumps when the jet
+ * appears, whatever the scroll overshoot. */
+#define RIVER_SPAWN_SLOT        (RIVER_ROWS - 4u)
+#endif
+
 /* The whole 48-byte Atari row is shown: 24 tiles of river area (nametable
  * columns 4..27) between 4 land columns on each side.  Generator banks can
  * reach bytes 3..46 at high levels, outside the 40-byte window of the

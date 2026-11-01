@@ -57,10 +57,12 @@ static uint8_t logic_acc;       /* frames since the last logic pass */
 #define GBC_CAM_MAX_X       32u
 #define GBC_CAM_STEP        2u      /* px per frame the camera may move */
 #define GBC_CAM_CENTER      (GBC_CAM_MAX_X / 2u)
+#define GBC_CAM_JET_X       (SOURCE_X_OFFSET + 76u) /* jet X that puts the camera at 0 */
 static uint8_t camera_x = GBC_CAM_CENTER;
-static uint8_t cam_prev_state = 0xFFu;
+static uint8_t cam_spawn_set;       /* camera_x holds this river's spawn view */
 #define GBC_PLAYER_STATE_ATTRACT 5u /* = PLAYER_STATE_ATTRACT in player.h */
 #define GBC_PLAYER_STATE_WAIT 3u    /* = PLAYER_STATE_WAIT in player.c */
+#define GBC_PLAYER_STATE_READY 4u   /* = PLAYER_STATE_READY in player.c */
 #define GBC_PLAYER_STATE_PAUSE 6u   /* = PLAYER_STATE_PAUSE in player.c */
 #define GBC_PLAYER_WIDTH      8u    /* = PLAYER_WIDTH in player.c */
 
@@ -102,42 +104,52 @@ static void gbc_required(void) {
     }
 }
 
-/* Centre the view on the jet, clamped to the ring, a few pixels per frame. */
+/* Camera X for a jet at logic X `jet_x`, clamped to the ring. */
+static uint8_t camera_for(int16_t jet_x) {
+    jet_x -= (int16_t)GBC_CAM_JET_X;
+    if (jet_x < 0) {
+        return 0u;
+    }
+    return (jet_x > (int16_t)GBC_CAM_MAX_X) ? (uint8_t)GBC_CAM_MAX_X : (uint8_t)jet_x;
+}
+
+/* Centre the view on the jet, clamped to the ring, a few pixels per frame.
+ *
+ * Attract and the (re)spawn scroll-in (WAIT) have no jet: the view holds the
+ * X the jet will give it when it appears.  player_center() puts the jet on the
+ * centre of RIVER_SPAWN_SLOT, so that is computed with the same formula and
+ * set at once, not eased.  river_start() zeroes every slot's bounds and a
+ * generated row is never 0, so a zero there means a fresh river whose spawn
+ * slot is not generated yet: keep the old X meanwhile (the slot is written
+ * ~12 scrolled rows after the start, while the whole view is still black).
+ * The value is latched because attract keeps scrolling and the ring later
+ * overwrites the slot; it is re-read after every river_init/river_restart,
+ * including the attract-menu level change, which stays in ATTRACT. */
 static void camera_follow(void) {
-    int16_t want = (int16_t)player.x - (int16_t)SOURCE_X_OFFSET - 76;
-    uint8_t slot;
+    uint8_t want;
 
-    /* Entering attract or a (re)spawn scroll-in: snap to the centre so the X
-     * of the previous death does not carry over. */
-    if (player_state != cam_prev_state) {
-        cam_prev_state = player_state;
-        if (player_state == GBC_PLAYER_STATE_WAIT || player_state == GBC_PLAYER_STATE_ATTRACT) {
-            camera_x = GBC_CAM_CENTER;
+    if (player_state == GBC_PLAYER_STATE_ATTRACT || player_state == GBC_PLAYER_STATE_WAIT) {
+        if (river_right_x[RIVER_SPAWN_SLOT] == 0u) {
+            cam_spawn_set = 0;
+        } else if (!cam_spawn_set) {
+            cam_spawn_set = 1u;
+            camera_x = camera_for((int16_t)(SOURCE_X_OFFSET - (GBC_PLAYER_WIDTH >> 1)) +
+                                  (int16_t)(((uint16_t)river_left_x[RIVER_SPAWN_SLOT] +
+                                             river_right_x[RIVER_SPAWN_SLOT]) >> 1));
         }
+        return;
     }
-    if (player_state == GBC_PLAYER_STATE_ATTRACT) {
-        want = GBC_CAM_CENTER;          /* no jet in attract: hold the centre */
-    }
+    cam_spawn_set = 0;
 
-    /* While the river scrolls in (WAIT) the jet is not placed yet: aim at the
-     * river centre on its spawn row, where player_center() will put it, so
-     * the view is already there when the jet appears. */
-    if (player_state == GBC_PLAYER_STATE_WAIT) {
-        slot = river_slot_at_scanline(PLAYER_START_Y);
-        if (river_right_x[slot] != 0u) {
-            want = (int16_t)(((uint16_t)river_left_x[slot] + river_right_x[slot]) >> 1) -
-                   (int16_t)(GBC_PLAYER_WIDTH >> 1) - 76;
-        }
+    want = camera_for((int16_t)player.x);
+    if (player_state == GBC_PLAYER_STATE_READY) {
+        camera_x = want;                /* the jet just appeared: no easing (already equal) */
+        return;
     }
-    if (want < 0) {
-        want = 0;
-    } else if (want > (int16_t)GBC_CAM_MAX_X) {
-        want = GBC_CAM_MAX_X;
-    }
-    if (want > (int16_t)camera_x) {
-        camera_x = (uint8_t)((want - camera_x > GBC_CAM_STEP) ? camera_x + GBC_CAM_STEP : want);
-    } else if (want < (int16_t)camera_x) {
-        camera_x = (uint8_t)((camera_x - want > GBC_CAM_STEP) ? camera_x - GBC_CAM_STEP : want);
+    if (want > camera_x) {
+        camera_x = ((uint8_t)(want - camera_x) > GBC_CAM_STEP) ? (uint8_t)(camera_x + GBC_CAM_STEP) : want;
+    } else if (want < camera_x) {
+        camera_x = ((uint8_t)(camera_x - want) > GBC_CAM_STEP) ? (uint8_t)(camera_x - GBC_CAM_STEP) : want;
     }
 }
 

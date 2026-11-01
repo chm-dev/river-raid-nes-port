@@ -2329,6 +2329,12 @@ void river_init_tiles(void) {
  * Atari does after a lost life ($B0F0 with X=$12 reloads only the generator
  * defaults, then $A3C8 loads the LFSR and rg_left from $66-$69; the level,
  * score and lives are kept).  bridges is the HUD bridge counter. */
+#ifdef __SDCC_sm83
+/* river.h's spawn slot is the third tile row generated below (river_slot
+ * starts at RIVER_RING_ROWS - 1 and steps down before each tile row). */
+typedef char river_spawn_slot_check[(RIVER_SPAWN_SLOT == RIVER_RING_ROWS - 4u) ? 1 : -1];
+#endif
+
 static void river_start(uint8_t restart, uint8_t bridges) {
     uint8_t i;
 
