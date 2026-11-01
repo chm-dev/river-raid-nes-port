@@ -27,6 +27,10 @@
 #define GBC_VIEW_LINES          128u
 #define GBC_VIEW_TOP_SCANLINE   (240u - GBC_VIEW_LINES)
 
+/* The view reaches logic scanline 239 (the NES HUD hid 232..239), so sprites
+ * are culled and despawned only from 240. */
+#define ENT_CULL_Y              240u
+
 /* River BG palettes (BG attribute map, VRAM bank 1, bit 3 clear).  Index 0
  * outline black, 1 land / road grey, 2 hills brown / road line yellow, 3 water.
  * Palette 1 is the HUD's.  Palette 0 is also the default of a cleared map.

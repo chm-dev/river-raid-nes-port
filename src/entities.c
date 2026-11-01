@@ -684,7 +684,7 @@ static uint8_t ent_bridge_hit(void) {
 /* Jet box (8x14 at e_px, e_y) against the swelling fireball in slot e_i;
  * entirely on screen only.  Scratch: e_l, e_r, e_slot. */
 static uint8_t ent_shell_hits(void) {
-    if (ent_y[e_i] >= 232u) {
+    if (ent_y[e_i] >= ENT_CULL_Y) {
         return 0;
     }
     e_slot = (uint8_t)(((ent_aux[e_i] - SHELL_FLY_FRAMES) >> 3) << 2);
@@ -1155,7 +1155,7 @@ static void ent_missile_tick(void) {
         return;
     }
     msl_y = (uint8_t)(ent_y[e_t] + river_scrolled);
-    if (msl_y < MISSILE_FIRE_Y || msl_y >= 232u) {
+    if (msl_y < MISSILE_FIRE_Y || msl_y >= ENT_CULL_Y) {
         return;
     }
     if (ent_flags[e_t] & ENT_F_LEFT) {
@@ -1287,7 +1287,7 @@ static void ent_draw_bridge_debris(void) {
     e_c = (uint8_t)((e_type - ENT_AUX_EXPLODE_FIRST) * 12u);
     e_y = ent_y[e_i];
     for (e_t = 0; e_t < 3u; e_t++, e_y = (uint8_t)(e_y + 8u)) {
-        if (e_y < HUD_SPLIT_SCANLINE || e_y >= 232u) {
+        if (e_y < HUD_SPLIT_SCANLINE || e_y >= ENT_CULL_Y) {
             continue;
         }
         for (e_cols = 0; e_cols < 4u; e_cols++) {
@@ -1497,7 +1497,7 @@ static void ent_draw(void) {
         e_off = (uint8_t)(e_oam << 2);
     }
     for (e_t = 0; e_t < e_rows; e_t += 8u, e_y = (uint8_t)(e_y + 8u)) {
-        if (e_y < HUD_SPLIT_SCANLINE || e_y >= 232u || e_off >= 176u) {
+        if (e_y < HUD_SPLIT_SCANLINE || e_y >= ENT_CULL_Y || e_off >= 176u) {
             e_tile = (uint8_t)(e_tile + e_cols);
             continue;
         }
@@ -1525,7 +1525,7 @@ void entities_follow(void) BANKED {
     }
 #ifndef __SDCC_mos6502
     for (e_t = ENT_OAM_TANK; e_t < ent_oam_used; e_t++) {
-        if (shadow_OAM[e_t].y >= 232u) {
+        if (shadow_OAM[e_t].y >= ENT_CULL_Y) {
             continue;
         }
         shadow_OAM[e_t].y = (uint8_t)(shadow_OAM[e_t].y + river_rows_last);
@@ -1604,7 +1604,7 @@ void entities_update(void) BANKED {
         /* Put the bar on the road once the road's top is on the ring: bar
          * rows 2..16 of the shape sit on the 16 road rows. */
         e_y = river_road_top();
-        if (e_y != 0xFFu && (e_y < 232u || e_y >= 250u)) {
+        if (e_y != 0xFFu && (e_y < ENT_CULL_Y || e_y >= 250u)) {
             for (e_i = 0; e_i < MAX_ENTITIES && ent_type[e_i] != ENTITY_NONE; e_i++) {
             }
             if (e_i < MAX_ENTITIES) {
@@ -1622,7 +1622,7 @@ void entities_update(void) BANKED {
 
     if (msl_dx) {
         msl_y = (uint8_t)(msl_y + river_scrolled);          /* $AB7E: $C2 scrolls too */
-        if (msl_y >= 232u) {
+        if (msl_y >= ENT_CULL_Y) {
             msl_dx = 0;
         }
     }
@@ -1647,7 +1647,7 @@ void entities_update(void) BANKED {
             continue;                       /* no position until the bar is placed */
         }
         ent_y[e_i] = (uint8_t)(ent_y[e_i] + river_scrolled);    /* the shell too ($AB7E: inc $40) */
-        if (ent_y[e_i] >= 232u && ent_y[e_i] < 250u) {
+        if (ent_y[e_i] >= ENT_CULL_Y && ent_y[e_i] < 250u) {
             ent_type[e_i] = ENTITY_NONE;
             entity_count--;
             continue;

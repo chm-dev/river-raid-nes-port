@@ -182,13 +182,13 @@ typedef char oam_camera_x_assert[(SOURCE_X_OFFSET >= 8u) ? 1 : -1];
 static void oam_camera(void) {
     uint8_t i, n = 0, y, x, xbase;
 
-    /* All 8-bit: y < 232 spans fewer than 256 values and x spans exactly 256,
+    /* All 8-bit: y < 240 spans fewer than 256 values and x spans exactly 256,
      * so "-8 < v < limit" becomes one unsigned compare of v + 8 - 1 (the sum
      * wraps for everything off-view). */
     xbase = (uint8_t)(SOURCE_X_OFFSET + camera_x - 8u);
     for (i = 0; i < LOGIC_OAM_SLOTS && n < 40u; i++) {
         y = gbc_logic_oam[i].y;
-        if (y >= 232u) {
+        if (y >= ENT_CULL_Y) {
             continue;
         }
         /* Pause menu slots (player.c) hold hardware coordinates: no camera. */
