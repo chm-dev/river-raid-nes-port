@@ -21,6 +21,7 @@
 #include <gbdk/font.h>
 #include <stdint.h>
 #include <stdio.h>
+#include <string.h>
 
 #include "config.h"
 #include "hud.h"
@@ -50,7 +51,19 @@ volatile uint16_t frame_counter;
 uint8_t game_ticks = 1u;
 static uint8_t ent_skipped;         /* 1 = last pass ran the player group only */
 static uint8_t main_last;
-static uint8_t logic_acc;       /* frames since the last logic pass */
+#ifdef PROF_EXPORT_STATICS
+/* Per-pass log for tests/gb/pass_log.mjs: frames elapsed (game_ticks), pass kind
+ * (0 entities, 1 player, 2 player+entities), LY at pass start / after the river /
+ * after the logic, and sys_time deltas for the last two. */
+#define PASS_LOG_N 64u
+uint8_t pl_idx;
+uint8_t pl_rec[PASS_LOG_N][10];
+#ifdef PROF_OAMCHECK
+uint8_t pl_oam_a[160];
+uint16_t pl_oam_n, pl_oam_err;
+#endif
+#endif
+static uint8_t logic_acc;      /* frames since the last logic pass */
 
 /* Camera. SCX runs 0..GBC_CAM_MAX_X: 24 map columns (192 px) in a 160 px
  * screen leave 32 px to pan. */
@@ -179,7 +192,7 @@ static void apply_camera(void) {
 /* oam_camera's 8-bit range tests wrap correctly only with SOURCE_X_OFFSET + camera >= 8. */
 typedef char oam_camera_x_assert[(SOURCE_X_OFFSET >= 8u) ? 1 : -1];
 
-static void oam_camera(void) {
+static void oam_camera_slow(void) {
     uint8_t i, n = 0, y, x, xbase;
 
     /* All 8-bit: y < 240 spans fewer than 256 values and x spans exactly 256,
@@ -217,6 +230,48 @@ static void oam_camera(void) {
     }
 }
 
+/* The common case (no pause menu): same output as oam_camera_slow, walking the
+ * arrays by pointer.  The per-slot work is what costs here (64 slots, most of
+ * them empty), so index arithmetic and the pause test stay out of the loop. */
+static void oam_camera(void) {
+    const OAM_item_t *s;
+    OAM_item_t *d;
+    uint8_t i, n, y, x, xbase;
+
+    if (player_state == GBC_PLAYER_STATE_PAUSE) {
+        oam_camera_slow();
+        return;
+    }
+    xbase = (uint8_t)(SOURCE_X_OFFSET + camera_x - 8u);
+    s = gbc_logic_oam;
+    d = shadow_OAM;
+    n = 40u;
+    for (i = LOGIC_OAM_SLOTS; i != 0u; i--, s++) {
+        y = s->y;
+        if (y >= ENT_CULL_Y) {
+            continue;
+        }
+        y = (uint8_t)(y - (GBC_VIEW_TOP_SCANLINE - 8u));        /* vy + 8 */
+        x = (uint8_t)(s->x - xbase);                            /* vx + 8 */
+        if ((uint8_t)(y - 1u) >= (uint8_t)(GBC_VIEW_LINES + 7u) ||
+            (uint8_t)(x - 1u) >= 167u) {
+            continue;
+        }
+        d->y = (uint8_t)(y + 8u);
+        d->x = x;
+        d->tile = s->tile;
+        d->prop = (uint8_t)(s->prop | S_BANK);
+        d++;
+        if (--n == 0u) {
+            return;
+        }
+    }
+    while (n != 0u) {
+        d->y = 0u;
+        d++;
+        n--;
+    }
+}
 /* The HUD Window starts at screen line GBC_VIEW_LINES and sprites draw over it,
  * so entities would stay visible on the HUD until culled.  LYC fires on the last
  * playfield line; once its HBlank is reached (the line's sprites are drawn) the
@@ -291,7 +346,18 @@ void main(void) {
         /* Same schedule as the NES main: the river every frame, the player
          * group and the entity group on alternate frames. */
         river_gen_budget = ((uint8_t)(logic_acc + game_ticks) >= LOGIC_FRAMES) ? 3u : 1u;
+#ifdef PROF_EXPORT_STATICS
+        pl_rec[pl_idx][0] = game_ticks;
+        pl_rec[pl_idx][1] = LY_REG;
+        pl_rec[pl_idx][7] = (uint8_t)sys_time;
+        pl_rec[pl_idx][8] = river_owed;
+#endif
         river_update();
+#ifdef PROF_EXPORT_STATICS
+        pl_rec[pl_idx][2] = LY_REG;
+        pl_rec[pl_idx][3] = (uint8_t)((uint8_t)sys_time - pl_rec[pl_idx][7]);
+        pl_rec[pl_idx][9] = river_owed;
+#endif
 
         logic_acc = (uint8_t)(logic_acc + game_ticks);
         if (logic_acc >= LOGIC_FRAMES) {
@@ -305,17 +371,42 @@ void main(void) {
                 collision_update();
                 entities_update();
                 ent_skipped = 0;
+#ifdef PROF_EXPORT_STATICS
+                pl_rec[pl_idx][5] = 2u;
+#endif
             } else {
                 entities_follow();
                 player_update();
                 collision_update();
                 ent_skipped = 1;
+#ifdef PROF_EXPORT_STATICS
+                pl_rec[pl_idx][5] = 1u;
+#endif
             }
         } else {
             entities_update();
             ent_skipped = 0;
+#ifdef PROF_EXPORT_STATICS
+            pl_rec[pl_idx][5] = 0u;
+#endif
         }
+#ifdef PROF_EXPORT_STATICS
+        pl_rec[pl_idx][4] = LY_REG;     /* after the logic, before camera/OAM */
+#endif
         camera_follow();
         oam_camera();
+#ifdef PROF_EXPORT_STATICS
+        pl_rec[pl_idx][6] = LY_REG;
+#ifdef PROF_OAMCHECK
+        /* oam_camera must match the reference walk byte for byte (LESSONS 18). */
+        memcpy(pl_oam_a, shadow_OAM, sizeof pl_oam_a);
+        oam_camera_slow();
+        pl_oam_n++;
+        if (memcmp(pl_oam_a, shadow_OAM, sizeof pl_oam_a) != 0) {
+            pl_oam_err++;
+        }
+#endif
+        pl_idx = (uint8_t)((pl_idx + 1u) & (PASS_LOG_N - 1u));
+#endif
     }
 }
