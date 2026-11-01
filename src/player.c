@@ -880,8 +880,8 @@ void player_update(void) BANKED {
         pl_prev_right = (uint8_t)(pl_pad & J_RIGHT);
     }
 
-    /* Throttle: down = slow, up = fast, otherwise cruise. */
-    river_speed = (pl_pad & J_DOWN) ? 0u : (pl_pad & J_UP) ? 2u : 1u;
+    /* Throttle: down or B = slow, up = fast, otherwise cruise. */
+    river_speed = (pl_pad & (J_DOWN | J_B)) ? 0u : (pl_pad & J_UP) ? 2u : 1u;
     sound_set_engine(river_speed);
 
     /* Fuel. */
