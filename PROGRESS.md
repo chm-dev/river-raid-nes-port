@@ -139,3 +139,7 @@ The NES history is in `archive/nes/PROGRESS.md`.
 - Added a -ProfExport per-pass ring (`pl_rec`, `tests/gb/pass_log.mjs`, `tests/gb/run_emu.ps1`): vsync() always waits for the next VBlank, so passes cost whole frames; baseline fast 0.69 passes/frame, clamps 6.
 - oam_camera by pointer (33 to 20 lines/pass), `-OamCheck` build compares with the old walk: 572 passes, 0 mismatches. Fast 0.76, clamps 5, cruise 1.00.
 - Rejected: player budget 3 to 2 (clamps 55), time governor on rows+job (0.83 / clamps 70-95), rows only (0.79 / 66). Old DMG benchmarks deleted.
+
+### 2026-11-01 - Sprite blink fix, pacing merged (branch `perf-pacing` into `gbc-port`)
+
+- Blinking sprites after the HUD-hide fix: the main loop re-enabled OBJ after vsync(), so an overrun pass left the next frame without sprites. Now `hud_show_sprites_isr` (add_VBL) does it. User play-tested: fine, slight stutter on busy late levels accepted. Remaining risk: OAM DMA can copy a half-written list if VBlank hits inside oam_camera (stage in a second buffer if it shows).
