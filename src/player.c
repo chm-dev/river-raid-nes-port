@@ -18,6 +18,9 @@
 #include "entity_gfx.h"
 #include "player.h"
 #include "sound.h"
+#ifdef __SDCC_sm83
+#include "save.h"
+#endif
 
 player_state_t player;
 
@@ -187,6 +190,12 @@ void player_init(void) BANKED {
 #endif
     pl_hi_idx = river_variant;
     pl_sel = river_variant;
+#ifdef __SDCC_sm83
+    save_load(&pl_hi[0][0]);            /* hi-scores from cartridge SRAM (0 when blank) */
+    hud_hi_bcd[0] = pl_hi[pl_hi_idx][0];
+    hud_hi_bcd[1] = pl_hi[pl_hi_idx][1];
+    hud_hi_bcd[2] = pl_hi[pl_hi_idx][2];
+#endif
     pl_frozen = 0;
     hud_game = 1u;
     hud_lives = 0;
@@ -567,6 +576,9 @@ static void player_attract(uint8_t variant) {
     pl_hi[pl_hi_idx][0] = hud_hi_bcd[0];
     pl_hi[pl_hi_idx][1] = hud_hi_bcd[1];
     pl_hi[pl_hi_idx][2] = hud_hi_bcd[2];
+#ifdef __SDCC_sm83
+    save_store(&pl_hi[0][0]);           /* game over / exit: persist when changed */
+#endif
     player_kill_shot();
     entities_clear();
     hide_sprite(PLAYER_SPRITE_TOP);

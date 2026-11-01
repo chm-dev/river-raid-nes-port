@@ -5,7 +5,7 @@
 #
 # Banked modules: entities, entity_gfx get -Wf-bo1; player gets -Wf-bo2.  The link is MBC5 with 4
 # banks.  After the link the script fails the build unless:
-#   - the header says CGB-only ($0143 = $C0), MBC5 ($0147 = $19), the right
+#   - the header says CGB-only ($0143 = $C0), MBC5+RAM+BATTERY ($0147 = $1B), 8 KB SRAM ($0149 = 2), the right
 #     ROM size code ($0148) and a valid header checksum ($014D);
 #   - the file is exactly Banks * 16 KB;
 #   - every ROM area in the .map sits inside its bank window (the linker does
@@ -13,7 +13,7 @@
 #   - the .noi exists and holds the symbols tests read.
 param(
     [string[]]$Sources = @(
-        'src/gbc/main.c', 'src/gbc/sound_gbc.c', 'src/gbc/hud_gbc.c', 'src/atari_data.c',
+        'src/gbc/main.c', 'src/gbc/sound_gbc.c', 'src/gbc/save_gbc.c', 'src/gbc/hud_gbc.c', 'src/atari_data.c',
         'src/collision.c', 'src/river.c', 'src/entities.c', 'src/entity_gfx.c', 'src/player.c'),
     [string]$Name = 'river_raid',
     [int]$Banks = 4,
@@ -41,7 +41,7 @@ foreach ($src in $Sources) {
     $a = @('-msm83:gb', '-Isrc')
     if ($base -in 'entities', 'entity_gfx') { $a += '-Wf-bo1' }
     if ($base -eq 'player') { $a += '-Wf-bo2' }
-    if ($base -eq 'sound_gbc') { $a += '-Wf-bo3' }
+    if ($base -in 'sound_gbc', 'save_gbc') { $a += '-Wf-bo3' }
     if ($ProfExport) { $a += '-DPROF_EXPORT_STATICS' }
     # Game logic writes sprites in NES coordinates into gbc_logic_oam; only
     # gbc/main.c sees the real shadow_OAM and translates (camera, +16/+8).
@@ -53,7 +53,7 @@ foreach ($src in $Sources) {
 }
 
 # ---- link ----
-$l = @('-msm83:gb', '-Wl-j', '-Wl-m', '-Wl-yt0x19', "-Wl-yo$Banks", '-Wm-yC',
+$l = @('-msm83:gb', '-Wl-j', '-Wl-m', '-Wl-yt0x1B', '-Wl-ya1', "-Wl-yo$Banks", '-Wm-yC',
        '-Wm-ynRIVERRAID', '-o', $rom) + $objs
 & $lcc @l
 if ($LASTEXITCODE -ne 0) { Write-Host 'link failed' -ForegroundColor Red; exit 1 }
@@ -68,8 +68,11 @@ else { Fail "size $($bytes.Length) bytes, expected $($Banks * 16384)" }
 if ($bytes[0x143] -eq 0xC0) { Pass 'header $0143 = $C0 (CGB only)' }
 else { Fail ('header $0143 = ${0:X2}, expected $C0 (CGB only)' -f $bytes[0x143]) }
 
-if ($bytes[0x147] -eq 0x19) { Pass 'header $0147 = $19 (MBC5)' }
-else { Fail ('header $0147 = ${0:X2}, expected $19 (MBC5)' -f $bytes[0x147]) }
+if ($bytes[0x147] -eq 0x1B) { Pass 'header $0147 = $1B (MBC5+RAM+BATTERY)' }
+else { Fail ('header $0147 = ${0:X2}, expected $1B (MBC5+RAM+BATTERY)' -f $bytes[0x147]) }
+
+if ($bytes[0x149] -eq 0x02) { Pass 'header $0149 = $02 (8 KB SRAM)' }
+else { Fail ('header $0149 = ${0:X2}, expected $02 (8 KB SRAM)' -f $bytes[0x149]) }
 
 # ROM size code: 0 = 32 KB (2 banks), 1 = 64 KB, 2 = 128 KB ...
 $sizeCode = [int][Math]::Log($Banks / 2, 2)
