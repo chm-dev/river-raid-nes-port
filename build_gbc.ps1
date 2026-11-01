@@ -18,7 +18,8 @@ param(
     [string]$Name = 'river_raid',
     [int]$Banks = 4,
     [string[]]$RequireSymbols = @('_frame_counter', '_gbc_logic_oam'),
-    [switch]$ProfExport
+    [switch]$ProfExport,
+    [switch]$OamCheck
 )
 
 $ErrorActionPreference = 'Stop'
@@ -43,6 +44,7 @@ foreach ($src in $Sources) {
     if ($base -eq 'player') { $a += '-Wf-bo2' }
     if ($base -in 'sound_gbc', 'save_gbc') { $a += '-Wf-bo3' }
     if ($ProfExport) { $a += '-DPROF_EXPORT_STATICS' }
+    if ($OamCheck) { $a += '-DPROF_OAMCHECK' }
     # Game logic writes sprites in NES coordinates into gbc_logic_oam; only
     # gbc/main.c sees the real shadow_OAM and translates (camera, +16/+8).
     if ($src -notlike '*gbc/main.c') { $a += '-Dshadow_OAM=gbc_logic_oam' }

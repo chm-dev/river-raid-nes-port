@@ -14,7 +14,7 @@ Status as of 2026-10-31: milestone 1 built and accepted in a playtest (river, ca
   - asm guards narrowed from `__SDCC` to `__SDCC_mos6502`. Confirmed: mos6502 builds define that macro, so NES builds would still select the asm. SDCC defines `__SDCC` on every target, so the old guards hid the C paths from SM83.
   - `<gb/gb.h>` replaces `<nes/nes.h>`.
   - palette calls stubbed and `.attr` changed to `.prop` in `src/entities.c`.
-- Benchmarks are in `tests/gb/bench/`; `tests/gb/gearboy_client.mjs` is the emulator client. The full numbers are in the branch's two commit messages.
+- The old DMG benchmarks were deleted (stale). `tests/gb/gearboy_client.mjs` is the emulator client; pacing is measured with `tests/gb/profile_play.mjs` and `tests/gb/pass_log.mjs`.
 - View mockups are in `tests/gb/` (on `gbc-port` and `main`): `gb_view_center.png`, `gb_view_3panel.png`, `sim_gb_view.py`. They use the existing same-size tiles at 1:1 pixels with a zoomed-in viewport.
 
 ## Measurements
