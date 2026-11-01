@@ -101,3 +101,8 @@ The NES history is in `archive/nes/PROGRESS.md`.
 
 - Bug: the pause menu was horizontally centred only for one camera position and sat too high (rows at screen y -1 and 15, i.e. half off the top). Cause: the menu sprites were NES logic coordinates run through the camera. Fix: while `player_state` is PAUSE, `oam_camera()` copies logic slots 56..63 and 2..4 to hardware OAM untranslated; under `__SDCC_sm83` `src/player.c` uses hardware coordinates (rows at screen y 60 and 76, columns 48..112: centre 72 of 144 and 80 of 160) and the hide band moves to logic scanlines 172..197. NES unchanged.
 - Build: `.\build_gbc.ps1` passes all checks. Not playtested (marked [~]).
+
+### 2026-11-01 - Player shot centred on the jet nose (branch `gbc-port`)
+
+- Bug: the 1 px shot appeared about 2 px left of the jet's centre. Cause: the straight jet tile has its nose at column 4 (`0x08`, rows symmetric about column 4) while the shot bar is column 3 of its tile and was drawn at `shot_x - 3`, i.e. at jet x + 3. Fix: draw offset `shot_x - 2` in `src/player.c` (bar at jet x + 4). Tile and 2 px hit box (`shot_x` = jet x + 3) unchanged.
+- Build: `.\build_gbc.ps1` passes all checks. Not playtested (marked [~]).

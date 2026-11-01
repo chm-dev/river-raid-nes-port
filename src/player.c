@@ -451,8 +451,10 @@ static void player_update_shot(void) {
         }
 #endif
     }
-    /* The 1 px bar sits at column 3 of its tile; shot_x is the box's left edge (the hit box stays 2 px). */
-    move_sprite(PLAYER_SHOT_SLOT, (uint8_t)(player.shot_x - 3u), player.shot_y);
+    /* The 1 px bar sits at column 3 of its tile.  The jet's nose is column 4 of its
+     * tile (player.x + 4) and shot_x = player.x + 3 is the 2 px hit box's left edge,
+     * so draw the bar at shot_x + 1 (the hit box stays 2 px). */
+    move_sprite(PLAYER_SHOT_SLOT, (uint8_t)(player.shot_x - 2u), player.shot_y);
     set_sprite_tile(PLAYER_SHOT_SLOT, entities_shot_tile());
     set_sprite_prop(PLAYER_SHOT_SLOT, S_PAL(0));
 }
