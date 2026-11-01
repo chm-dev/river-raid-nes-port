@@ -121,3 +121,10 @@ The NES history is in `archive/nes/PROGRESS.md`.
 ### 2026-11-01 - Riverside hills/trees yellow to brown (branch `gbc-port`)
 
 - Cause: river hills/trees use pixel value 2 (comment at river.c:542), which in land palettes 0 and 2 was GBC_RGB_YELLOW (shared with the road line). Fix: new GBC_RGB_BROWN RGB(15,9,3) in index 2 of palettes 0 and 2 (gbc/main.c, entities.c flash copy); road palette 3 keeps the yellow line. Water, HUD untouched. Build ok (build_gbc.ps1, all checks pass). Not played.
+
+### 2026-11-01 - GBC HUD rework (branch `gbc-port`)
+
+- `src/gbc/hud_gbc.c` rebuilt from the mockups `tests/gb/gb_hud.png`, `gb_hud_lowFuel.png`, `gb_hud_idle.png`: lives left, score centred on row 0 (start column from the digit count; odd counts sit half a tile right), `Bnn` right, `E`/8-cell bar/`F` centred on row 1 (cols 5..14).
+- Colours by per-cell palette (1 yellow, 4 B/F, 5 E, 6 gauge). Palettes 4..6 are rewritten in `hud_update()` when `sound_warn_on` changes (renamed from `snd_warn_on`, exported, declared in `sound.h` under `__SDCC_sm83`): gauge red and E/F/Bnn yellow while the low-fuel note sounds.
+- Idle (`PLAYER_STATE_ATTRACT`): `HI` label top-left, the high score replaces the centred score in white (tiles 24..35, ink in both planes = colour 3), lives hidden.
+- Build: `.\build_gbc.ps1`, all checks pass, bank 0 code ends `$3712`. Not run in the emulator; user play-test pending.

@@ -109,7 +109,7 @@ static uint8_t snd_fuel;
 static uint8_t snd_fuel_t;
 static uint8_t snd_fuel_full;
 static uint8_t snd_warn;
-static uint8_t snd_warn_on;
+uint8_t sound_warn_on;              /* 1 while the low-fuel note is audible (read by the HUD) */
 static uint8_t snd_shell;
 static uint8_t snd_msl;
 static uint8_t snd_p2_on;
@@ -217,7 +217,7 @@ void sound_init(void) BANKED {
     snd_fuel_t = 0;
     snd_fuel_full = 0;
     snd_warn = 0;
-    snd_warn_on = 0;
+    sound_warn_on = 0;
     snd_shell = 0;
     snd_msl = 0;
     snd_p2_on = 0;
@@ -247,20 +247,20 @@ void sound_update(void) BANKED {
             p = (uint16_t)(2044u - ((uint16_t)snd_warn << 3)
                            - (uint8_t)(((uint16_t)snd_warn * 51u) >> 8));
             p1_note(p, ENV_CONST(15u), 0u);
-            snd_warn_on = 1u;
-        } else if (snd_warn_on != 0u) {
-            snd_warn_on = 0u;
+            sound_warn_on = 1u;
+        } else if (sound_warn_on != 0u) {
+            sound_warn_on = 0u;
             p1_off();
         }
-    } else if (snd_warn_on != 0u) {
-        snd_warn_on = 0u;
+    } else if (sound_warn_on != 0u) {
+        sound_warn_on = 0u;
         p1_off();
     }
 
     /* Shot: pulse 1, 405 -> 196 Hz in 15 steps, volume 8. */
     if (snd_shot != 0u) {
         snd_shot = snd_tick(snd_shot);
-        if (snd_warn_on == 0u) {
+        if (sound_warn_on == 0u) {
             if (snd_shot != 0u) {
                 p1_note(shot_period[(uint8_t)(SHOT_FRAMES - snd_shot)], ENV_CONST(8u), 0u);
             } else {
@@ -334,7 +334,7 @@ void sound_update(void) BANKED {
         vol = 12u;
         idx = (uint8_t)(12u + (snd_next_rand() & 3u));
     }
-    if (vol == 0u && snd_engine != SOUND_ENGINE_OFF && snd_warn_on == 0u) {
+    if (vol == 0u && snd_engine != SOUND_ENGINE_OFF && sound_warn_on == 0u) {
         if (snd_eng_idx != engine_idx[snd_engine]) {
             snd_eng_wait = (uint8_t)(snd_eng_wait + snd_t);
             if (snd_eng_wait >= ENGINE_STEP_FRAMES) {
@@ -357,7 +357,7 @@ void sound_set_engine(uint8_t speed) BANKED {
 
 void sound_play_shot(void) BANKED {
     snd_shot = SHOT_FRAMES;
-    if (snd_warn_on == 0u) {
+    if (sound_warn_on == 0u) {
         p1_note(shot_period[0], ENV_CONST(8u), 1u);
     }
 }

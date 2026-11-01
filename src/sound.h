@@ -18,6 +18,11 @@
 #define SND_BANKED
 #endif
 
+#ifdef __SDCC_sm83
+/* GBC: 1 while the low-fuel warning note sounds; the HUD gauge turns red with it. */
+extern uint8_t sound_warn_on;
+#endif
+
 void sound_init(void) SND_BANKED;
 
 /* Advance the effects and the engine hiss; call once per frame. */
