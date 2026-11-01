@@ -20,6 +20,7 @@ Found in the milestone 1 playtest (`roms/m1_jet.gb`, 2026-10-31). All expected a
 - [x] **Grass color does not alternate between bridges** Cause: same single palette; the existing `river_land_alt` flip had nothing to select. Fix: palette 0 = dark green, palette 2 = bright green, chosen per row by the same attribute write. `ent_water_color` (bridge flash) now rewrites water in all three river palettes.
 - [x] **Plane's projectile should be 1px in width (is 2px)** [All platforms] Cause: the shot tile in `tools/gen_entity_gfx.py` drew columns 3..4 (`0x18`). Fix: draw column 3 only (`0x10`), regenerated `src/entity_gfx.c`; sprite x offset and the 2 px hit box are unchanged. Follow-up: the bar looked about 2 px left of the nose. The jet tile's nose is column 4 (`0x08`, symmetric about column 4) but the bar was drawn at column 3 (`shot_x - 3`). Draw offset is now `shot_x - 2` (bar at jet x + 4); hit box unchanged.
 - [x] **One of the side hills / trees colors are off.** There are 3 separate variants of riverside objects. One has a yellow color - this should be changed to brown if possible or some darker one. 
+- [ ] Enemies and fuel is dissapearing too early as they scroll. You can see it dissapear close to the bottom line near the hud. 
 
 
 # FEATURES
