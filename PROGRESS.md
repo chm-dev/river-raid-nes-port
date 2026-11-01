@@ -133,3 +133,9 @@ The NES history is in `archive/nes/PROGRESS.md`.
 
 - `camera_follow` (`src/gbc/main.c`) holds the camera while the jet is within `GBC_CAM_DEAD` (12 px) of the view centre; beyond that it targets the position that puts the jet on the zone edge. Distance is measured from the unclamped centred camera (`player.x - GBC_CAM_JET_X`) so the pan still reaches 0 / `GBC_CAM_MAX_X`. READY, ATTRACT and WAIT paths unchanged.
 - `GBC_CAM_STEP` 2 to 1 px/frame: 2 felt hectic. The jet (1.5 px/frame at cruise) slowly outruns the camera on long holds; play-tested fine. User play-tested "just right". Build ok.
+
+### 2026-11-01 - Pacing: oam_camera trim, pass log (branch `perf-pacing`)
+
+- Added a -ProfExport per-pass ring (`pl_rec`, `tests/gb/pass_log.mjs`, `tests/gb/run_emu.ps1`): vsync() always waits for the next VBlank, so passes cost whole frames; baseline fast 0.69 passes/frame, clamps 6.
+- oam_camera by pointer (33 to 20 lines/pass), `-OamCheck` build compares with the old walk: 572 passes, 0 mismatches. Fast 0.76, clamps 5, cruise 1.00.
+- Rejected: player budget 3 to 2 (clamps 55), time governor on rows+job (0.83 / clamps 70-95), rows only (0.79 / 66). Old DMG benchmarks deleted.
