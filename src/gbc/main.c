@@ -57,6 +57,8 @@ static uint8_t logic_acc;       /* frames since the last logic pass */
 #define GBC_CAM_MAX_X       32u
 #define GBC_CAM_STEP        2u      /* px per frame the camera may move */
 static uint8_t camera_x;
+#define GBC_PLAYER_STATE_WAIT 3u    /* = PLAYER_STATE_WAIT in player.c */
+#define GBC_PLAYER_WIDTH      8u    /* = PLAYER_WIDTH in player.c */
 
 /* Index meaning is set by the river tiles: 0 outline (black), 1 land,
  * 3 water; 2 is spare (road line).  One palette for now; per-row colour is
@@ -96,7 +98,18 @@ static void gbc_required(void) {
 /* Centre the view on the jet, clamped to the ring, a few pixels per frame. */
 static void camera_follow(void) {
     int16_t want = (int16_t)player.x - (int16_t)SOURCE_X_OFFSET - 76;
+    uint8_t slot;
 
+    /* While the river scrolls in (WAIT) the jet is not placed yet: aim at the
+     * river centre on its spawn row, where player_center() will put it, so
+     * the view is already there when the jet appears. */
+    if (player_state == GBC_PLAYER_STATE_WAIT) {
+        slot = river_slot_at_scanline(PLAYER_START_Y);
+        if (river_right_x[slot] != 0u) {
+            want = (int16_t)(((uint16_t)river_left_x[slot] + river_right_x[slot]) >> 1) -
+                   (int16_t)(GBC_PLAYER_WIDTH >> 1) - 76;
+        }
+    }
     if (want < 0) {
         want = 0;
     } else if (want > (int16_t)GBC_CAM_MAX_X) {

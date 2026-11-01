@@ -77,3 +77,8 @@ The NES history is in `archive/nes/PROGRESS.md`.
 
 - Cause: player.c draws the pause letters in NES OAM slots 56..63, but `gbc_logic_oam` had 48 slots (LOGIC_OAM_SLOTS), so those writes went past the array and oam_camera never saw them; only slots 2..4 (cursor, "I", "T") showed. Fix: LOGIC_OAM_SLOTS 64 in src/gbc/main.c (also removes the stray writes past the array).
 - `.\build_gbc.ps1` passes all checks. Awaiting user playtest.
+
+### 2026-11-01 - Camera aligned with the jet spawn point before start (branch `gbc-port`)
+
+- Bug: during the scroll-in (PLAYER_STATE_WAIT) the camera followed player.x = PLAYER_START_X; player_center() moves it to the river centre only when the jet appears, so the view panned afterwards. Fix: camera_follow() in src/gbc/main.c targets the river centre at PLAYER_START_Y while in WAIT (same formula as player_center). Marked [~] in BUGS&FEATS.md.
+- Build: .\build_gbc.ps1 passes all checks (4 banks, map inside windows). No gameplay test run (user playtests).
