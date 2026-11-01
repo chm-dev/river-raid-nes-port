@@ -28,7 +28,7 @@ Found in the milestone 1 playtest (`roms/m1_jet.gb`, 2026-10-31). All expected a
 - [ ] **Sprite Y may be 1 px off** (NES draws at `y+1`). Check against the Atari after the jet is lowered.
 - [~] **Rework the HUD.** Done 2026-11-01 (layout from `tests/gb/gb_hud*.png`, centred score, idle HI score, red gauge while the low-fuel note sounds); awaiting play-test. Was: `src/gbc/hud_gbc.c` is a minimal stand-in (score, fuel bar, lives, bridge number). Needs a proper layout and the original charset art; also HI score, blink, game number.
 - [x] **Remove two-player mode for GBC.** Done and play-tested 2026-11-01 with a `TWO_PLAYER` macro (NES only) around `pl_two`, `player_swap_players`, the `joypad_ex` path and `river_swap_checkpoint`; `hud_two`/`hud_cur`/`hud_other_bcd` are gone from `hud_gbc.c`. The attract menu now only picks the level (Up/Down, 4 levels).
-- [ ] **Come up with smarter camera scrolling so it doesn't follow on every small vertical movement**
+- [ ] **Come up with smarter camera scrolling so it doesn't follow on every small vertical movement** It sould remain centered until certain treshhold is crossed and only after then it should pan left or right.
 - [ ] **Save highscore** Same way as max level is saved in robbo.
 
 
