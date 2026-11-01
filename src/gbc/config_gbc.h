@@ -37,7 +37,7 @@
 #define GBC_RIVER_PALS          4u
 #define GBC_RGB_BLACK           RGB(0, 0, 0)
 #define GBC_RGB_YELLOW          RGB(28, 26, 6)
-#define GBC_RGB_BROWN           RGB(15, 9, 3)   /* hills / trees: land palettes' index 2 */
+#define GBC_RGB_BROWN           RGB(10, 3, 0)   /* hills / trees: land palettes' index 2 */
 #define GBC_RGB_WATER          RGB(6, 12, 26)
 #define GBC_RGB_FLASH           RGB(24, 5, 3)
 #define GBC_RGB_LAND            RGB(5, 17, 5)
