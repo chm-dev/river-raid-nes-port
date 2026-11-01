@@ -55,8 +55,9 @@ static uint8_t logic_acc;       /* frames since the last logic pass */
 /* Camera. SCX runs 0..GBC_CAM_MAX_X: 24 map columns (192 px) in a 160 px
  * screen leave 32 px to pan. */
 #define GBC_CAM_MAX_X       32u
-#define GBC_CAM_STEP        2u      /* px per frame the camera may move */
-#define GBC_CAM_CENTER      (GBC_CAM_MAX_X / 2u)
+#define GBC_CAM_STEP        1u     /* px per frame the camera may move */
+#define GBC_CAM_DEAD        12u     /* px the jet may drift from centre before the camera pans */
+#define GBC_CAM_CENTER     (GBC_CAM_MAX_X / 2u)
 #define GBC_CAM_JET_X       (SOURCE_X_OFFSET + 76u) /* jet X that puts the camera at 0 */
 static uint8_t camera_x = GBC_CAM_CENTER;
 static uint8_t cam_spawn_set;       /* camera_x holds this river's spawn view */
@@ -127,6 +128,7 @@ static uint8_t camera_for(int16_t jet_x) {
  * including the attract-menu level change, which stays in ATTRACT. */
 static void camera_follow(void) {
     uint8_t want;
+    int16_t ideal;
 
     if (player_state == GBC_PLAYER_STATE_ATTRACT || player_state == GBC_PLAYER_STATE_WAIT) {
         if (river_right_x[RIVER_SPAWN_SLOT] == 0u) {
@@ -146,6 +148,19 @@ static void camera_follow(void) {
         camera_x = want;                /* the jet just appeared: no easing (already equal) */
         return;
     }
+    /* Dead zone: hold the camera while the jet stays within GBC_CAM_DEAD px of
+     * the view centre; past that, aim for the spot that puts the jet on the
+     * zone's edge.  Measured from the unclamped centred camera so the pan still
+     * reaches 0 / GBC_CAM_MAX_X. */
+    ideal = (int16_t)player.x - (int16_t)GBC_CAM_JET_X;
+    if (ideal - (int16_t)camera_x > (int16_t)GBC_CAM_DEAD) {
+        ideal -= (int16_t)GBC_CAM_DEAD;
+    } else if ((int16_t)camera_x - ideal > (int16_t)GBC_CAM_DEAD) {
+        ideal += (int16_t)GBC_CAM_DEAD;
+    } else {
+        ideal = (int16_t)camera_x;
+    }
+    want = (ideal < 0) ? 0u : (ideal > (int16_t)GBC_CAM_MAX_X) ? (uint8_t)GBC_CAM_MAX_X : (uint8_t)ideal;
     if (want > camera_x) {
         camera_x = ((uint8_t)(want - camera_x) > GBC_CAM_STEP) ? (uint8_t)(camera_x + GBC_CAM_STEP) : want;
     } else if (want < camera_x) {

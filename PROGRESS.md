@@ -128,3 +128,8 @@ The NES history is in `archive/nes/PROGRESS.md`.
 - Colours by per-cell palette (1 yellow, 4 B/F, 5 E, 6 gauge). Palettes 4..6 are rewritten in `hud_update()` when `sound_warn_on` changes (renamed from `snd_warn_on`, exported, declared in `sound.h` under `__SDCC_sm83`): gauge red and E/F/Bnn yellow while the low-fuel note sounds.
 - Idle (`PLAYER_STATE_ATTRACT`): `HI` label top-left, the high score replaces the centred score in white (tiles 24..35, ink in both planes = colour 3), lives hidden.
 - Build: `.\build_gbc.ps1`, all checks pass, bank 0 code ends `$3712`. Not run in the emulator; user play-test pending.
+
+### 2026-11-01 - Camera dead zone (branch `gbc-port`)
+
+- `camera_follow` (`src/gbc/main.c`) holds the camera while the jet is within `GBC_CAM_DEAD` (12 px) of the view centre; beyond that it targets the position that puts the jet on the zone edge. Distance is measured from the unclamped centred camera (`player.x - GBC_CAM_JET_X`) so the pan still reaches 0 / `GBC_CAM_MAX_X`. READY, ATTRACT and WAIT paths unchanged.
+- `GBC_CAM_STEP` 2 to 1 px/frame: 2 felt hectic. The jet (1.5 px/frame at cruise) slowly outruns the camera on long holds; play-tested fine. User play-tested "just right". Build ok.
