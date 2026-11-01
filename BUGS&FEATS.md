@@ -15,7 +15,7 @@ Found in the milestone 1 playtest (`roms/m1_jet.gb`, 2026-10-31). All expected a
 - [x] **Enemies move very slow and stutter a lot**
 - [~] **Pause menu is broken. Is invisible only letter "IT" can be seen** It still is usable if you navigate blind. Cause: the menu letters use logic OAM slots 56..63 but `gbc_logic_oam` had only 48 slots, so they were written out of bounds and never drawn (only slots 2..4 showed). Fix: `LOGIC_OAM_SLOTS` 64 in `src/gbc/main.c`.
 - [~] **Scroll camera before start of the gameplay, when river scrolls down should be aligned vertically with the position where plane will appear** currently it is bit off and gets aligned only after plane appears. Cause: the camera followed `player.x`, which stays at `PLAYER_START_X` during WAIT and jumps to the river centre only when `player_center()` runs, so the view then panned (2 px/frame). Fix: in WAIT, `camera_follow()` (`src/gbc/main.c`) aims at the river centre on the spawn row (`PLAYER_START_Y`), the same target `player_center()` uses.
-- [ ] **Flash after hitting bridge with tank on it is not present**
+- [~] **Flash after hitting bridge with tank on it is not present** Cause: `ent_water_color()` in `src/entities.c` wrote NES palette entries through a macro that is a no-op on GBC (the river uses BG palette 0 there). Fix: a `__SDCC_sm83` branch rewrites BG palette 0 (water = colour 3) with `set_bkg_palette`, alternating water blue and dark red for 23 frames as on the Atari.
 - [ ] **Road color should be gray and is green**
 - [ ] **Grass color does not alternate between bridges**
 - [ ] **Plane's projectile should be 1px in width (is 2px)**[All platforms]

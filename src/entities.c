@@ -8,6 +8,9 @@
  * extracted Atari tables.
  */
 #include <gb/gb.h>
+#ifdef __SDCC_sm83
+#include <gb/cgb.h>
+#endif
 #define palette_color_t uint16_t
 #undef set_bkg_palette_entry
 #define set_bkg_palette_entry(p,i,c)
@@ -109,18 +112,35 @@ static uint8_t ent_random(void) {
 }
 
 /* The land palettes' water entry (all three: dark land, bright land, road). */
+#ifdef __SDCC_sm83
+/* GBC: the river uses BG palette 0 only (gbc/main.c bkg_palette); water is
+ * colour 3.  The NES palette macro above is a no-op here, so write the whole
+ * palette.  c is 0 for normal water, nonzero for the flash colour. */
+static palette_color_t ent_gbc_pal[4] = {
+    RGB(0, 0, 0), RGB(5, 17, 5), RGB(28, 26, 6), RGB(6, 12, 26)
+};
+static void ent_water_color(uint8_t flash) {
+    ent_gbc_pal[3] = flash ? RGB(24, 5, 3) : RGB(6, 12, 26);
+    set_bkg_palette(0, 1, ent_gbc_pal);
+}
+#else
 static void ent_water_color(palette_color_t c) {
     set_bkg_palette_entry(PLAYFIELD_PALETTE, 3u, c);
     set_bkg_palette_entry(PLAYFIELD_ALT_PALETTE, 3u, c);
     set_bkg_palette_entry(ROAD_PALETTE, 3u, c);
 }
+#endif
 
 /* For 23 frames after a bridge is shot the Atari VBI (at $B41C) swaps the
  * water colour ($84 -> $42) on every frame whose remaining count is odd. */
 static void ent_flash_tick(void) {
     e_c = bridge_flash;
     bridge_flash = (e_c > game_ticks) ? (uint8_t)(e_c - game_ticks) : 0u;
+#ifdef __SDCC_sm83
+    ent_water_color((bridge_flash != 0u && (e_c & 1u)) ? 1u : 0u);
+#else
     ent_water_color((bridge_flash != 0u && (e_c & 1u)) ? BRIDGE_FLASH_COLOR : BG_COLOR_BLUE);
+#endif
 }
 
 void entities_clear(void) BANKED {
@@ -141,7 +161,11 @@ void entities_clear(void) BANKED {
     }
     if (bridge_flash) {
         bridge_flash = 0;
+#ifdef __SDCC_sm83
+        ent_water_color(0u);
+#else
         ent_water_color(BG_COLOR_BLUE);
+#endif
     }
     river_obj_count = 0x0Bu;
 }

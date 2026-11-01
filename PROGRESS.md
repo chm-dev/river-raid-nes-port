@@ -82,3 +82,8 @@ The NES history is in `archive/nes/PROGRESS.md`.
 
 - Bug: during the scroll-in (PLAYER_STATE_WAIT) the camera followed player.x = PLAYER_START_X; player_center() moves it to the river centre only when the jet appears, so the view panned afterwards. Fix: camera_follow() in src/gbc/main.c targets the river centre at PLAYER_START_Y while in WAIT (same formula as player_center). Marked [~] in BUGS&FEATS.md.
 - Build: .\build_gbc.ps1 passes all checks (4 banks, map inside windows). No gameplay test run (user playtests).
+
+### 2026-11-01 - Bridge-hit flash on GBC (branch `gbc-port`)
+
+- Bug: no flash after shooting a bridge with the tank on it. The flash logic (`bridge_flash`, `ent_flash_tick`) was shared, but `ent_water_color` used `set_bkg_palette_entry`, which `entities.c` defines away. Added a `__SDCC_sm83` branch that rewrites BG palette 0 colour 3 (water) with `set_bkg_palette`: dark red RGB(24,5,3) on odd remaining frames for 23 frames, else RGB(6,12,26). NES path unchanged.
+- Build: `.\build_gbc.ps1` passes all checks. Not play-tested (marked [~]).
