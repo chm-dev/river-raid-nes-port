@@ -106,3 +106,8 @@ The NES history is in `archive/nes/PROGRESS.md`.
 
 - Bug: the 1 px shot appeared about 2 px left of the jet's centre. Cause: the straight jet tile has its nose at column 4 (`0x08`, rows symmetric about column 4) while the shot bar is column 3 of its tile and was drawn at `shot_x - 3`, i.e. at jet x + 3. Fix: draw offset `shot_x - 2` in `src/player.c` (bar at jet x + 4). Tile and 2 px hit box (`shot_x` = jet x + 3) unchanged.
 - Build: `.\build_gbc.ps1` passes all checks. Not playtested (marked [~]).
+
+### 2026-11-01 - Camera snaps to centre on attract and respawn scroll-in (branch `gbc-port`)
+
+- Bug: the camera X from the previous death carried into the next scroll-in and attract. Cause: `camera_x` (`src/gbc/main.c`) was only eased toward its target, never reset. Fix: `camera_follow()` tracks `player_state`; on a change to WAIT or ATTRACT it snaps `camera_x` to `GBC_CAM_CENTER` (16, mid of 0..32); attract targets the centre; WAIT still targets the spawn-row river centre. `camera_x` now initialises to the centre. NES unchanged.
+- Build: `.\build_gbc.ps1` passes all checks. Not playtested (marked [~]).
