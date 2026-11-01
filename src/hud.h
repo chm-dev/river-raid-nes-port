@@ -31,9 +31,11 @@ extern uint8_t hud_bridge;          /* current bridge number (0..99) */
  * always P1's score; the right field is "HI" + hi-score in a one-player game
  * and "P2" + P2's score in a two-player game.  hud_score_bcd is the active
  * player's score, hud_other_bcd (set by the player code) the idle player's. */
+#ifndef __SDCC_sm83                 /* the GBC port has one player only */
 extern uint8_t hud_two;             /* 1 = two players alternating */
 extern uint8_t hud_cur;             /* active player, 0 = P1 */
 extern uint8_t *hud_other_bcd;      /* idle player's score, 3 BCD bytes */
+#endif
 
 /* The active player's label + score blink until the game really starts
  * ($B69A: while $76 is 1..$7F the group is painted gray for 16 of every 64

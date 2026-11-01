@@ -30,11 +30,7 @@ uint8_t hud_fuel;
 uint8_t hud_lives;
 uint8_t hud_game;
 uint8_t hud_bridge;
-uint8_t hud_two;
-uint8_t hud_cur;
 uint8_t hud_blink;
-static uint8_t hud_other_store[3];
-uint8_t *hud_other_bcd = hud_other_store;
 
 #define HT_BLANK        0u
 #define HT_DIGIT        1u      /* 10 tiles: 1..10 */

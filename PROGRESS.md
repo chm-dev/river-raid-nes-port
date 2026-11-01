@@ -60,3 +60,8 @@ The NES history is in `archive/nes/PROGRESS.md`.
 - The user ran the full m2 checklist at the end of the pacing work (fast speed, edges, crash/respawn, roads and bridges, fuel/lives/score, shot): all OK. Stutter bug marked `[x]`.
 - The user added open bugs (camera alignment, bridge flash, road colour, grass alternation, smarter camera) and the pause-menu note; kept as is.
 - HANDOFF rewritten: next is the go/no-go call, then milestone 3 colour work. Bank 0 ends at `$3538`. The shipped `roms/river_raid.gb` is the plain (non `-ProfExport`) build, `RIVER_JOB_COLS` 10.
+
+### 2026-11-01 - Remove two-player mode from the GBC build (branch `gbc-port`)
+
+- User decision after the m2 playtest: go; keep bugs and HUD rework for later, remove 2P, then sound. `TWO_PLAYER` (config.h, non-sm83 only) gates the 2P state, player swap, `joypad_ex` path and 2P game-number step in `player.c`; `river_swap_checkpoint` and the `hud_two`/`hud_cur`/`hud_other_bcd` externs use `#ifndef __SDCC_sm83`; the GBC HUD no longer defines them. The attract menu steps only the start level 0..3. NES code kept for the milestone 5 merge.
+- Build: `.\build_gbc.ps1`, all checks ok; bank 0 code now ends at `$33D6` (was `$3538`). User play-tested: level cycling, START, death/respawn, game over, SELECT debug start all fine.

@@ -205,6 +205,7 @@
 #ifdef __SDCC_sm83
 #include "gbc/config_gbc.h"
 #else
+#define TWO_PLAYER              1       /* alternating two-player games; dropped on GBC */
 #define PPU_NT0_BASE            0x2000u
 #define PPU_NT0_ATTR            0x23C0u
 #define PPU_NT1_BASE            0x2400u

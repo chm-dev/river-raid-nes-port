@@ -2452,6 +2452,7 @@ uint8_t river_init(uint8_t variant) {
     return atari_level_descriptors[river_variant * 6u + 4u];
 }
 
+#ifndef __SDCC_sm83
 /* Two-player games: exchange the generator's per-player part of $60-$69
  * (level and the LFSR/left checkpoint) with blk[0..4] ($B247). */
 void river_swap_checkpoint(uint8_t *blk) {
@@ -2466,6 +2467,7 @@ void river_swap_checkpoint(uint8_t *blk) {
         blk[1u + i] = t;
     }
 }
+#endif
 
 /* The jet was lost: pick the checkpoint like $B1C0 and restart the river
  * there.  The generator runs ahead of the jet, so rg_seeds may already belong

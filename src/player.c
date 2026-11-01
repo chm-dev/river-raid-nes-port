@@ -112,13 +112,16 @@ static uint8_t player_fuel_tick;
 static uint8_t player_prev_pad;
 static uint8_t pl_step;
 
-/* Game selection and the two-player state.  Like the Atari ($09 / $77, and the
- * $6B-$75 mirror swapped by $B247) the idle player's state is kept aside and
+/* Game selection.  With TWO_PLAYER (NES only) the idle player's state is kept
+ * aside like the Atari ($09 / $77, and the $6B-$75 mirror swapped by $B247) and
  * exchanged after every death.  pl_other: score[3], lives, bridge, then
  * river_swap_checkpoint()'s level + 4 seeds. */
+#ifdef TWO_PLAYER
 static uint8_t pl_two;                  /* 1 = two players alternating */
 static uint8_t pl_cur;                  /* active player (joypad index) */
 static uint8_t pl_other[10];
+static joypads_t pl_pads;
+#endif
 static uint8_t pl_hi[4][3];             /* hi-score per start level */
 static uint8_t pl_hi_idx;               /* start level hud_hi_bcd belongs to */
 static uint8_t pl_sel;                  /* start level picked in the menu (river_variant once built) */
@@ -128,7 +131,6 @@ static uint8_t pl_nocol;                /* debug start (SELECT): the jet cannot 
 static uint8_t pl_rep;                  /* attract: frames until Up/Down repeats */
 static uint8_t pause_sel;               /* 0 = RESUME, 1 = EXIT */
 static uint8_t pause_from;              /* state to return to: PLAY, or READY (jet not yet moving) */
-static joypads_t pl_pads;
 static uint8_t pl_new;
 static uint8_t pl_i;
 static uint8_t pl_t;
@@ -162,12 +164,14 @@ void player_init(void) BANKED {
     player_prev_pad = 0xFFu;            /* a button held at boot is not a press */
     river_speed = 2u;                   /* the boot attract scrolls at the fast speed */
     river_vel = RIVER_VEL_FAST;
+#ifdef TWO_PLAYER
     joypad_init(2u, &pl_pads);
     pl_two = 0;
     pl_cur = 0;
     hud_other_bcd = pl_other;
     hud_two = 0;
     hud_cur = 0;
+#endif
     pl_hi_idx = river_variant;
     pl_sel = river_variant;
     pl_frozen = 0;
@@ -451,10 +455,15 @@ static void player_crash(void) {
     /* The life is spent when the next jet appears (WAIT -> READY), as on the
      * Atari; with none left in reserve this crash ends the game. */
     player_timer = PLAYER_DEAD_FRAMES;
+#ifdef TWO_PLAYER
     player_state = (hud_lives == 0u && !(pl_two && pl_other[3] != 0u))
         ? PLAYER_STATE_OVER : PLAYER_STATE_DEAD;
+#else
+    player_state = (hud_lives == 0u) ? PLAYER_STATE_OVER : PLAYER_STATE_DEAD;
+#endif
 }
 
+#ifdef TWO_PLAYER
 /* $B247: exchange the active player's score/lives/bridge/checkpoint with the
  * idle player's. */
 static void player_swap_players(void) {
@@ -473,12 +482,17 @@ static void player_swap_players(void) {
     pl_cur ^= 1u;
     hud_cur = pl_cur;
 }
+#endif
 
 /* Game number (the Atari's $09 + 1) and the scoreboard layout that goes with it. */
 static void player_show_game(void) {
+#ifdef TWO_PLAYER
     hud_game = (uint8_t)(1u + (pl_sel << 1) + pl_two);
     hud_two = pl_two;
     hud_cur = pl_cur;
+#else
+    hud_game = (uint8_t)(1u + (pl_sel << 1));       /* odd numbers: one player */
+#endif
 }
 
 /* Pause menu: the sprites other than the menu's own are cleared from its band
@@ -523,7 +537,7 @@ static void player_pause_enter(void) {
 
 /* Back to the attract screen on start level `variant`: a fresh river with no
  * jet, a blank scoreboard and the hi-score of that level.  The jet is gone and
- * the menu (Up/Down = start level, SELECT = 1P/2P, START) is live. */
+ * the menu (Up/Down = start level, SELECT = debug start, START) is live. */
 static void player_attract(uint8_t variant) {
     pl_hi[pl_hi_idx][0] = hud_hi_bcd[0];
     pl_hi[pl_hi_idx][1] = hud_hi_bcd[1];
@@ -553,10 +567,12 @@ static void player_attract(uint8_t variant) {
     hud_score_bcd[2] = 0;
     hud_lives = 0;
     hud_fuel = 255u;
+#ifdef TWO_PLAYER
     pl_cur = 0;
     pl_other[0] = 0;                    /* no P2 score left over from the last game */
     pl_other[1] = 0;
     pl_other[2] = 0;
+#endif
     player.alive = 0;
     player_show_game();
     player_state = PLAYER_STATE_ATTRACT;
@@ -585,7 +601,8 @@ static void player_pause_update(void) {
 }
 
 /* Atari $A69D: the game number steps 0..7 and wraps; bit 0 is "two players" and
- * bits 1-2 the start level.  Up = next, Down = previous.
+ * bits 1-2 the start level.  Up = next, Down = previous.  Without TWO_PLAYER
+ * only the start level steps (0..3).
  *
  * Like the Atari, a change only edits the scoreboard and freezes the old river
  * (and its enemies: $76 = $FF, $29 = 0) and (re)loads the idle timer $2A = $25,
@@ -594,14 +611,19 @@ static void player_pause_update(void) {
 #define ATTRACT_SELECT_FRAMES   (0x25u * 8u)
 
 static void player_step_game(uint8_t pad) {
+#ifdef TWO_PLAYER
     pl_t = (uint8_t)(((pl_sel << 1) | pl_two) + ((pad & J_UP) ? 1u : 7u)) & 7u;
     pl_two = (uint8_t)(pl_t & 1u);
-    if ((uint8_t)(pl_t >> 1) != pl_sel) {
+    pl_t >>= 1;                         /* now the start level */
+#else
+    pl_t = (uint8_t)(pl_sel + ((pad & J_UP) ? 1u : 3u)) & 3u;
+#endif
+    if (pl_t != pl_sel) {
         /* New start level: its hi-score and first bridge number. */
         pl_hi[pl_hi_idx][0] = hud_hi_bcd[0];
         pl_hi[pl_hi_idx][1] = hud_hi_bcd[1];
         pl_hi[pl_hi_idx][2] = hud_hi_bcd[2];
-        pl_sel = (uint8_t)(pl_t >> 1);
+        pl_sel = pl_t;
         pl_hi_idx = pl_sel;
         hud_hi_bcd[0] = pl_hi[pl_sel][0];
         hud_hi_bcd[1] = pl_hi[pl_sel][1];
@@ -622,8 +644,9 @@ static void player_respawn(uint8_t new_game);
  * same level. */
 static void player_start_game(void) {
     hud_lives = 4u;                     /* $6A = 4: one is spent when the jet appears */
-    pl_cur = 0;
     pl_frozen = 0;
+#ifdef TWO_PLAYER
+    pl_cur = 0;
     pl_other[0] = 0;
     pl_other[1] = 0;
     pl_other[2] = 0;
@@ -634,6 +657,7 @@ static void player_start_game(void) {
     pl_other[7] = atari_level_descriptors[pl_sel * 6u + 1u];
     pl_other[8] = atari_level_descriptors[pl_sel * 6u + 2u];
     pl_other[9] = atari_level_descriptors[pl_sel * 6u + 3u];
+#endif
     player_show_game();
     sound_play_blip();
     player_respawn(1);
@@ -741,12 +765,16 @@ void player_update(void) BANKED {
     }
 
     pl_ticks = game_ticks;
+#ifdef TWO_PLAYER
     if (pl_two) {
         joypad_ex(&pl_pads);
         pl_pad = pl_pads.joypads[pl_cur];
     } else {
         pl_pad = joypad();
     }
+#else
+    pl_pad = joypad();
+#endif
 
     if (player_state == PLAYER_STATE_PAUSE) {
         player_pause_update();
@@ -776,9 +804,11 @@ void player_update(void) BANKED {
             player_death_anim();
             player_timer = (player_timer > pl_ticks) ? (uint8_t)(player_timer - pl_ticks) : 0u;
         } else if (player_state == PLAYER_STATE_DEAD) {
+#ifdef TWO_PLAYER
             if (pl_two && pl_other[3] != 0u) {
                 player_swap_players();      /* the other player's turn */
             }
+#endif
             player_respawn(0);
         } else {
             player_attract(river_variant);  /* game over */

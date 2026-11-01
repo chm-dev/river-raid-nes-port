@@ -24,6 +24,6 @@ Found in the milestone 1 playtest (`roms/m1_jet.gb`, 2026-10-31). All expected a
 - [x] **Bank 0 headroom.** Done: `player.c` moved to bank 2; bank 0 now has ~2.6 KB free (see HANDOFF).
 - [ ] **Sprite Y may be 1 px off** (NES draws at `y+1`). Check against the Atari after the jet is lowered.
 - [ ] **Rework the HUD (separate, later task).** `src/gbc/hud_gbc.c` is a minimal stand-in (score, fuel bar, lives, bridge number). Needs a proper layout and the original charset art; also HI score, blink, game number.
-- [ ] **Remove two-player mode for GBC.** Strip `pl_two`, `player_swap_players`, the `joypad_ex` path and the `hud_two`/`hud_other_bcd` state from the GBC build; the attract menu then only picks the level.
+- [x] **Remove two-player mode for GBC.** Done and play-tested 2026-11-01 with a `TWO_PLAYER` macro (NES only) around `pl_two`, `player_swap_players`, the `joypad_ex` path and `river_swap_checkpoint`; `hud_two`/`hud_cur`/`hud_other_bcd` are gone from `hud_gbc.c`. The attract menu now only picks the level (Up/Down, 4 levels).
 - [ ] **Come up with smarter camera scrolling so it doesn't follow on every small vertical movement**
 
