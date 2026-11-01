@@ -111,3 +111,9 @@ The NES history is in `archive/nes/PROGRESS.md`.
 
 - Bug: the camera X from the previous death carried into the next scroll-in and attract. Cause: `camera_x` (`src/gbc/main.c`) was only eased toward its target, never reset. Fix: `camera_follow()` tracks `player_state`; on a change to WAIT or ATTRACT it snaps `camera_x` to `GBC_CAM_CENTER` (16, mid of 0..32); attract targets the centre; WAIT still targets the spawn-row river centre. `camera_x` now initialises to the centre. NES unchanged.
 - Build: `.\build_gbc.ps1` passes all checks. Not playtested (marked [~]).
+
+### 2026-11-01 - GBC camera spawn view and pause cursor (branch `gbc-port`)
+
+- Camera X (third attempt): in WAIT `camera_follow` fell back to `player.x` (the death X; 120 at boot) until the river reached the spawn row, ~17 lines before the jet appears, then eased; the a6228dd snap to 16 was undone at once. Attract's 16 was 1 px left of the level-1 spawn view. Fix: `RIVER_SPAWN_SLOT` (`river.h`, ring slot 28 = third tile row after `river_start`); `player_center` uses it on GBC (the slot at `player.y` was slot 27, 3 px off, when the scroll-in overshot by 7+ px); `camera_follow` latches `clamp(centre(slot) - 80, 0, 32)` in ATTRACT/WAIT once the slot is generated (view still black), re-read when the slot's bounds are 0 (any river restart), snaps in READY, eases only from PLAY. `river_model.py` trace of slot 28 camera: new game levels 1/5/20/50 = 17/18/17/18; 30 checkpoints 9..24; slot 27 is 3 px left of slot 28 in every case. Commit 9f14aeb.
+- Pause cursor invisible: sprite tile `HUD_LIFE_TILE` is uploaded only by the NES `hud.c`; on GBC it stayed blank. `player_init_graphics` uploads the `$5C` glyph (plane 0). Commit 765b627.
+- `.\build_gbc.ps1` passes all checks (bank 2 code $4000-$4D6D); `tests/host_river.ps1` all rows match. Awaiting playtest.
